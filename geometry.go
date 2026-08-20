@@ -120,10 +120,12 @@ func rectShape(dst *bezierShape, cx, cy, w, h, r float64) {
 		[2]float64{-o, 0}, [2]float64{},
 		[2]float64{0, -o}, [2]float64{},
 	)
+	// In-tangents point backward along the direction of travel at each
+	// corner's exit vertex.
 	dst.I = append(dst.I[:0],
 		[2]float64{}, [2]float64{0, -o},
-		[2]float64{}, [2]float64{-o, 0},
-		[2]float64{}, [2]float64{0, o},
 		[2]float64{}, [2]float64{o, 0},
+		[2]float64{}, [2]float64{0, o},
+		[2]float64{}, [2]float64{-o, 0},
 	)
 }
