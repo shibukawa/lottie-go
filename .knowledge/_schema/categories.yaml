@@ -1,0 +1,17 @@
+categories:
+  objective:
+    purpose: goals, requirements, success measures
+  vocabulary:
+    purpose: terms and controlled language
+  concept:
+    purpose: domain concepts
+  behavior:
+    purpose: actors, workflows, and runtime behavior
+  interface:
+    purpose: APIs, UIs, events, and boundaries
+  structure:
+    purpose: data structures and records
+  constraint:
+    purpose: rules, permissions, policies, and decisions
+  external:
+    purpose: systems and outside dependencies

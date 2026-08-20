@@ -1,0 +1,10 @@
+enums:
+  role:
+    values:
+      primary: central concept for a task or export
+      supporting: related concept included as context
+  export_profile:
+    values:
+      review: human review document
+      ticket: implementation ticket context
+      ai: compact AI context bundle

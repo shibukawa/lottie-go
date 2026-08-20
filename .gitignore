@@ -1,0 +1,6 @@
+# Knowledge catalog compile cache
+.knowledge/.cache/
+
+# Editor/OS noise
+.DS_Store
+*.swp

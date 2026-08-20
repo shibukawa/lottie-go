@@ -1,0 +1,80 @@
+{
+    "v": "5.11.0",
+    "fr": 60,
+    "ip": 0,
+    "op": 120,
+    "w": 80,
+    "h": 80,
+    "nm": "Comp 1",
+    "ddd": 0,
+    "assets": [
+        {
+            "id": "image_0",
+            "w": 40,
+            "h": 40,
+            "u": "",
+            "p": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAoAgMAAADxkFD+AAAAJHpUWHRDcmVhdG9yAAAImXNMyU9KVXBMK0ktUnBNS0tNLikGAEF6Bs5qehXFAAAACXBIWXMAAAABAAAAAQBPJcTWAAAADFBMVEVHcEzE2fUyULApL3WotRF/AAAAAXRSTlMAQObYZgAAABlJREFUGNNjWAUC/0GAYdgxQ0GAAQyGGxMAVJTHOaKS7GsAAAAASUVORK5CYII=",
+            "e": 1
+        }
+    ],
+    "layers": [
+        {
+            "ddd": 0,
+            "ind": 1,
+            "ty": 2,
+            "nm": "asset.png",
+            "cl": "png",
+            "refId": "image_0",
+            "sr": 1,
+            "ks": {
+                "o": {
+                    "a": 0,
+                    "k": 100,
+                    "ix": 11
+                },
+                "r": {
+                    "a": 0,
+                    "k": 0,
+                    "ix": 10
+                },
+                "p": {
+                    "a": 0,
+                    "k": [
+                        40,
+                        40,
+                        0
+                    ],
+                    "ix": 2,
+                    "l": 2
+                },
+                "a": {
+                    "a": 0,
+                    "k": [
+                        20,
+                        20,
+                        0
+                    ],
+                    "ix": 1,
+                    "l": 2
+                },
+                "s": {
+                    "a": 0,
+                    "k": [
+                        100,
+                        100,
+                        100
+                    ],
+                    "ix": 6,
+                    "l": 2
+                }
+            },
+            "ao": 0,
+            "ip": 0,
+            "op": 120,
+            "st": 0,
+            "bm": 0
+        }
+    ],
+    "markers": [],
+    "props": {}
+}

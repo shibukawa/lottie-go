@@ -1,0 +1,49 @@
+types:
+  vision:
+    category: objective
+    default_role: primary
+  requirement:
+    category: objective
+    default_role: primary
+  metric:
+    category: objective
+    default_role: supporting
+  term:
+    category: vocabulary
+    default_role: supporting
+  concept:
+    category: concept
+    default_role: supporting
+  actor:
+    category: behavior
+    default_role: supporting
+  flow:
+    category: behavior
+    default_role: primary
+  rule:
+    category: constraint
+    default_role: supporting
+  ui:
+    category: interface
+    default_role: primary
+  api:
+    category: interface
+    default_role: primary
+  event:
+    category: interface
+    default_role: supporting
+  data:
+    category: structure
+    default_role: supporting
+  permission:
+    category: constraint
+    default_role: supporting
+  system:
+    category: external
+    default_role: supporting
+  policy:
+    category: constraint
+    default_role: supporting
+  decision:
+    category: constraint
+    default_role: supporting
