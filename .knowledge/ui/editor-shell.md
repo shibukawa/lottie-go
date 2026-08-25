@@ -53,6 +53,10 @@ ui:
         children:
           - {kind: image, id: view.stage, target: api:state-machine-runtime}
           - {kind: text, id: label.state, state: current state name, or the clip being previewed}
+          - kind: timeline
+            id: view.timeline
+            state: document as a track, played range as a band, markers as ticks, playhead
+            action: drag to scrub
 guigui_mapping:
   window: guigui.Run root widget
   toolbar/row/panel: guigui.LinearLayout plus basicwidget.Panel
@@ -68,6 +72,7 @@ verified:
   - screenshots via guigui.RunWithCustomFunc, forwarding LayoutF as well as Layout
   - basicwidget.ListItem.Content hosts a custom row widget; mark its labels passthrough so the row still selects
   - separate a document-edit counter from the redraw counter, or selecting something reports the preview as edited
+  - a per-frame readout must be written from Tick as well as Build, or it disagrees with what Draw paints
 ```
 
 list.transitions must allow reordering because order decides which transition wins (data:state-machine).

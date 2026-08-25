@@ -228,3 +228,51 @@ func TestSelectionDoesNotStaleThePreview(t *testing.T) {
 		t.Error("restarting did not clear the stale mark")
 	}
 }
+
+// The timeline reads the player behind the stage, whichever is showing.
+func TestTimelineFollowsTheStage(t *testing.T) {
+	m := openSample(t, "spritesheet", "spritesheet.lottie")
+	if m.PreviewPlayer() == nil {
+		t.Fatal("no player behind the stage")
+	}
+	// Markers are what a segment names, so the timeline can show them.
+	if got := len(m.PreviewMarkers()); got != 3 {
+		t.Errorf("PreviewMarkers() = %d; want 3", got)
+	}
+	// The band is the segment, narrower than the document.
+	start, end := m.PreviewPlayer().Range()
+	if start != 0 || end != 60 {
+		t.Errorf("idle range = [%v,%v); want the idle marker [0,60)", start, end)
+	}
+
+	// Scrubbing moves the playhead, clamped into the playing range.
+	m.PreviewSeek(30)
+	if got := m.PreviewPlayer().Frame(); got != 30 {
+		t.Errorf("Frame() = %v; want 30", got)
+	}
+	m.PreviewSeek(500)
+	if got := m.PreviewPlayer().Frame(); got > end {
+		t.Errorf("Frame() = %v; scrubbing escaped the range end %v", got, end)
+	}
+
+	// A clip on its own shows its whole self, markers included.
+	m.ShowClip("actions")
+	if got := len(m.PreviewMarkers()); got != 3 {
+		t.Errorf("clip PreviewMarkers() = %d; want 3", got)
+	}
+	start, end = m.PreviewPlayer().Range()
+	if start != 0 || end != 180 {
+		t.Errorf("clip range = [%v,%v); want the whole document", start, end)
+	}
+}
+
+func TestTimelineIsQuietWithNothingLoaded(t *testing.T) {
+	m := NewModel()
+	if m.PreviewPlayer() != nil {
+		t.Error("a player exists with nothing loaded")
+	}
+	if m.PreviewMarkers() != nil {
+		t.Error("markers exist with nothing loaded")
+	}
+	m.PreviewSeek(10) // must not panic
+}

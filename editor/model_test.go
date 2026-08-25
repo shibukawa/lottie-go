@@ -232,8 +232,9 @@ func TestMarkersFeedTheSegmentPicker(t *testing.T) {
 	if len(got) != 2 || got[0] != "idle" || got[1] != "walk" {
 		t.Errorf("Markers() = %v; want [idle walk]", got)
 	}
-	if s := m.ClipSummary("sheet"); !strings.Contains(s, "2 markers") {
-		t.Errorf("ClipSummary() = %q; want it to mention markers", s)
+	// The summary shares a row with the clip name, so it stays terse.
+	if s := m.ClipSummary("sheet"); !strings.Contains(s, "▾2") {
+		t.Errorf("ClipSummary() = %q; want it to note two markers", s)
 	}
 }
 

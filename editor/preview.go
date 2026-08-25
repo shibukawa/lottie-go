@@ -18,6 +18,7 @@ type previewPane struct {
 	guigui.DefaultWidget
 
 	stage         previewStage
+	timeline      timelineView
 	stateLabel    basicwidget.Text
 	hint          basicwidget.Text
 	backToMachine basicwidget.Button
@@ -40,6 +41,7 @@ func (p *previewPane) Build(context *guigui.Context, adder *guigui.ChildAdder) e
 		return nil
 	}
 	adder.AddWidget(&p.stage)
+	adder.AddWidget(&p.timeline)
 	adder.AddWidget(&p.stateLabel)
 	adder.AddWidget(&p.hint)
 	// Only offered while a clip has taken the stage.
@@ -98,6 +100,7 @@ func (p *previewPane) Layout(context *guigui.Context, widgetBounds *guigui.Widge
 	p.items = slices.Delete(p.items, 0, len(p.items))
 	p.items = append(p.items,
 		guigui.LinearLayoutItem{Widget: &p.stage, Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Widget: &p.timeline},
 		guigui.LinearLayoutItem{Widget: &p.stateLabel, Size: guigui.FixedSize(u)},
 		guigui.LinearLayoutItem{Widget: &p.hint, Size: guigui.FixedSize(u)},
 	)

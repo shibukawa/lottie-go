@@ -24,6 +24,10 @@ type palette struct {
 	// active marks the state the preview is in right now; traced marks the
 	// transitions that read the selected input.
 	active, activeBorder, traced color.Color
+	// frame outlines the graph and the stage.
+	frame color.Color
+	// timeline parts.
+	track, band, playhead, tick color.Color
 }
 
 func paletteFor(context *guigui.Context) palette {
@@ -39,6 +43,12 @@ func paletteFor(context *guigui.Context) palette {
 			active:       color.NRGBA{0x1f, 0x5c, 0x40, 0xff},
 			activeBorder: color.NRGBA{0x4c, 0xc2, 0x8a, 0xff},
 			traced:       color.NRGBA{0xf0, 0x8a, 0x3c, 0xff},
+
+			frame:    color.NRGBA{0x4a, 0x4e, 0x5c, 0xff},
+			track:    color.NRGBA{0x2a, 0x2d, 0x36, 0xff},
+			band:     color.NRGBA{0x3d, 0x4a, 0x63, 0xff},
+			playhead: color.NRGBA{0x6f, 0xb0, 0xff, 0xff},
+			tick:     color.NRGBA{0x9a, 0x9a, 0xa8, 0xff},
 		}
 	}
 	return palette{
@@ -52,6 +62,12 @@ func paletteFor(context *guigui.Context) palette {
 		active:       color.NRGBA{0xd4, 0xf3, 0xe2, 0xff},
 		activeBorder: color.NRGBA{0x1e, 0x9c, 0x63, 0xff},
 		traced:       color.NRGBA{0xd4, 0x6a, 0x10, 0xff},
+
+		frame:    color.NRGBA{0xc2, 0xc6, 0xd0, 0xff},
+		track:    color.NRGBA{0xe6, 0xe8, 0xee, 0xff},
+		band:     color.NRGBA{0xc3, 0xd6, 0xf2, 0xff},
+		playhead: color.NRGBA{0x1f, 0x6f, 0xd0, 0xff},
+		tick:     color.NRGBA{0x6a, 0x6e, 0x7a, 0xff},
 	}
 }
 

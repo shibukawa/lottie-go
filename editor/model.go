@@ -221,10 +221,12 @@ func (m *Model) ClipSummary(id string) string {
 	if err != nil {
 		return "unreadable"
 	}
+	// Kept short: the summary shares its row with the clip's name, and the
+	// name is the part you are looking for.
 	w, h := anim.Size()
-	s := fmt.Sprintf("%dx%d  %.2fs", w, h, anim.Duration().Seconds())
+	s := fmt.Sprintf("%.2fs %d×%d", anim.Duration().Seconds(), w, h)
 	if n := len(anim.Markers()); n > 0 {
-		s += fmt.Sprintf("  %d markers", n)
+		s += fmt.Sprintf(" ▾%d", n)
 	}
 	return s
 }
@@ -730,6 +732,38 @@ func (m *Model) PreviewDraw(dst *ebiten.Image, opts *lottie.DrawOptions) {
 	if m.preview != nil {
 		m.preview.Draw(dst, opts)
 	}
+}
+
+// PreviewPlayer is the player behind the stage, whichever is showing. The
+// timeline reads its position and range through this.
+func (m *Model) PreviewPlayer() *lottie.Player {
+	if m.clipPlayer != nil {
+		return m.clipPlayer
+	}
+	if m.preview == nil {
+		return nil
+	}
+	return m.preview.Player()
+}
+
+// PreviewMarkers lists the markers of the animation on the stage. They are
+// what a state's segment names, so the timeline shows where they fall.
+func (m *Model) PreviewMarkers() []lottie.Marker {
+	anim := m.PreviewAnimation()
+	if anim == nil {
+		return nil
+	}
+	return anim.Markers()
+}
+
+// PreviewSeek scrubs the stage to an absolute frame.
+func (m *Model) PreviewSeek(frame float64) {
+	p := m.PreviewPlayer()
+	if p == nil {
+		return
+	}
+	p.SetFrame(frame)
+	m.generation++
 }
 
 // PreviewAnimation is the animation on the stage, for sizing the drawing.

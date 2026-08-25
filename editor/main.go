@@ -30,12 +30,14 @@ type Root struct {
 	machineCombo basicwidget.Combobox
 	newMachine   basicwidget.Button
 
-	clips      clipsPane
-	graph      graphView
-	graphPanel basicwidget.Panel
-	preview    previewPane
-	inspector  inspectorPane
-	status     basicwidget.Text
+	clips        clipsPane
+	graph        graphView
+	graphPanel   basicwidget.Panel
+	graphFrame   framedPane
+	preview      previewPane
+	previewFrame framedPane
+	inspector    inspectorPane
+	status       basicwidget.Text
 
 	model *Model
 
@@ -64,8 +66,8 @@ func (r *Root) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 	adder.AddWidget(&r.machineCombo)
 	adder.AddWidget(&r.newMachine)
 	adder.AddWidget(&r.clips)
-	adder.AddWidget(&r.graphPanel)
-	adder.AddWidget(&r.preview)
+	adder.AddWidget(&r.graphFrame)
+	adder.AddWidget(&r.previewFrame)
 	adder.AddWidget(&r.inspector)
 	adder.AddWidget(&r.status)
 
@@ -110,7 +112,10 @@ func (r *Root) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 	r.newMachine.OnDown(func(context *guigui.Context) { m.NewMachine() })
 
 	r.graphPanel.SetContent(&r.graph)
-	r.graphPanel.SetAutoBorder(true)
+	// The graph and the stage are the two working surfaces; outline both so
+	// they read as areas rather than as loose content between control panes.
+	r.graphFrame.SetContent(&r.graphPanel)
+	r.previewFrame.SetContent(&r.preview)
 
 	r.status.SetValue(m.Status())
 	r.status.SetVerticalAlign(basicwidget.VerticalAlignMiddle)
@@ -152,8 +157,8 @@ func (r *Root) Layout(context *guigui.Context, widgetBounds *guigui.WidgetBounds
 	// machine run right under the graph you are editing.
 	r.centerItems = slices.Delete(r.centerItems, 0, len(r.centerItems))
 	r.centerItems = append(r.centerItems,
-		guigui.LinearLayoutItem{Widget: &r.graphPanel, Size: guigui.FlexibleSize(3)},
-		guigui.LinearLayoutItem{Widget: &r.preview, Size: guigui.FlexibleSize(2)},
+		guigui.LinearLayoutItem{Widget: &r.graphFrame, Size: guigui.FlexibleSize(3)},
+		guigui.LinearLayoutItem{Widget: &r.previewFrame, Size: guigui.FlexibleSize(2)},
 	)
 	r.center = guigui.LinearLayout{
 		Direction: guigui.LayoutDirectionVertical, Items: r.centerItems, Gap: u / 4,
