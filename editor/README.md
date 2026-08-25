@@ -15,11 +15,18 @@ The path argument is optional; **Open…**, **Save As…**, and **Import…** op
 native file dialogs through [zenity](https://github.com/ncruces/zenity),
 which is pure Go and needs no cgo.
 
-The module carries a `replace` pointing at the parent directory, because the
-editor needs library changes newer than the latest tag: `ExtraFields` had to
-be exported so a tool can write vendor data into a state, and `Player` gained
-an `Animation` accessor so the preview can size its stage. Drop the replace
-and depend on a released version once those ship.
+The editor is its own module and depends on a released `lottie-go`, so it
+installs like any other command:
+
+```bash
+go run github.com/shibukawa/lottie-go/editor@latest
+```
+
+The repository root carries a `go.work` that points the editor at the
+library in this checkout, so working on both at once needs no `replace`
+directive. Set `GOWORK=off` to build the editor against the released
+library instead — worth doing before a release, to check the library
+actually exports everything the editor uses.
 
 ## Samples
 
