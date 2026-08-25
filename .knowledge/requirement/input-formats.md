@@ -9,13 +9,16 @@ formats:
   - format: lottie-json (.json)
     priority: P0
     note: raw JSON; support first
-  - format: dotlottie (.lottie)
+  - format: dotlottie v1 (.lottie)
     priority: P1
-    note: ZIP archive; unpack via archive/zip; read manifest.json;
-      may contain multiple animations, embedded themes, embedded images
+    note: ZIP; animations/ and images/; implemented
+  - format: dotlottie v2 (.lottie)
+    priority: P1
+    note: ZIP; a/ i/ s/ t/ f/; implemented, read and write (data:bundle-layout)
 unsupported:
-  - dotlottie state machines (game owns state management)
   - externally referenced assets (URL-fetched images)
 ```
 
 Parser must stay permissive across editor dialects (system:lottie-editors, policy:risks).
+
+State machines in `s/` were previously excluded here on the grounds that the game owns state management. That exclusion is withdrawn: they are now in scope via decision:align-dotlottie-state-machine and requirement:player-state-machine.
