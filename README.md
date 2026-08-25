@@ -76,7 +76,9 @@ b.Encode(out)
 `ParseStateMachine` reads the documents under `s/` into `StateMachine`.
 Members this package does not model are preserved and written back
 unchanged, so editing a bundle here keeps it valid for other dotLottie
-runtimes. `Bundle.Validate` reports dangling transition targets, unknown
+runtimes. Those members are reachable as `ExtraFields`, so a tool can also
+stash its own data in one — an editor's node positions, say — and have it
+survive a rewrite. `Bundle.Validate` reports dangling transition targets, unknown
 animation ids, unreachable states, and markers that do not exist.
 
 ## State machines
@@ -148,6 +150,8 @@ p.SetMarkerRange("walk")   // or p.SetRange(start, end)
 p.SetReverse(true)
 p.SetLoopCount(3)
 p.OnComplete(func() { ... })
+
+w, h := p.Animation().Size()   // to place or scale the drawing
 ```
 
 Run the demos:
