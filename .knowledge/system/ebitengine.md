@@ -4,7 +4,7 @@ type: system
 title: Ebitengine
 ---
 
-2D game engine for Go; sole runtime dependency (decision:no-cgo). v2.9+ mandatory for the reworked vector API (decision:use-vector-package).
+2D game engine for Go; sole runtime dependency (decision:no-cgo). v2.9+ mandatory for the reworked vector API (decision:use-vector-package). Batching and atlas behavior: concept:ebitengine-draw-batching.
 
 ```yaml
 references:

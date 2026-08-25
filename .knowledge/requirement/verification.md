@@ -14,4 +14,10 @@ verification:
     detail: testing.B per-frame draw time; catch regressions vs metric:performance-targets
   - method: fallback verification
     detail: load files with unsupported features; confirm no panic (policy:robustness)
+  - method: golden frame comparison
+    detail: examples/gpuprobe -golden/-compare renders 6 frames of every
+      bundled asset to PNG; rendering changes must show pixel-neutrality
+  - method: gpu command inspection
+    detail: ebitenginedebug build dumps per-frame draw commands and texture
+      census; gpuprobe -summarize tracks metric:gpu-draw-cost
 ```
