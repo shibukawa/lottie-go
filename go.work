@@ -1,0 +1,10 @@
+// The editor is a separate module so the library never depends on a GUI
+// toolkit. This workspace points it at the library in this checkout, so
+// working on both at once needs no replace directive and the editor's
+// go.mod keeps recording the real released minimum.
+go 1.27.0
+
+use (
+	.
+	./editor
+)

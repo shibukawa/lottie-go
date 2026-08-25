@@ -22,7 +22,7 @@ type Manifest struct {
 	Themes        []ManifestTheme        `json:"themes,omitempty"`
 	StateMachines []ManifestStateMachine `json:"stateMachines,omitempty"`
 
-	Extra extraFields `json:"-"`
+	Extra ExtraFields `json:"-"`
 }
 
 func (m Manifest) MarshalJSON() ([]byte, error) {

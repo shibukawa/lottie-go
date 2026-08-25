@@ -50,6 +50,10 @@ func (a *Animation) NewPlayer() *Player {
 	}
 }
 
+// Animation returns the animation this player renders. It is needed to size
+// or place the drawing, since Draw applies whatever transform it is given.
+func (p *Player) Animation() *Animation { return p.anim }
+
 // SetLoop makes playback restart from the beginning after the last frame.
 func (p *Player) SetLoop(loop bool) { p.loop = loop }
 
