@@ -10,8 +10,10 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 
 	lottie "github.com/shibukawa/lottie-go"
 )
@@ -58,7 +60,11 @@ func writeSample(dir, name string, clips map[string]obj, sm *lottie.StateMachine
 		return err
 	}
 	b := lottie.NewBundle()
-	for id, clip := range clips {
+	// Sorted, not map order: the manifest records the order animations were
+	// added, so iterating the map would rewrite the committed bundle on
+	// every run and churn the repository for no reason.
+	for _, id := range slices.Sorted(maps.Keys(clips)) {
+		clip := clips[id]
 		data, err := json.MarshalIndent(clip, "", " ")
 		if err != nil {
 			return fmt.Errorf("%s/%s: %w", name, id, err)
