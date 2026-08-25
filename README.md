@@ -254,6 +254,14 @@ modifiers. See `.knowledge/` for the full requirement catalog.
 - `go run ./examples/stress` verifies the performance target (5 concurrent
   UI-scale animations, p99 draw under 2ms). Measured on an M3: p99 0.98ms
   at 5 players; 40 players still hold 60fps.
+- Masks, track mattes and precomps need an offscreen. Ebitengine drops an
+  image from its shared texture atlas as soon as anything is drawn into one,
+  and doubles the wait before it may rejoin on every further such use, so
+  offscreens are permanently textures of their own and their count is what
+  matters. One process-wide pool serves every `Player`, and each offscreen
+  covers only the layer's own bounds rather than the whole destination, which
+  keeps that count flat as animations are added: 20 concurrent matte
+  animations hold 6 textures totalling 6.4MiB.
 
 ## Verification
 
