@@ -23,9 +23,10 @@ should:
   - open: undo / redo
 deviations:
   - transitions are created in the inspector; the graph draws but does not author them
-  - no file dialog; paths are typed into the toolbar
   - node positions live in State.Extra under "x-lottie-go-editor" (data:state-machine round-trip)
 wont: policy:editor-out-of-scope
 ```
+
+File dialogs come from system:zenity, on a goroutine so a modal dialog never stalls the game loop.
 
 Preview runs the real interpreter (decision:runtime-package-first), so the editor cannot show behavior the game will not reproduce.

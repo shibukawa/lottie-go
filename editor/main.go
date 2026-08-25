@@ -23,9 +23,10 @@ type Root struct {
 
 	background basicwidget.Background
 
-	pathInput    basicwidget.TextInput
+	pathLabel    basicwidget.Text
 	openBtn      basicwidget.Button
 	saveBtn      basicwidget.Button
+	saveAsBtn    basicwidget.Button
 	machineCombo basicwidget.Combobox
 	newMachine   basicwidget.Button
 
@@ -56,9 +57,10 @@ func (r *Root) Env(context *guigui.Context, key guigui.EnvKey, source *guigui.En
 
 func (r *Root) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 	adder.AddWidget(&r.background)
-	adder.AddWidget(&r.pathInput)
+	adder.AddWidget(&r.pathLabel)
 	adder.AddWidget(&r.openBtn)
 	adder.AddWidget(&r.saveBtn)
+	adder.AddWidget(&r.saveAsBtn)
 	adder.AddWidget(&r.machineCombo)
 	adder.AddWidget(&r.newMachine)
 	adder.AddWidget(&r.clips)
@@ -68,12 +70,32 @@ func (r *Root) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 	adder.AddWidget(&r.status)
 
 	m := r.model
-	r.pathInput.SetPlaceholder("path to .lottie (or .json clip)")
-	r.pathInput.SetValue(m.Path())
-	r.openBtn.SetText("Open")
-	r.openBtn.OnDown(func(context *guigui.Context) { m.Open(r.pathInput.Value()) })
+	path := m.Path()
+	if path == "" {
+		path = "(unsaved bundle)"
+	}
+	r.pathLabel.SetValue(path)
+	r.pathLabel.SetVerticalAlign(basicwidget.VerticalAlignMiddle)
+
+	r.openBtn.SetText("Open…")
+	r.openBtn.OnDown(func(context *guigui.Context) { m.BrowseOpen() })
 	r.saveBtn.SetText("Save")
-	r.saveBtn.OnDown(func(context *guigui.Context) { m.Save(r.pathInput.Value()) })
+	r.saveBtn.OnDown(func(context *guigui.Context) {
+		// Saving a bundle that has no path yet has to ask where to put it.
+		if m.Path() == "" {
+			m.BrowseSaveAs()
+			return
+		}
+		m.Save(m.Path())
+	})
+	r.saveAsBtn.SetText("Save As…")
+	r.saveAsBtn.OnDown(func(context *guigui.Context) { m.BrowseSaveAs() })
+
+	// A second dialog while one is already up would be ignored anyway; grey
+	// the buttons so that is visible.
+	for _, w := range []guigui.Widget{&r.openBtn, &r.saveBtn, &r.saveAsBtn} {
+		context.SetEnabled(w, !m.DialogOpen())
+	}
 
 	ids := m.MachineIDs()
 	r.machineCombo.SetItems(ids)
@@ -83,7 +105,7 @@ func (r *Root) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 			m.SelectMachine(value)
 		}
 	})
-	context.SetEnabled(&r.machineCombo, len(ids) > 0)
+	context.SetEnabled(&r.machineCombo, len(ids) > 0 && !m.DialogOpen())
 	r.newMachine.SetText("New machine")
 	r.newMachine.OnDown(func(context *guigui.Context) { m.NewMachine() })
 
@@ -96,8 +118,17 @@ func (r *Root) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 	return nil
 }
 
+// Tick applies whatever a file dialog finished with. The dialog runs on its
+// own goroutine, so the result lands outside any handler; applying it bumps
+// the generation, and the state key below turns that into a rebuild.
+func (r *Root) Tick(context *guigui.Context, widgetBounds *guigui.WidgetBounds) error {
+	r.model.PumpDialogs()
+	return nil
+}
+
 func (r *Root) WriteStateKey(context *guigui.Context, w *guigui.StateKeyWriter) {
 	w.WriteInt(r.model.Generation())
+	w.WriteBool(r.model.DialogOpen())
 }
 
 func (r *Root) Layout(context *guigui.Context, widgetBounds *guigui.WidgetBounds, layouter *guigui.ChildLayouter) {
@@ -106,9 +137,10 @@ func (r *Root) Layout(context *guigui.Context, widgetBounds *guigui.WidgetBounds
 
 	r.toolbarItems = slices.Delete(r.toolbarItems, 0, len(r.toolbarItems))
 	r.toolbarItems = append(r.toolbarItems,
-		guigui.LinearLayoutItem{Widget: &r.pathInput, Size: guigui.FlexibleSize(1)},
-		guigui.LinearLayoutItem{Widget: &r.openBtn, Size: guigui.FixedSize(3 * u)},
+		guigui.LinearLayoutItem{Widget: &r.pathLabel, Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Widget: &r.openBtn, Size: guigui.FixedSize(4 * u)},
 		guigui.LinearLayoutItem{Widget: &r.saveBtn, Size: guigui.FixedSize(3 * u)},
+		guigui.LinearLayoutItem{Widget: &r.saveAsBtn, Size: guigui.FixedSize(4 * u)},
 		guigui.LinearLayoutItem{Widget: &r.machineCombo, Size: guigui.FixedSize(6 * u)},
 		guigui.LinearLayoutItem{Widget: &r.newMachine, Size: guigui.FixedSize(5 * u)},
 	)

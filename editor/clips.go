@@ -17,7 +17,6 @@ type clipsPane struct {
 
 	clipsTitle basicwidget.Text
 	clipList   basicwidget.List[string]
-	importPath basicwidget.TextInput
 	importBtn  basicwidget.Button
 	removeBtn  basicwidget.Button
 
@@ -60,7 +59,6 @@ func (c *clipsPane) Build(context *guigui.Context, adder *guigui.ChildAdder) err
 	}
 	adder.AddWidget(&c.clipsTitle)
 	adder.AddWidget(&c.clipList)
-	adder.AddWidget(&c.importPath)
 	adder.AddWidget(&c.importBtn)
 	adder.AddWidget(&c.removeBtn)
 	adder.AddWidget(&c.inputsTitle)
@@ -94,11 +92,9 @@ func (c *clipsPane) Build(context *guigui.Context, adder *guigui.ChildAdder) err
 		}
 	})
 
-	c.importPath.SetPlaceholder("path to .json clip")
-	c.importBtn.SetText("Import")
-	c.importBtn.OnDown(func(context *guigui.Context) {
-		m.ImportClip(c.importPath.Value())
-	})
+	c.importBtn.SetText("Import…")
+	c.importBtn.OnDown(func(context *guigui.Context) { m.BrowseImport() })
+	context.SetEnabled(&c.importBtn, !m.DialogOpen())
 	c.removeBtn.SetText("Remove")
 	c.removeBtn.OnDown(func(context *guigui.Context) {
 		if c.selectedClip != "" {
@@ -176,9 +172,8 @@ func (c *clipsPane) Layout(context *guigui.Context, widgetBounds *guigui.WidgetB
 
 	c.importRowItems = slices.Delete(c.importRowItems, 0, len(c.importRowItems))
 	c.importRowItems = append(c.importRowItems,
-		guigui.LinearLayoutItem{Widget: &c.importPath, Size: guigui.FlexibleSize(1)},
-		guigui.LinearLayoutItem{Widget: &c.importBtn, Size: guigui.FixedSize(3 * u)},
-		guigui.LinearLayoutItem{Widget: &c.removeBtn, Size: guigui.FixedSize(3 * u)},
+		guigui.LinearLayoutItem{Widget: &c.importBtn, Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Widget: &c.removeBtn, Size: guigui.FlexibleSize(1)},
 	)
 	c.importRow = guigui.LinearLayout{
 		Direction: guigui.LayoutDirectionHorizontal,

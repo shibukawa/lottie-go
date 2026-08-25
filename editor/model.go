@@ -47,10 +47,18 @@ type Model struct {
 
 	problemsCache []string
 	problemsGen   int
+
+	// Native file dialogs run on their own goroutine; see dialog.go.
+	dialog     chan dialogResult
+	dialogOpen bool
 }
 
 func NewModel() *Model {
-	m := &Model{bundle: lottie.NewBundle(), selectedTrans: -1}
+	m := &Model{
+		bundle:        lottie.NewBundle(),
+		selectedTrans: -1,
+		dialog:        make(chan dialogResult, 1),
+	}
 	m.status = "New bundle. Import a clip to begin."
 	return m
 }

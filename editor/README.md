@@ -11,8 +11,9 @@ Go module, so the `lottie-go` library itself never pulls in a GUI toolkit.
 cd editor && go run . path/to/character.lottie
 ```
 
-The path argument is optional; the editor also opens and saves through the
-toolbar field.
+The path argument is optional; **Open…**, **Save As…**, and **Import…** open
+native file dialogs through [zenity](https://github.com/ncruces/zenity),
+which is pure Go and needs no cgo.
 
 The module carries a `replace` pointing at the parent directory, because the
 editor needs library changes newer than the latest tag: `ExtraFields` had to
@@ -34,6 +35,12 @@ and depend on a released version once those ship.
   with one button per Event input.
 
 ## Notes
+
+A native dialog blocks for as long as it is on screen, so dialogs run on
+their own goroutine and their result is applied from `Tick`. The window
+keeps rendering while one is open, and every `Model` field stays owned by
+the main goroutine. Only one dialog runs at a time; the buttons grey out
+while one is up.
 
 Transitions are created and edited in the inspector; the graph draws them.
 Drag-to-connect is not implemented.
