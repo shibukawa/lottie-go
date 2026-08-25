@@ -169,7 +169,20 @@ go run ./examples/stopwatch
 
 # performance target verification (5+ concurrent animations)
 go run ./examples/stress
+
+# GPU cost inspection and pixel-regression guard for the compositing path
+go run -tags ebitenginedebug ./examples/gpuprobe -copies 20 |
+	go run ./examples/gpuprobe -summarize
+go run ./examples/gpuprobe -golden /tmp/base    # record reference renders
+go run ./examples/gpuprobe -compare /tmp/base   # verify against them
 ```
+
+`gpuprobe` exists because draw-call merging and texture allocation are not
+observable from outside Ebitengine. Built with the `ebitenginedebug` tag,
+Ebitengine dumps every graphics command and every internal texture once per
+frame, and `-summarize` reduces that to the numbers worth tracking. Its
+`-golden`/`-compare` modes render fixed frames of every bundled asset to PNG,
+which is how changes to offscreen allocation are shown to be pixel-neutral.
 
 The stopwatch shows the intended game-UI pattern: ten `digit-N.json`
 animations each display digit N at frame 0 and morph to N+1 when played,
