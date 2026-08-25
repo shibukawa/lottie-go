@@ -166,8 +166,10 @@ func (r *Root) Layout(context *guigui.Context, widgetBounds *guigui.WidgetBounds
 
 	r.middleItems = slices.Delete(r.middleItems, 0, len(r.middleItems))
 	r.middleItems = append(r.middleItems,
-		guigui.LinearLayoutItem{Widget: &r.clips, Size: guigui.FlexibleSize(2)},
-		guigui.LinearLayoutItem{Size: guigui.FlexibleSize(5), Layout: &r.center},
+		// The clips pane carries three columns now — name, source, control —
+		// so it needs more than the fifth of the width it had.
+		guigui.LinearLayoutItem{Widget: &r.clips, Size: guigui.FlexibleSize(3)},
+		guigui.LinearLayoutItem{Size: guigui.FlexibleSize(6), Layout: &r.center},
 		guigui.LinearLayoutItem{Widget: &r.inspector, Size: guigui.FlexibleSize(3)},
 	)
 	r.middle = guigui.LinearLayout{

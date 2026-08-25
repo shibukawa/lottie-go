@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	lottie "github.com/shibukawa/lottie-go"
 )
@@ -34,19 +35,19 @@ func main() {
 func run(out string) error {
 	if err := writeSample(filepath.Join(out, "character"), "character",
 		map[string]obj{
-			"idle": idleClip(), "walk": walkClip(), "run": runClip(),
-			"jump": jumpClip(), "hurt": hurtClip(),
+			"idle-anim": idleClip(), "walk-anim": walkClip(), "run-anim": runClip(),
+			"jump-anim": jumpClip(), "hurt-anim": hurtClip(),
 		}, characterMachine()); err != nil {
 		return err
 	}
 	if err := writeSample(filepath.Join(out, "spritesheet"), "spritesheet",
-		map[string]obj{"actions": sheetClip()}, sheetMachine()); err != nil {
+		map[string]obj{"actions-anim": sheetClip()}, sheetMachine()); err != nil {
 		return err
 	}
 	if err := writeSample(filepath.Join(out, "combo"), "combo",
 		map[string]obj{
-			"ready": readyClip(), "windup": windupClip(),
-			"strike": strikeClip(), "recover": recoverClip(),
+			"ready-anim": readyClip(), "windup-anim": windupClip(),
+			"strike-anim": strikeClip(), "recover-anim": recoverClip(),
 		}, comboMachine()); err != nil {
 		return err
 	}
@@ -57,6 +58,12 @@ func run(out string) error {
 // The clips stay on disk so the editor's Import can be tried against them.
 func writeSample(dir, name string, clips map[string]obj, sm *lottie.StateMachine) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	// Clips this run does not produce are left over from an earlier one.
+	// Without this, renaming a clip leaves both names on disk and the stale
+	// one looks like part of the sample.
+	if err := removeStaleClips(dir, clips); err != nil {
 		return err
 	}
 	b := lottie.NewBundle()
@@ -92,6 +99,26 @@ func writeSample(dir, name string, clips map[string]obj, sm *lottie.StateMachine
 		return err
 	}
 	fmt.Printf("wrote %s (%d clips, %d bytes)\n", path, len(clips), buf.Len())
+	return nil
+}
+
+// removeStaleClips deletes the .json clips in dir that are not being
+// written. The bundle and the README are left alone.
+func removeStaleClips(dir string, clips map[string]obj) error {
+	entries, err := filepath.Glob(filepath.Join(dir, "*.json"))
+	if err != nil {
+		return err
+	}
+	for _, path := range entries {
+		id := strings.TrimSuffix(filepath.Base(path), ".json")
+		if _, ok := clips[id]; ok {
+			continue
+		}
+		if err := os.Remove(path); err != nil {
+			return err
+		}
+		fmt.Printf("removed stale %s\n", path)
+	}
 	return nil
 }
 
@@ -143,7 +170,7 @@ func characterMachine() *lottie.StateMachine {
 	// Order matters: jump is listed first everywhere so it wins over a
 	// simultaneous move request.
 	return &lottie.StateMachine{
-		Initial: "idle",
+		Initial: "idle-state",
 		Inputs: []lottie.Input{
 			{Type: lottie.InputEvent, Name: "walk"},
 			{Type: lottie.InputEvent, Name: "run"},
@@ -154,32 +181,32 @@ func characterMachine() *lottie.StateMachine {
 			{Type: lottie.InputBoolean, Name: "grounded", Value: lottie.JSONValue(true)},
 		},
 		States: []lottie.State{
-			at(loopState("idle", "idle", []lottie.Transition{
-				to("jump", event("jump"), grounded),
-				to("run", event("run")),
-				to("walk", event("walk")),
+			at(loopState("idle-state", "idle-anim", []lottie.Transition{
+				to("jump-state", event("jump"), grounded),
+				to("run-state", event("run")),
+				to("walk-state", event("walk")),
 			}), 30, 140),
-			at(loopState("walk", "walk", []lottie.Transition{
-				to("jump", event("jump"), grounded),
-				to("run", event("run")),
-				to("idle", event("stop")),
+			at(loopState("walk-state", "walk-anim", []lottie.Transition{
+				to("jump-state", event("jump"), grounded),
+				to("run-state", event("run")),
+				to("idle-state", event("stop")),
 			}), 250, 30),
-			at(loopState("run", "run", []lottie.Transition{
-				to("jump", event("jump"), grounded),
-				to("walk", event("walk")),
-				to("idle", event("stop")),
+			at(loopState("run-state", "run-anim", []lottie.Transition{
+				to("jump-state", event("jump"), grounded),
+				to("walk-state", event("walk")),
+				to("idle-state", event("stop")),
 			}), 470, 30),
-			at(onceState("jump", "jump", []lottie.Transition{
-				to("idle", event("clipDone")),
+			at(onceState("jump-state", "jump-anim", []lottie.Transition{
+				to("idle-state", event("clipDone")),
 			}), 250, 250),
-			at(onceState("hurt", "hurt", []lottie.Transition{
-				to("idle", event("clipDone")),
+			at(onceState("hurt-state", "hurt-anim", []lottie.Transition{
+				to("idle-state", event("clipDone")),
 			}), 470, 250),
 			// A global state's transitions apply from every state, which is
 			// how "take damage at any time" is expressed.
 			at(lottie.State{
-				Name: "anywhere", Type: lottie.StateGlobal,
-				Transitions: []lottie.Transition{to("hurt", event("hurt"))},
+				Name: "anywhere-state", Type: lottie.StateGlobal,
+				Transitions: []lottie.Transition{to("hurt-state", event("hurt"))},
 			}, 30, 360),
 		},
 		// One-shot clips announce their own end, so the game never needs a
@@ -195,14 +222,13 @@ func characterMachine() *lottie.StateMachine {
 // is the sample for PlaybackState.segment.
 func sheetMachine() *lottie.StateMachine {
 	seg := func(name, marker string, loop bool, trs []lottie.Transition) lottie.State {
-		s := lottie.State{
-			Name: name, Type: lottie.StatePlayback, Animation: "actions",
+		return lottie.State{
+			Name: name, Type: lottie.StatePlayback, Animation: "actions-anim",
 			Segment: marker, Loop: loop, Autoplay: true, Transitions: trs,
 		}
-		return s
 	}
 	return &lottie.StateMachine{
-		Initial: "idle",
+		Initial: "idle-state",
 		Inputs: []lottie.Input{
 			{Type: lottie.InputEvent, Name: "walk"},
 			{Type: lottie.InputEvent, Name: "stop"},
@@ -210,16 +236,16 @@ func sheetMachine() *lottie.StateMachine {
 			{Type: lottie.InputEvent, Name: "clipDone"},
 		},
 		States: []lottie.State{
-			at(seg("idle", "idle", true, []lottie.Transition{
-				to("jump", event("jump")),
-				to("walk", event("walk")),
+			at(seg("idle-state", "idle-seg", true, []lottie.Transition{
+				to("jump-state", event("jump")),
+				to("walk-state", event("walk")),
 			}), 30, 40),
-			at(seg("walk", "walk", true, []lottie.Transition{
-				to("jump", event("jump")),
-				to("idle", event("stop")),
+			at(seg("walk-state", "walk-seg", true, []lottie.Transition{
+				to("jump-state", event("jump")),
+				to("idle-state", event("stop")),
 			}), 250, 40),
-			at(seg("jump", "jump", false, []lottie.Transition{
-				to("idle", event("clipDone")),
+			at(seg("jump-state", "jump-seg", false, []lottie.Transition{
+				to("idle-state", event("clipDone")),
 			}), 470, 40),
 		},
 		Interactions: []lottie.Interaction{{
@@ -234,23 +260,23 @@ func sheetMachine() *lottie.StateMachine {
 // playback, which nothing else here shows.
 func comboMachine() *lottie.StateMachine {
 	return &lottie.StateMachine{
-		Initial: "ready",
+		Initial: "ready-state",
 		Inputs: []lottie.Input{
 			{Type: lottie.InputEvent, Name: "attack"},
 			{Type: lottie.InputEvent, Name: "clipDone"},
 		},
 		States: []lottie.State{
-			at(loopState("ready", "ready", []lottie.Transition{
-				to("windup", event("attack")),
+			at(loopState("ready-state", "ready-anim", []lottie.Transition{
+				to("windup-state", event("attack")),
 			}), 30, 40),
-			at(onceState("windup", "windup", []lottie.Transition{
-				to("strike", event("clipDone")),
+			at(onceState("windup-state", "windup-anim", []lottie.Transition{
+				to("strike-state", event("clipDone")),
 			}), 250, 40),
-			at(onceState("strike", "strike", []lottie.Transition{
-				to("recover", event("clipDone")),
+			at(onceState("strike-state", "strike-anim", []lottie.Transition{
+				to("recover-state", event("clipDone")),
 			}), 470, 40),
-			at(onceState("recover", "recover", []lottie.Transition{
-				to("ready", event("clipDone")),
+			at(onceState("recover-state", "recover-anim", []lottie.Transition{
+				to("ready-state", event("clipDone")),
 			}), 250, 190),
 		},
 		Interactions: []lottie.Interaction{{
@@ -269,17 +295,37 @@ Open a bundle with:
 
     cd editor && go run . ../testdata/editor/character/character.lottie
 
+## Naming
+
+Clips, states, markers and inputs are four separate namespaces, and dotLottie
+does nothing to keep them apart. A sample where the clip, the state, the
+marker and the event are all called ` + "`jump`" + ` reads fine on screen and is
+unreadable as data, so the samples suffix them:
+
+| kind | suffix | example |
+| --- | --- | --- |
+| animation | ` + "`-anim`" + ` | ` + "`jump-anim`" + ` |
+| state | ` + "`-state`" + ` | ` + "`jump-state`" + ` |
+| marker | ` + "`-seg`" + ` | ` + "`jump-seg`" + ` |
+| input | none | ` + "`jump`" + ` |
+
+Inputs stay bare on purpose: they are the names a game passes to
+` + "`Fire`" + `, so they are the sample's public surface and should read like
+one. This is a convention of these samples, not something the format
+requires.
+
 ## character/
 
 Five clips and the machine a platformer actually needs. Each clip has its own
 colour, so a state change is obvious the moment it happens.
 
 - Event inputs are the verbs a game fires: ` + "`walk`, `run`, `stop`, `jump`, `hurt`" + `.
-- ` + "`jump`" + ` is guarded on the boolean ` + "`grounded`" + `, which the game owns.
-- ` + "`anywhere`" + ` is a global state: its transition applies from every state,
-  which is how damage is reachable at any time.
-- ` + "`jump`" + ` and ` + "`hurt`" + ` are one-shot. An OnComplete interaction fires
-  ` + "`clipDone`" + `, so they return to idle without a game-side timer.
+- ` + "`jump-state`" + ` is guarded on the boolean ` + "`grounded`" + `, which the game owns.
+- ` + "`anywhere-state`" + ` is a global state: its transition applies from every
+  state, which is how damage is reachable at any time.
+- ` + "`jump-state`" + ` and ` + "`hurt-state`" + ` are one-shot. An OnComplete
+  interaction fires ` + "`clipDone`" + `, so they return to idle without a
+  game-side timer.
 - Every state lists its jump transition first: order decides which transition
   wins when two apply on the same tick.
 

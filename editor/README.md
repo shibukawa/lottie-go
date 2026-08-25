@@ -28,6 +28,10 @@ directive. Set `GOWORK=off` to build the editor against the released
 library instead — worth doing before a release, to check the library
 actually exports everything the editor uses.
 
+Right now that build fails: the Markers tab needs `Player.OnMarker` and
+`StateMachinePlayer.OnMarker`, which are newer than v0.5.2. The editor
+builds from this checkout until the next library release.
+
 ## Samples
 
 `testdata/editor/` holds three generated bundles — a platformer character,
@@ -41,16 +45,31 @@ cd editor && go run ./gensamples
 They are generated rather than downloaded so there is no third-party
 licensing to track: every clip is authored in this repository.
 
+Their names carry what kind of thing they are — `-anim` for clips, `-state`
+for states, `-seg` for markers, nothing for inputs. dotLottie keeps those in
+four separate namespaces but does nothing to tell them apart, so a machine
+where the clip, the state, the marker and the event are all called `jump`
+reads fine on screen and is unreadable as data. Inputs stay bare because
+they are what a game passes to `Fire`.
+
 ## Layout
 
-- **Clips** — the animations in the bundle, and the machine's inputs.
-  Selecting a clip plays it on its own, so it can be judged before being
-  wired into any state.
-- **Inputs** — every input carries the control that exercises it: a *Try*
-  button for an event, a checkbox or field for a value. `Restart` sits at the
-  top as a pseudo-input: it can be triggered like the rest but not renamed or
-  removed, since the document does not declare it. Selecting an input traces
-  the transitions that read it, in orange, on the graph.
+- **Clips** — one row per playable unit, which is a file narrowed to one of
+  its markers. A document carrying three markers is three clips here, so the
+  same file name repeats down the source column. Selecting one plays it on
+  its own, so it can be judged before being wired into any state.
+- **Interface** — the machine's external surface, split by direction:
+  - *Events* come in from the game. Each carries a *Try* button. `Restart`
+    leads the tab as a pseudo-event: triggerable like the rest, but not
+    renamable or removable, since the document does not declare it.
+  - *Values* come in too, each with a checkbox or a field.
+  - *Markers* go the other way: the animation passes them and the game
+    reacts. They are not declared by the machine and cannot be driven from
+    here, so the tab reports where each one lives and how often it has
+    fired this run.
+
+  Selecting an event or value traces the transitions that read it, in
+  orange, on the graph.
 - **State graph** — states as nodes, transitions as arrows, outlined as its
   own working area. Click to select, drag to move. `▶` marks the initial
   state, and the state the preview is currently in is filled green, so the

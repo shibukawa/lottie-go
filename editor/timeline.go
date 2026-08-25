@@ -185,7 +185,7 @@ func (t *timelineView) WriteStateKey(context *guigui.Context, w *guigui.StateKey
 		return
 	}
 	w.WriteInt(m.Generation())
-	w.WriteString(m.PreviewClip())
+	w.WriteString(m.PreviewClip().Anim + "/" + m.PreviewClip().Segment)
 	w.WriteString(m.ActiveState())
 }
 

@@ -2,24 +2,25 @@ package main
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
 // A clip can be judged on its own, before it is wired into any state.
 func TestPreviewOneClip(t *testing.T) {
 	m := openSample(t, "character", "character.lottie")
-	if m.PreviewClip() != "" {
+	if m.PreviewClip().Anim != "" {
 		t.Fatal("a freshly opened bundle should be previewing the machine")
 	}
 	if m.PreviewAnimation() == nil {
 		t.Fatal("nothing on the stage")
 	}
 
-	m.ShowClip("jump")
-	if m.PreviewClip() != "jump" {
-		t.Errorf("PreviewClip() = %q; want jump", m.PreviewClip())
+	m.ShowClip(clipRef{Anim: "jump-anim"})
+	if m.PreviewClip().Anim != "jump-anim" {
+		t.Errorf("PreviewClip() = %+v; want jump-anim", m.PreviewClip())
 	}
-	jump, _ := m.Bundle().Animation("jump")
+	jump, _ := m.Bundle().Animation("jump-anim")
 	if m.PreviewAnimation() != jump {
 		t.Error("the stage is not showing the selected clip")
 	}
@@ -41,24 +42,24 @@ func TestPreviewOneClip(t *testing.T) {
 	}
 
 	m.ShowMachine()
-	if m.PreviewClip() != "" {
+	if m.PreviewClip().Anim != "" {
 		t.Error("ShowMachine did not release the stage")
 	}
-	if m.ActiveState() != "idle" {
-		t.Errorf("ActiveState() = %q; want idle", m.ActiveState())
+	if m.ActiveState() != "idle-state" {
+		t.Errorf("ActiveState() = %q; want idle-state", m.ActiveState())
 	}
 }
 
 // Restarting is about the machine, so it also takes the stage back.
 func TestRestartReturnsToTheMachine(t *testing.T) {
 	m := openSample(t, "character", "character.lottie")
-	m.ShowClip("walk")
+	m.ShowClip(clipRef{Anim: "walk-anim"})
 	m.RestartPreview()
-	if m.PreviewClip() != "" {
-		t.Errorf("PreviewClip() = %q; Restart should return to the machine", m.PreviewClip())
+	if m.PreviewClip().Anim != "" {
+		t.Errorf("PreviewClip() = %+v; Restart should return to the machine", m.PreviewClip())
 	}
-	if m.ActiveState() != "idle" {
-		t.Errorf("ActiveState() = %q; want idle", m.ActiveState())
+	if m.ActiveState() != "idle-state" {
+		t.Errorf("ActiveState() = %q; want idle-state", m.ActiveState())
 	}
 }
 
@@ -66,18 +67,18 @@ func TestRestartReturnsToTheMachine(t *testing.T) {
 // drawn as active.
 func TestActiveStateFollowsPlayback(t *testing.T) {
 	m := openSample(t, "character", "character.lottie")
-	if m.ActiveState() != "idle" {
-		t.Fatalf("ActiveState() = %q; want idle", m.ActiveState())
+	if m.ActiveState() != "idle-state" {
+		t.Fatalf("ActiveState() = %q; want idle-state", m.ActiveState())
 	}
 	m.Fire("walk")
 	m.PreviewUpdate()
-	if m.ActiveState() != "walk" {
-		t.Errorf("ActiveState() = %q; want walk", m.ActiveState())
+	if m.ActiveState() != "walk-state" {
+		t.Errorf("ActiveState() = %q; want walk-state", m.ActiveState())
 	}
 	m.Fire("hurt")
 	m.PreviewUpdate()
-	if m.ActiveState() != "hurt" {
-		t.Errorf("ActiveState() = %q; want hurt", m.ActiveState())
+	if m.ActiveState() != "hurt-state" {
+		t.Errorf("ActiveState() = %q; want hurt-state", m.ActiveState())
 	}
 }
 
@@ -106,7 +107,7 @@ func TestSelectedInputTracesTransitions(t *testing.T) {
 		for _, tr := range st.Transitions {
 			if TransitionUsesInput(tr, "jump") {
 				traced++
-				if tr.ToState != "jump" {
+				if tr.ToState != "jump-state" {
 					t.Errorf("state %q traces a transition to %q", st.Name, tr.ToState)
 				}
 			} else {
@@ -140,8 +141,8 @@ func TestFireFromTheInputTable(t *testing.T) {
 	m := openSample(t, "character", "character.lottie")
 	m.Fire("walk")
 	m.PreviewUpdate()
-	if m.ActiveState() != "walk" {
-		t.Errorf("ActiveState() = %q; want walk", m.ActiveState())
+	if m.ActiveState() != "walk-state" {
+		t.Errorf("ActiveState() = %q; want walk-state", m.ActiveState())
 	}
 	// Firing with no machine running must not panic.
 	empty := NewModel()
@@ -159,27 +160,27 @@ func TestSetInputValueFromTheTable(t *testing.T) {
 	for range 5 {
 		m.PreviewUpdate()
 	}
-	if m.ActiveState() != "idle" {
+	if m.ActiveState() != "idle-state" {
 		t.Errorf("jumped while not grounded; state = %q", m.ActiveState())
 	}
 }
 
 func TestShowClipRejectsUnknownID(t *testing.T) {
 	m := openSample(t, "character", "character.lottie")
-	m.ShowClip("nope")
-	if m.PreviewClip() != "" {
+	m.ShowClip(clipRef{Anim: "nope"})
+	if m.PreviewClip().Anim != "" {
 		t.Error("an unknown clip took the stage")
 	}
 }
 
 func TestPreviewLabelDescribesTheStage(t *testing.T) {
 	m := openSample(t, "character", "character.lottie")
-	if got := m.PreviewLabel(); got != "state: idle" {
-		t.Errorf("PreviewLabel() = %q; want state: idle", got)
+	if got := m.PreviewLabel(); got != "state: idle-state" {
+		t.Errorf("PreviewLabel() = %q; want state: idle-state", got)
 	}
-	m.ShowClip("run")
-	if got := m.PreviewLabel(); got != "clip: run" {
-		t.Errorf("PreviewLabel() = %q; want clip: run", got)
+	m.ShowClip(clipRef{Anim: "run-anim"})
+	if got := m.PreviewLabel(); got != "clip: run-anim" {
+		t.Errorf("PreviewLabel() = %q; want clip: run-anim", got)
 	}
 	empty := NewModel()
 	if got := empty.PreviewLabel(); got != "no preview" {
@@ -191,11 +192,11 @@ func TestPreviewLabelDescribesTheStage(t *testing.T) {
 // previewing one on its own.
 func TestClipPreviewNeedsNoMachine(t *testing.T) {
 	m := NewModel()
-	m.ImportClip(filepath.Join(sampleDir("character"), "idle.json"))
+	m.ImportClip(filepath.Join(sampleDir("character"), "idle-anim.json"))
 	if m.Machine() != nil {
 		t.Fatal("no machine expected yet")
 	}
-	m.ShowClip("idle")
+	m.ShowClip(clipRef{Anim: "idle-anim"})
 	if m.PreviewAnimation() == nil {
 		t.Error("a clip should play even with no machine defined")
 	}
@@ -210,9 +211,9 @@ func TestSelectionDoesNotStaleThePreview(t *testing.T) {
 		t.Fatal("stale straight after loading")
 	}
 	m.SelectInput(1)
-	m.SelectState("walk")
+	m.SelectState("walk-state")
 	m.SelectTransition(0)
-	m.ShowClip("run")
+	m.ShowClip(clipRef{Anim: "run-anim"})
 	m.ShowMachine()
 	m.Problems()
 	if m.PreviewStale() {
@@ -256,7 +257,7 @@ func TestTimelineFollowsTheStage(t *testing.T) {
 	}
 
 	// A clip on its own shows its whole self, markers included.
-	m.ShowClip("actions")
+	m.ShowClip(clipRef{Anim: "actions-anim"})
 	if got := len(m.PreviewMarkers()); got != 3 {
 		t.Errorf("clip PreviewMarkers() = %d; want 3", got)
 	}
@@ -275,4 +276,123 @@ func TestTimelineIsQuietWithNothingLoaded(t *testing.T) {
 		t.Error("markers exist with nothing loaded")
 	}
 	m.PreviewSeek(10) // must not panic
+}
+
+// The playable unit is a file narrowed to one marker, so a document with
+// three markers is three clips as far as this tool is concerned.
+func TestClipRefsAreFileTimesSegment(t *testing.T) {
+	m := openSample(t, "spritesheet", "spritesheet.lottie")
+	refs := m.ClipRefs()
+	if len(refs) != 3 {
+		t.Fatalf("ClipRefs() = %v; want one per marker", refs)
+	}
+	for _, r := range refs {
+		if r.Anim != "actions-anim" {
+			t.Errorf("ref %+v does not come from the one clip in the bundle", r)
+		}
+		if r.Segment == "" {
+			t.Errorf("ref %+v should name a segment", r)
+		}
+		if r.Label() != r.Segment {
+			t.Errorf("Label() = %q; the segment leads when there is one", r.Label())
+		}
+		// The source file is what the summary carries, since the label does
+		// not repeat it.
+		if got := m.ClipSummaryRef(r); !strings.Contains(got, "actions-anim") {
+			t.Errorf("ClipSummaryRef(%+v) = %q; want the source file named", r, got)
+		}
+	}
+}
+
+// A file with no markers is one unit: itself.
+func TestClipRefsFallBackToTheWholeFile(t *testing.T) {
+	m := openSample(t, "character", "character.lottie")
+	refs := m.ClipRefs()
+	if len(refs) != len(m.AnimationIDs()) {
+		t.Fatalf("ClipRefs() = %d; want one per unmarked clip", len(refs))
+	}
+	for _, r := range refs {
+		if r.Segment != "" {
+			t.Errorf("ref %+v names a segment, but these clips have no markers", r)
+		}
+		if r.Label() != r.Anim {
+			t.Errorf("Label() = %q; want the file name %q", r.Label(), r.Anim)
+		}
+	}
+}
+
+// Previewing a segment plays only that part of the file.
+func TestShowClipHonoursTheSegment(t *testing.T) {
+	m := openSample(t, "spritesheet", "spritesheet.lottie")
+	anim, err := m.Bundle().Animation("actions-anim")
+	if err != nil {
+		t.Fatal(err)
+	}
+	walk, ok := anim.Marker("walk-seg")
+	if !ok {
+		t.Fatal("no walk-seg marker")
+	}
+	m.ShowClip(clipRef{Anim: "actions-anim", Segment: "walk-seg"})
+	if m.PreviewClip().Segment != "walk-seg" {
+		t.Fatalf("PreviewClip() = %+v", m.PreviewClip())
+	}
+	start, end := m.PreviewPlayer().Range()
+	if start != walk.Start || end != walk.End {
+		t.Errorf("range = [%v,%v); want the marker's [%v,%v)", start, end, walk.Start, walk.End)
+	}
+	if got := m.PreviewPlayer().Frame(); got != walk.Start {
+		t.Errorf("Frame() = %v; playback should start at the segment", got)
+	}
+}
+
+func TestShowClipRejectsUnknownSegment(t *testing.T) {
+	m := openSample(t, "spritesheet", "spritesheet.lottie")
+	m.ShowClip(clipRef{Anim: "actions-anim", Segment: "nope-seg"})
+	if m.PreviewClip().Anim != "" {
+		t.Error("a clip with an unknown segment took the stage")
+	}
+	if !strings.Contains(m.Status(), "no marker") {
+		t.Errorf("Status() = %q; want it to name the missing marker", m.Status())
+	}
+}
+
+// Markers are the machine's outgoing side: the game reacts to them, and the
+// count is what shows they are firing.
+func TestMarkersAreReportedWhilePlaying(t *testing.T) {
+	m := openSample(t, "spritesheet", "spritesheet.lottie")
+	refs := m.MarkerRefs()
+	if len(refs) != 3 {
+		t.Fatalf("MarkerRefs() = %v; want three", refs)
+	}
+	for _, r := range refs {
+		if r.Anim != "actions-anim" || r.Name == "" {
+			t.Errorf("marker %+v is missing its source or name", r)
+		}
+	}
+	// idle-state loops over the idle-seg range, so that marker keeps firing
+	// and the others never do.
+	for range 200 {
+		m.PreviewUpdate()
+	}
+	if m.MarkerHits("idle-seg") == 0 {
+		t.Error("the playing segment's marker never fired")
+	}
+	if got := m.MarkerHits("jump-seg"); got != 0 {
+		t.Errorf("a marker outside the playing range fired %d times", got)
+	}
+}
+
+// Restarting the preview starts the counts over: they describe this run.
+func TestMarkerHitsResetOnRestart(t *testing.T) {
+	m := openSample(t, "spritesheet", "spritesheet.lottie")
+	for range 200 {
+		m.PreviewUpdate()
+	}
+	if m.MarkerHits("idle-seg") == 0 {
+		t.Fatal("no hits to reset")
+	}
+	m.RestartPreview()
+	if got := m.MarkerHits("idle-seg"); got != 0 {
+		t.Errorf("MarkerHits after restart = %d; want 0", got)
+	}
 }

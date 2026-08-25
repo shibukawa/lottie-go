@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -56,29 +57,29 @@ func TestCharacterSample(t *testing.T) {
 		t.Errorf("EventInputs() = %v; want six verbs", got)
 	}
 	sm := m.Preview()
-	if sm.State() != "idle" {
-		t.Fatalf("initial state = %q; want idle", sm.State())
+	if sm.State() != "idle-state" {
+		t.Fatalf("initial state = %q; want idle-state", sm.State())
 	}
 
-	fire(t, m, "walk", "walk", 2)
-	fire(t, m, "run", "run", 2)
-	fire(t, m, "stop", "idle", 2)
+	fire(t, m, "walk", "walk-state", 2)
+	fire(t, m, "run", "run-state", 2)
+	fire(t, m, "stop", "idle-state", 2)
 
 	// jump is a one-shot: it must come home on its own, no timer.
-	fire(t, m, "jump", "jump", 2)
+	fire(t, m, "jump", "jump-state", 2)
 	for range 60 {
 		sm.Update()
-		if sm.State() == "idle" {
+		if sm.State() == "idle-state" {
 			break
 		}
 	}
-	if sm.State() != "idle" {
+	if sm.State() != "idle-state" {
 		t.Errorf("jump did not return to idle; stuck in %q", sm.State())
 	}
 
 	// The global state makes damage reachable from anywhere.
-	fire(t, m, "walk", "walk", 2)
-	fire(t, m, "hurt", "hurt", 2)
+	fire(t, m, "walk", "walk-state", 2)
+	fire(t, m, "hurt", "hurt-state", 2)
 }
 
 // jump is guarded on a boolean the game owns, so clearing it blocks the jump
@@ -92,18 +93,18 @@ func TestCharacterJumpRespectsGroundedGuard(t *testing.T) {
 	for range 5 {
 		sm.Update()
 	}
-	if sm.State() != "idle" {
+	if sm.State() != "idle-state" {
 		t.Errorf("jumped while not grounded; state = %q", sm.State())
 	}
 	sm.Set("grounded", true)
-	fire(t, m, "jump", "jump", 2)
+	fire(t, m, "jump", "jump-state", 2)
 }
 
 func TestSpritesheetSampleUsesSegments(t *testing.T) {
 	m := openSample(t, "spritesheet", "spritesheet.lottie")
 	sm := m.Preview()
 
-	anim, err := m.Bundle().Animation("actions")
+	anim, err := m.Bundle().Animation("actions-anim")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +112,7 @@ func TestSpritesheetSampleUsesSegments(t *testing.T) {
 		t.Fatalf("Markers() = %d; want 3", got)
 	}
 	// Each state plays only its own marker range.
-	idleMarker, ok := anim.Marker("idle")
+	idleMarker, ok := anim.Marker("idle-seg")
 	if !ok {
 		t.Fatal("no idle marker")
 	}
@@ -121,8 +122,8 @@ func TestSpritesheetSampleUsesSegments(t *testing.T) {
 			start, end, idleMarker.Start, idleMarker.End)
 	}
 
-	fire(t, m, "walk", "walk", 2)
-	walkMarker, _ := anim.Marker("walk")
+	fire(t, m, "walk", "walk-state", 2)
+	walkMarker, _ := anim.Marker("walk-seg")
 	start, end = sm.Player().Range()
 	if start != walkMarker.Start || end != walkMarker.End {
 		t.Errorf("walk range = [%v,%v); want [%v,%v)", start, end, walkMarker.Start, walkMarker.End)
@@ -151,7 +152,7 @@ func TestSamplesCarryNodePositions(t *testing.T) {
 func TestSampleClipsImportIndividually(t *testing.T) {
 	m := NewModel()
 	for _, name := range []string{"idle", "walk", "run", "jump", "hurt"} {
-		m.ImportClip(filepath.Join(sampleDir("character"), name+".json"))
+		m.ImportClip(filepath.Join(sampleDir("character"), name+"-anim.json"))
 	}
 	if got := m.AnimationIDs(); len(got) != 5 {
 		t.Fatalf("AnimationIDs() = %v; want 5 clips (%s)", got, m.Status())
@@ -173,8 +174,8 @@ func TestSampleClipsImportIndividually(t *testing.T) {
 func TestComboSampleChainsClips(t *testing.T) {
 	m := openSample(t, "combo", "combo.lottie")
 	sm := m.Preview()
-	if sm.State() != "ready" {
-		t.Fatalf("initial state = %q; want ready", sm.State())
+	if sm.State() != "ready-state" {
+		t.Fatalf("initial state = %q; want ready-state", sm.State())
 	}
 
 	var seen []string
@@ -183,11 +184,11 @@ func TestComboSampleChainsClips(t *testing.T) {
 	sm.Fire("attack")
 	for range 300 {
 		sm.Update()
-		if len(seen) > 0 && seen[len(seen)-1] == "ready" {
+		if len(seen) > 0 && seen[len(seen)-1] == "ready-state" {
 			break
 		}
 	}
-	want := []string{"windup", "strike", "recover", "ready"}
+	want := []string{"windup-state", "strike-state", "recover-state", "ready-state"}
 	if len(seen) != len(want) {
 		t.Fatalf("state sequence = %v; want %v", seen, want)
 	}
@@ -197,8 +198,8 @@ func TestComboSampleChainsClips(t *testing.T) {
 		}
 	}
 	// Only the first move needed an event from outside.
-	if sm.State() != "ready" {
-		t.Errorf("ended in %q; want ready", sm.State())
+	if sm.State() != "ready-state" {
+		t.Errorf("ended in %q; want ready-state", sm.State())
 	}
 }
 
@@ -208,8 +209,8 @@ func TestComboRunsFromOneEvent(t *testing.T) {
 	sm := m.Preview()
 	sm.Fire("attack")
 	sm.Update()
-	if sm.State() != "windup" {
-		t.Fatalf("state = %q; want windup", sm.State())
+	if sm.State() != "windup-state" {
+		t.Fatalf("state = %q; want windup-state", sm.State())
 	}
 	// Every later hand-over is the machine's own doing.
 	reached := map[string]bool{}
@@ -217,9 +218,52 @@ func TestComboRunsFromOneEvent(t *testing.T) {
 		sm.Update()
 		reached[sm.State()] = true
 	}
-	for _, s := range []string{"strike", "recover", "ready"} {
+	for _, s := range []string{"strike-state", "recover-state", "ready-state"} {
 		if !reached[s] {
 			t.Errorf("never reached %q without another event", s)
 		}
+	}
+}
+
+// Clips, states, markers and inputs are four separate namespaces, and a
+// sample where the same word appears in all four is unreadable as data.
+// Suffixes keep them apart. Events stay bare: they are the names a game
+// passes in, so they read as the public surface.
+func TestSampleNamesSayWhatKindOfThingTheyAre(t *testing.T) {
+	for _, tt := range []struct{ dir, file string }{
+		{"character", "character.lottie"},
+		{"spritesheet", "spritesheet.lottie"},
+		{"combo", "combo.lottie"},
+	} {
+		t.Run(tt.dir, func(t *testing.T) {
+			m := openSample(t, tt.dir, tt.file)
+
+			for _, id := range m.AnimationIDs() {
+				if !strings.HasSuffix(id, "-anim") {
+					t.Errorf("clip %q should end in -anim", id)
+				}
+				anim, err := m.Bundle().Animation(id)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, mk := range anim.Markers() {
+					if !strings.HasSuffix(mk.Name, "-seg") {
+						t.Errorf("marker %q in %q should end in -seg", mk.Name, id)
+					}
+				}
+			}
+			for _, st := range m.Machine().States {
+				if !strings.HasSuffix(st.Name, "-state") {
+					t.Errorf("state %q should end in -state", st.Name)
+				}
+			}
+			for _, in := range m.Machine().Inputs {
+				for _, suffix := range []string{"-anim", "-state", "-seg"} {
+					if strings.HasSuffix(in.Name, suffix) {
+						t.Errorf("input %q carries the %q suffix; inputs are the game-facing names and stay bare", in.Name, suffix)
+					}
+				}
+			}
+		})
 	}
 }

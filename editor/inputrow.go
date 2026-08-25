@@ -17,9 +17,10 @@ type inputRow struct {
 	name basicwidget.Text
 	kind basicwidget.Text
 
-	fire  basicwidget.Button
-	check basicwidget.Checkbox
-	text  basicwidget.TextInput
+	fire    basicwidget.Button
+	check   basicwidget.Checkbox
+	text    basicwidget.TextInput
+	readout basicwidget.Text
 
 	control  inputControl
 	label    string
@@ -39,6 +40,9 @@ const (
 	controlFire
 	controlBool
 	controlText
+	// controlReadout is for the outgoing side: a marker is reported, not
+	// driven, so the row shows a value instead of a control.
+	controlReadout
 )
 
 var (
@@ -76,6 +80,12 @@ func (r *inputRow) SetText(name, kind, v string, live bool) {
 	r.control = controlText
 }
 
+// SetReadout configures the row as a report with nothing to drive.
+func (r *inputRow) SetReadout(name, kind, value string) {
+	r.label, r.kindText, r.textVal, r.live = name, kind, value, false
+	r.control = controlReadout
+}
+
 func (r *inputRow) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 	adder.AddWidget(&r.name)
 	adder.AddWidget(&r.kind)
@@ -86,6 +96,8 @@ func (r *inputRow) Build(context *guigui.Context, adder *guigui.ChildAdder) erro
 		adder.AddWidget(&r.check)
 	case controlText:
 		adder.AddWidget(&r.text)
+	case controlReadout:
+		adder.AddWidget(&r.readout)
 	}
 
 	r.name.SetValue(r.label)
@@ -95,6 +107,8 @@ func (r *inputRow) Build(context *guigui.Context, adder *guigui.ChildAdder) erro
 	r.kind.SetHorizontalAlign(basicwidget.HorizontalAlignEnd)
 	r.kind.SetScale(0.8)
 	r.kind.SetOpacity(0.7)
+	// Elide rather than crop: a clipped "actions-anim" reads as a typo.
+	r.kind.SetEllipsisString("…")
 	// The labels are decoration; let the click through so the list row
 	// still selects.
 	context.SetPassthrough(&r.name, true)
@@ -121,6 +135,12 @@ func (r *inputRow) Build(context *guigui.Context, adder *guigui.ChildAdder) erro
 			}
 		})
 		context.SetEnabled(&r.text, r.live)
+	case controlReadout:
+		r.readout.SetValue(r.textVal)
+		r.readout.SetVerticalAlign(basicwidget.VerticalAlignMiddle)
+		r.readout.SetHorizontalAlign(basicwidget.HorizontalAlignEnd)
+		r.readout.SetScale(0.85)
+		context.SetPassthrough(&r.readout, true)
 	}
 	return nil
 }
@@ -128,9 +148,15 @@ func (r *inputRow) Build(context *guigui.Context, adder *guigui.ChildAdder) erro
 func (r *inputRow) layout(context *guigui.Context) guigui.LinearLayout {
 	u := basicwidget.UnitSize(context)
 	r.items = slices.Delete(r.items, 0, len(r.items))
+	// A readout row names a source file in the middle column, which needs
+	// more room than the one-word kind an input row puts there.
+	kindWidth := 5 * u / 2
+	if r.control == controlReadout {
+		kindWidth = 9 * u / 2
+	}
 	r.items = append(r.items,
 		guigui.LinearLayoutItem{Widget: &r.name, Size: guigui.FlexibleSize(1)},
-		guigui.LinearLayoutItem{Widget: &r.kind, Size: guigui.FixedSize(5 * u / 2)},
+		guigui.LinearLayoutItem{Widget: &r.kind, Size: guigui.FixedSize(kindWidth)},
 	)
 	switch r.control {
 	case controlFire:
@@ -142,6 +168,9 @@ func (r *inputRow) layout(context *guigui.Context) guigui.LinearLayout {
 	case controlText:
 		r.items = append(r.items, guigui.LinearLayoutItem{
 			Widget: &r.text, Size: guigui.FixedSize(3 * u)})
+	case controlReadout:
+		r.items = append(r.items, guigui.LinearLayoutItem{
+			Widget: &r.readout, Size: guigui.FixedSize(3 * u / 2)})
 	}
 	return guigui.LinearLayout{
 		Direction: guigui.LayoutDirectionHorizontal,

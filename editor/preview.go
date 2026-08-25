@@ -45,7 +45,7 @@ func (p *previewPane) Build(context *guigui.Context, adder *guigui.ChildAdder) e
 	adder.AddWidget(&p.stateLabel)
 	adder.AddWidget(&p.hint)
 	// Only offered while a clip has taken the stage.
-	if m.PreviewClip() != "" {
+	if m.PreviewClip().Anim != "" {
 		adder.AddWidget(&p.backToMachine)
 	}
 
@@ -54,7 +54,7 @@ func (p *previewPane) Build(context *guigui.Context, adder *guigui.ChildAdder) e
 
 	hint := ""
 	switch {
-	case m.PreviewClip() != "":
+	case m.PreviewClip().Anim != "":
 		hint = "playing one clip; the machine is paused"
 	case m.PreviewErr() != nil:
 		hint = m.PreviewErr().Error()
@@ -90,7 +90,7 @@ func (p *previewPane) WriteStateKey(context *guigui.Context, w *guigui.StateKeyW
 	}
 	w.WriteInt(m.Generation())
 	w.WriteString(m.ActiveState())
-	w.WriteString(m.PreviewClip())
+	w.WriteString(m.PreviewClip().Anim + "/" + m.PreviewClip().Segment)
 }
 
 func (p *previewPane) Layout(context *guigui.Context, widgetBounds *guigui.WidgetBounds, layouter *guigui.ChildLayouter) {
@@ -104,7 +104,7 @@ func (p *previewPane) Layout(context *guigui.Context, widgetBounds *guigui.Widge
 		guigui.LinearLayoutItem{Widget: &p.stateLabel, Size: guigui.FixedSize(u)},
 		guigui.LinearLayoutItem{Widget: &p.hint, Size: guigui.FixedSize(u)},
 	)
-	if m != nil && m.PreviewClip() != "" {
+	if m != nil && m.PreviewClip().Anim != "" {
 		p.items = append(p.items, guigui.LinearLayoutItem{
 			Widget: &p.backToMachine, Size: guigui.FixedSize(u)})
 	}

@@ -43,6 +43,7 @@ type StateMachinePlayer struct {
 	loopCompleted bool
 
 	onStateChanged func(from, to string)
+	onMarker       func(state string, marker Marker)
 
 	unsupported map[string]struct{}
 	err         error
@@ -104,6 +105,14 @@ func (m *StateMachinePlayer) Player() *Player { return m.player }
 // including the moves a single Update chains through. It runs during Update.
 func (m *StateMachinePlayer) OnStateChanged(f func(from, to string)) {
 	m.onStateChanged = f
+}
+
+// OnMarker registers a function to run when the playing clip passes a
+// marker, handed the state that was playing. Markers are the animation's own
+// cues — a footstep, a hit frame — so a game can react to them without
+// counting frames itself. It runs during Update.
+func (m *StateMachinePlayer) OnMarker(f func(state string, marker Marker)) {
+	m.onMarker = f
 }
 
 // Err returns the first error hit while running, such as a state naming an
@@ -370,6 +379,12 @@ func (m *StateMachinePlayer) startPlayback(st *State) {
 	p.Rewind()
 	p.OnComplete(func() { m.completed = true })
 	p.OnLoopComplete(func() { m.loopCompleted = true })
+	name := st.Name
+	p.OnMarker(func(mk Marker) {
+		if m.onMarker != nil {
+			m.onMarker(name, mk)
+		}
+	})
 	if st.Autoplay {
 		p.Play()
 	} else {

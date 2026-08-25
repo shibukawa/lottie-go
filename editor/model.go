@@ -42,8 +42,14 @@ type Model struct {
 	previewErr error
 
 	// The preview shows either the machine or one clip on its own.
-	previewClip string
-	clipPlayer  *lottie.Player
+	previewClip    clipRef
+	clipPlayer     *lottie.Player
+	previewClipSet bool
+
+	// How often each marker has been passed since the preview started.
+	// Markers are the machine's outgoing side, so the count is what shows
+	// they are actually firing.
+	markerHits map[string]int
 
 	// Which input is selected, so the graph can highlight the transitions
 	// that depend on it.
@@ -660,39 +666,147 @@ func SetInputValue[T lottie.InputValue](m *Model, name string, v T) {
 func (m *Model) Preview() *lottie.StateMachinePlayer { return m.preview }
 func (m *Model) PreviewErr() error                   { return m.previewErr }
 
-// PreviewClip returns the clip being previewed on its own, or "" when the
-// preview is running the machine.
-func (m *Model) PreviewClip() string { return m.previewClip }
+// clipRef is one playable unit: a file, optionally narrowed to one of its
+// markers. A document carrying three markers is three clips as far as this
+// tool is concerned, which is how they are listed.
+type clipRef struct {
+	Anim    string
+	Segment string
+}
 
-// ShowClip switches the preview to one clip, played on a loop so it can be
-// judged without wiring it into a machine first.
-func (m *Model) ShowClip(id string) {
-	anim, err := m.bundle.Animation(id)
+// Label is how the unit reads in a list: the segment leads when there is
+// one, since that is the part being played.
+func (c clipRef) Label() string {
+	if c.Segment != "" {
+		return c.Segment
+	}
+	return c.Anim
+}
+
+// markerRef is a marker together with the file it lives in.
+type markerRef struct {
+	Anim  string
+	Name  string
+	Start float64
+	End   float64
+}
+
+// ClipRefs lists every playable unit in the bundle: one row per marker, or
+// the whole file when it carries none. The same file name repeats across
+// its segments, which is the point.
+func (m *Model) ClipRefs() []clipRef {
+	var out []clipRef
+	for _, id := range m.bundle.AnimationIDs() {
+		anim, err := m.bundle.Animation(id)
+		if err != nil {
+			out = append(out, clipRef{Anim: id})
+			continue
+		}
+		var named int
+		for _, mk := range anim.Markers() {
+			if mk.Name == "" {
+				continue
+			}
+			named++
+			out = append(out, clipRef{Anim: id, Segment: mk.Name})
+		}
+		if named == 0 {
+			out = append(out, clipRef{Anim: id})
+		}
+	}
+	return out
+}
+
+// MarkerRefs lists every marker in the bundle. They are the machine's
+// outgoing interface: a game reacts to them through OnMarker.
+func (m *Model) MarkerRefs() []markerRef {
+	var out []markerRef
+	for _, id := range m.bundle.AnimationIDs() {
+		anim, err := m.bundle.Animation(id)
+		if err != nil {
+			continue
+		}
+		for _, mk := range anim.Markers() {
+			if mk.Name == "" {
+				continue
+			}
+			out = append(out, markerRef{Anim: id, Name: mk.Name, Start: mk.Start, End: mk.End})
+		}
+	}
+	return out
+}
+
+// MarkerHits reports how often a marker has fired since the preview began.
+func (m *Model) MarkerHits(name string) int { return m.markerHits[name] }
+
+// ClipSummaryRef describes one playable unit for the clips list.
+func (m *Model) ClipSummaryRef(c clipRef) string {
+	anim, err := m.bundle.Animation(c.Anim)
 	if err != nil {
-		m.setStatus("cannot play clip %q: %v", id, err)
+		return "unreadable"
+	}
+	if c.Segment == "" {
+		w, h := anim.Size()
+		return fmt.Sprintf("%.2fs %d×%d", anim.Duration().Seconds(), w, h)
+	}
+	mk, ok := anim.Marker(c.Segment)
+	if !ok {
+		return c.Anim + " (missing)"
+	}
+	fps := anim.FrameRate()
+	if fps <= 0 {
+		fps = 60
+	}
+	return fmt.Sprintf("%s %.2fs", c.Anim, (mk.End-mk.Start)/fps)
+}
+
+// PreviewClip returns the unit being previewed on its own; Anim is empty
+// when the preview is running the machine.
+func (m *Model) PreviewClip() clipRef { return m.previewClip }
+
+// ShowClip switches the preview to one playable unit, looped so it can be
+// judged without wiring it into a machine first.
+func (m *Model) ShowClip(c clipRef) {
+	anim, err := m.bundle.Animation(c.Anim)
+	if err != nil {
+		m.setStatus("cannot play clip %q: %v", c.Anim, err)
 		m.generation++
 		return
 	}
 	p := anim.NewPlayer()
 	p.SetLoop(true)
-	m.previewClip, m.clipPlayer = id, p
-	m.setStatus("previewing clip %q", id)
+	if c.Segment != "" && !p.SetMarkerRange(c.Segment) {
+		m.setStatus("clip %q has no marker %q", c.Anim, c.Segment)
+		m.generation++
+		return
+	}
+	p.Rewind()
+	p.OnMarker(func(mk lottie.Marker) { m.noteMarker(mk) })
+	m.previewClip, m.clipPlayer = c, p
+	m.setStatus("previewing %s", c.Label())
 	m.generation++
 }
 
 // ShowMachine returns the preview to the state machine.
 func (m *Model) ShowMachine() {
-	if m.previewClip == "" {
+	if m.previewClip.Anim == "" {
 		return
 	}
-	m.previewClip, m.clipPlayer = "", nil
+	m.previewClip, m.clipPlayer = clipRef{}, nil
 	m.generation++
+}
+
+func (m *Model) noteMarker(mk lottie.Marker) {
+	if m.markerHits == nil {
+		m.markerHits = map[string]int{}
+	}
+	m.markerHits[mk.Name]++
 }
 
 // ActiveState is the state the running machine is in, or "" when a clip is
 // being previewed on its own.
 func (m *Model) ActiveState() string {
-	if m.previewClip != "" || m.preview == nil {
+	if m.previewClip.Anim != "" || m.preview == nil {
 		return ""
 	}
 	return m.preview.State()
@@ -701,8 +815,8 @@ func (m *Model) ActiveState() string {
 // PreviewLabel describes what the stage is showing.
 func (m *Model) PreviewLabel() string {
 	switch {
-	case m.previewClip != "":
-		return "clip: " + m.previewClip
+	case m.previewClip.Anim != "":
+		return "clip: " + m.previewClip.Label()
 	case m.previewErr != nil:
 		return "preview error"
 	case m.preview == nil:
@@ -784,7 +898,7 @@ func (m *Model) PreviewStale() bool {
 }
 
 func (m *Model) RestartPreview() {
-	m.previewClip, m.clipPlayer = "", nil
+	m.previewClip, m.clipPlayer = clipRef{}, nil
 	m.generation++
 	m.restartPreview()
 }
@@ -805,6 +919,8 @@ func (m *Model) restartPreview() {
 		m.previewErr = err
 		return
 	}
+	clear(m.markerHits)
+	p.OnMarker(func(state string, mk lottie.Marker) { m.noteMarker(mk) })
 	m.preview = p
 	m.previewGen = m.docGen
 }
