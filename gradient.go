@@ -152,8 +152,20 @@ func (r *renderer) executeGradient(dst *ebiten.Image, cmd *drawCmd, arr []geomet
 	if region.Empty() {
 		return
 	}
+
+	// Bail out before taking an offscreen. Returning an unread offscreen to
+	// the pool would strand the fill that was rasterized into it: the vector
+	// package defers a fill until its target is next used, so an offscreen
+	// that goes back unused carries that pending work into whichever layer
+	// borrows it next.
+	grad := cmd.grad
+	inv, ok := grad.mat.invert()
+	if !ok {
+		return
+	}
+
 	w, h := region.Dx(), region.Dy()
-	mask := r.pool.get(w, h)
+	mask, maskBase := sharedPool.get(w, h)
 
 	// Rebuild the path shifted into mask space.
 	shift := identityMatrix.translate(-float64(region.Min.X), -float64(region.Min.Y))
@@ -180,12 +192,6 @@ func (r *renderer) executeGradient(dst *ebiten.Image, cmd *drawCmd, arr []geomet
 		gradShader = s
 	})
 
-	grad := cmd.grad
-	inv, ok := grad.mat.invert()
-	if !ok {
-		r.pool.put(mask)
-		return
-	}
 	stops := make([]float32, maxGradStops)
 	colors := make([]float32, maxGradStops*4)
 	for i := 0; i < grad.count; i++ {
@@ -232,5 +238,5 @@ func (r *renderer) executeGradient(dst *ebiten.Image, cmd *drawCmd, arr []geomet
 		"Colors": colors,
 	}
 	dst.DrawTrianglesShader(vs, []uint16{0, 1, 2, 1, 3, 2}, gradShader, &top)
-	r.pool.put(mask)
+	sharedPool.put(maskBase)
 }

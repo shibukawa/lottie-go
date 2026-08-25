@@ -1,6 +1,7 @@
 package lottie
 
 import (
+	"image"
 	"math"
 	"sync"
 
@@ -35,41 +36,118 @@ type drawCmd struct {
 // maxOffscreen bounds pooled offscreen dimensions.
 const maxOffscreen = 4096
 
-// imagePool reuses offscreen images by exact size.
+// smallBucketMax is the size below which bucket sizes double instead of
+// stepping by bucketStep, and bucketStep is the step above it. Small
+// offscreens are numerous and cheap, so a coarse ladder keeps their bucket
+// count down; large ones are rare and expensive, so a fine ladder keeps their
+// waste down.
+const (
+	smallBucketMin  = 16
+	smallBucketMax  = 256
+	largeBucketStep = 128
+)
+
+// bucketSize rounds an offscreen dimension up to the next bucket. Offscreens
+// are sized to layer bounds, which drift by a pixel or two from frame to
+// frame as a layer animates; without rounding, almost every frame would miss
+// the pool and allocate a fresh texture.
+func bucketSize(n int) int {
+	if n <= smallBucketMin {
+		return smallBucketMin
+	}
+	if n <= smallBucketMax {
+		b := smallBucketMin
+		for b < n {
+			b *= 2
+		}
+		return b
+	}
+	return (n + largeBucketStep - 1) &^ (largeBucketStep - 1)
+}
+
+// perBucket caps how many free images a single bucket retains, so that a
+// frame which transiently needs many same-sized offscreens does not pin them
+// all for the rest of the process's life.
+const perBucket = 4
+
+// imagePool reuses offscreen images. Offscreens live only for as long as it
+// takes to compose one layer, so a single process-wide pool keeps the texture
+// count proportional to composition depth instead of to the number of
+// animations on screen: every Player borrows from and returns to the same set
+// of images rather than growing a private one.
+//
+// Ebitengine will not keep an image on its shared texture atlas once the image
+// has been drawn into, and the delay before it may rejoin doubles with every
+// such use. Offscreens are therefore permanently isolated textures, which is
+// what makes the count of them, rather than their size, the thing worth
+// minimizing.
 type imagePool struct {
+	mu   sync.Mutex
 	free map[[2]int][]*ebiten.Image
 }
 
-func (p *imagePool) get(w, h int) *ebiten.Image {
-	if w < 1 {
-		w = 1
+// sharedPool backs every renderer in the process.
+var sharedPool imagePool
+
+// get returns a cleared offscreen whose bounds are exactly the requested size,
+// together with the pooled image backing it. Callers hand the backing image,
+// not the view, to put.
+func (p *imagePool) get(w, h int) (view, base *ebiten.Image) {
+	w = min(max(w, 1), maxOffscreen)
+	h = min(max(h, 1), maxOffscreen)
+	return p.alloc(w, h, bucketSize(w), bucketSize(h))
+}
+
+// getExact skips bucketing. An offscreen that is resampled when it is
+// composited must not sit on an oversized backing image: the sampling
+// coordinates are derived from the backing size, so rounding the allocation up
+// shifts filtered pixels by a unit. Sizes on this path track the composition
+// resolution rather than per-frame layer bounds, so they repeat well enough to
+// pool without bucketing.
+func (p *imagePool) getExact(w, h int) (view, base *ebiten.Image) {
+	w = min(max(w, 1), maxOffscreen)
+	h = min(max(h, 1), maxOffscreen)
+	return p.alloc(w, h, w, h)
+}
+
+func (p *imagePool) alloc(w, h, bw, bh int) (view, base *ebiten.Image) {
+	key := [2]int{bw, bh}
+
+	p.mu.Lock()
+	if s := p.free[key]; len(s) > 0 {
+		base = s[len(s)-1]
+		p.free[key] = s[:len(s)-1]
 	}
-	if h < 1 {
-		h = 1
+	p.mu.Unlock()
+
+	if base == nil {
+		base = ebiten.NewImage(bw, bh)
 	}
-	if w > maxOffscreen {
-		w = maxOffscreen
+	if bw == w && bh == h {
+		base.Clear()
+		return base, base
 	}
-	if h > maxOffscreen {
-		h = maxOffscreen
-	}
-	key := [2]int{w, h}
+	view = base.SubImage(image.Rect(0, 0, w, h)).(*ebiten.Image)
+	// Only the view is ever read back, so clearing the whole backing image
+	// would be wasted fill rate.
+	view.Clear()
+	return view, base
+}
+
+func (p *imagePool) put(base *ebiten.Image) {
+	b := base.Bounds()
+	key := [2]int{b.Dx(), b.Dy()}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if p.free == nil {
 		p.free = map[[2]int][]*ebiten.Image{}
 	}
-	if s := p.free[key]; len(s) > 0 {
-		img := s[len(s)-1]
-		p.free[key] = s[:len(s)-1]
-		img.Clear()
-		return img
+	if len(p.free[key]) >= perBucket {
+		base.Deallocate()
+		return
 	}
-	return ebiten.NewImage(w, h)
-}
-
-func (p *imagePool) put(img *ebiten.Image) {
-	b := img.Bounds()
-	key := [2]int{b.Dx(), b.Dy()}
-	p.free[key] = append(p.free[key], img)
+	p.free[key] = append(p.free[key], base)
 }
 
 // renderer holds reusable buffers for one Player.
@@ -88,7 +166,6 @@ type renderer struct {
 	dashVals     []float64
 	repGeoms     []geometry // repeater source snapshot
 	repCmds      []drawCmd
-	pool         imagePool
 	trim         trimmer
 }
 
@@ -166,28 +243,37 @@ func (r *renderer) renderLayer(dst *ebiten.Image, l *layerNode, f float64, root 
 		return
 	}
 
-	// Flatten the layer into a dst-sized offscreen, apply masks and matte
-	// there, then composite.
+	// Flatten the layer into an offscreen, apply masks and matte there, then
+	// composite. The offscreen only has to cover what the layer draws, so
+	// shrink it to the layer's own bounds where those are known: an effect
+	// then costs in proportion to the thing it is applied to rather than to
+	// the size of the destination.
 	bounds := dst.Bounds()
+	if lb, ok := r.layerBounds(l, f, lt, mat); ok {
+		bounds = bounds.Intersect(lb)
+		if bounds.Empty() {
+			return
+		}
+	}
 	w, h := bounds.Dx(), bounds.Dy()
 	shift := identityMatrix.translate(-float64(bounds.Min.X), -float64(bounds.Min.Y))
 	bodyMat := shift.mul(mat)
 	var neutral ebiten.ColorScale
 
-	content := r.pool.get(w, h)
+	content, contentBase := sharedPool.get(w, h)
 	r.renderBody(content, l, f, lt, bodyMat, 1, neutral, ebiten.BlendSourceOver, antialias)
 
 	if len(l.masks) > 0 {
 		r.applyMasks(content, l.masks, lt, bodyMat, antialias)
 	}
 	if hasMatte {
-		matteImg := r.pool.get(w, h)
+		matteImg, matteBase := sharedPool.get(w, h)
 		src := l.matteSrc
 		if !src.hidden && f >= src.ip && f < src.op {
 			r.renderLayer(matteImg, src, f, shift.mul(root), neutral, antialias, false)
 		}
 		combineMatte(content, matteImg, l.matteMode)
-		r.pool.put(matteImg)
+		sharedPool.put(matteBase)
 	}
 
 	var op ebiten.DrawImageOptions
@@ -196,7 +282,120 @@ func (r *renderer) renderLayer(dst *ebiten.Image, l *layerNode, f float64, root 
 	op.ColorScale.ScaleAlpha(float32(opacity))
 	op.Blend = blend
 	dst.DrawImage(content, &op)
-	r.pool.put(content)
+	sharedPool.put(contentBase)
+}
+
+// layerBounds returns a device-space rectangle that contains everything the
+// layer draws, and reports whether one could be determined at all.
+//
+// The result is deliberately a superset rather than a tight fit. Masks and
+// track mattes only ever remove coverage, never add it, so an offscreen
+// clipped to the layer's own content is correct for every matte mode
+// including the inverted ones. Erring outward therefore only costs area,
+// while erring inward would clip visible pixels.
+func (r *renderer) layerBounds(l *layerNode, f, lt float64, mat matrix) (image.Rectangle, bool) {
+	switch l.typ {
+	case 4:
+		return r.shapeBounds(l, lt, mat)
+	case 0:
+		if len(l.comp) == 0 || l.compW <= 0 || l.compH <= 0 {
+			return image.Rectangle{}, true
+		}
+		return quadBounds(mat, 0, 0, l.compW, l.compH, 1), true
+	case 2:
+		if l.img == nil {
+			return image.Rectangle{}, true
+		}
+		b := l.img.Bounds()
+		return quadBounds(mat, float64(b.Min.X), float64(b.Min.Y), float64(b.Max.X), float64(b.Max.Y), 1), true
+	}
+	// A text layer's extent is only known once renderText has shaped it.
+	return image.Rectangle{}, false
+}
+
+// shapeBounds evaluates the layer's shapes and bounds the result. It leaves
+// the geometry and command arenas dirty; every caller re-walks the shapes
+// before drawing them, so the arenas are rebuilt anyway.
+func (r *renderer) shapeBounds(l *layerNode, lt float64, mat matrix) (image.Rectangle, bool) {
+	r.nGeoms = 0
+	r.nDash = 0
+	r.cmds = r.cmds[:0]
+	r.walkShapes(l.shapes, lt, mat, 1)
+
+	minX, minY := math.Inf(1), math.Inf(1)
+	maxX, maxY := math.Inf(-1), math.Inf(-1)
+	grow := func(arr []geometry, n int) {
+		for i := 0; i < n; i++ {
+			g := &arr[i]
+			for j, v := range g.bez.V {
+				// A cubic segment stays inside the convex hull of its control
+				// points, so bounding the vertices together with their tangent
+				// handles bounds the curve.
+				cx, cy := v[0], v[1]
+				pts := [3][2]float64{{cx, cy}, {cx, cy}, {cx, cy}}
+				if j < len(g.bez.O) {
+					pts[1][0] += g.bez.O[j][0]
+					pts[1][1] += g.bez.O[j][1]
+				}
+				if j < len(g.bez.I) {
+					pts[2][0] += g.bez.I[j][0]
+					pts[2][1] += g.bez.I[j][1]
+				}
+				for _, p := range pts {
+					x, y := g.mat.apply(p[0], p[1])
+					minX, minY = math.Min(minX, x), math.Min(minY, y)
+					maxX, maxY = math.Max(maxX, x), math.Max(maxY, y)
+				}
+			}
+		}
+	}
+	grow(r.geoms, r.nGeoms)
+	grow(r.dashGeoms, r.nDash)
+	if math.IsInf(minX, 1) {
+		return image.Rectangle{}, true
+	}
+
+	// A stroke straddles its path by half its width, but joins and caps reach
+	// further: a square cap puts its corner at half the width diagonally out
+	// from the end point, and a miter join runs out along the corner by up to
+	// the miter limit. Pad by whichever stroke in the layer reaches furthest.
+	pad := 0.0
+	for i := range r.cmds {
+		c := &r.cmds[i]
+		if !c.stroke {
+			continue
+		}
+		reach := 1.0
+		if c.strokeOpts.LineCap == vector.LineCapSquare {
+			reach = math.Sqrt2
+		}
+		if c.strokeOpts.LineJoin == vector.LineJoinMiter {
+			reach = math.Max(reach, float64(c.strokeOpts.MiterLimit))
+		}
+		pad = math.Max(pad, float64(c.strokeOpts.Width)/2*reach)
+	}
+	return outsetRect(minX, minY, maxX, maxY, pad+1), true
+}
+
+// quadBounds bounds the image of an axis-aligned rectangle under m.
+func quadBounds(m matrix, x0, y0, x1, y1, pad float64) image.Rectangle {
+	minX, minY := math.Inf(1), math.Inf(1)
+	maxX, maxY := math.Inf(-1), math.Inf(-1)
+	for _, c := range [4][2]float64{{x0, y0}, {x1, y0}, {x0, y1}, {x1, y1}} {
+		x, y := m.apply(c[0], c[1])
+		minX, minY = math.Min(minX, x), math.Min(minY, y)
+		maxX, maxY = math.Max(maxX, x), math.Max(maxY, y)
+	}
+	return outsetRect(minX, minY, maxX, maxY, pad)
+}
+
+// outsetRect rounds a float rectangle outward, widened by pad. The extra
+// pixel absorbs the sub-pixel offsets the anti-aliased rasterizer samples at.
+func outsetRect(minX, minY, maxX, maxY, pad float64) image.Rectangle {
+	return image.Rect(
+		int(math.Floor(minX-pad))-1, int(math.Floor(minY-pad))-1,
+		int(math.Ceil(maxX+pad))+1, int(math.Ceil(maxY+pad))+1,
+	)
 }
 
 // renderBody draws the layer's content with the given transform.
@@ -238,7 +437,7 @@ func (r *renderer) renderBody(dst *ebiten.Image, l *layerNode, f, lt float64, ma
 			oh, s = maxOffscreen, float64(maxOffscreen)/l.compH
 			ow = int(math.Ceil(l.compW * s))
 		}
-		off := r.pool.get(ow, oh)
+		off, offBase := sharedPool.getExact(ow, oh)
 		var neutral ebiten.ColorScale
 		r.renderLayers(off, l.comp, lt, identityMatrix.scale(s, s), neutral, antialias)
 		var op ebiten.DrawImageOptions
@@ -248,7 +447,7 @@ func (r *renderer) renderBody(dst *ebiten.Image, l *layerNode, f, lt float64, ma
 		op.Blend = blend
 		op.Filter = ebiten.FilterLinear
 		dst.DrawImage(off, &op)
-		r.pool.put(off)
+		sharedPool.put(offBase)
 	case 2:
 		if l.img == nil {
 			return
@@ -267,7 +466,7 @@ func (r *renderer) renderBody(dst *ebiten.Image, l *layerNode, f, lt float64, ma
 // content with it.
 func (r *renderer) applyMasks(content *ebiten.Image, masks []maskNode, lt float64, mat matrix, antialias bool) {
 	b := content.Bounds()
-	coverage := r.pool.get(b.Dx(), b.Dy())
+	coverage, coverageBase := sharedPool.get(b.Dx(), b.Dy())
 	for i := range masks {
 		m := &masks[i]
 		alpha := clamp01(m.opacity.scalarAt(lt, 100) / 100)
@@ -291,7 +490,7 @@ func (r *renderer) applyMasks(content *ebiten.Image, masks []maskNode, lt float6
 	var op ebiten.DrawImageOptions
 	op.Blend = ebiten.BlendDestinationIn
 	content.DrawImage(coverage, &op)
-	r.pool.put(coverage)
+	sharedPool.put(coverageBase)
 }
 
 var (

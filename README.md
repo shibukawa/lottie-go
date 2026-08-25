@@ -173,7 +173,20 @@ go run ./examples/stopwatch
 
 # performance target verification (5+ concurrent animations)
 go run ./examples/stress
+
+# GPU cost inspection and pixel-regression guard for the compositing path
+go run -tags ebitenginedebug ./examples/gpuprobe -copies 20 |
+	go run ./examples/gpuprobe -summarize
+go run ./examples/gpuprobe -golden /tmp/base    # record reference renders
+go run ./examples/gpuprobe -compare /tmp/base   # verify against them
 ```
+
+`gpuprobe` exists because draw-call merging and texture allocation are not
+observable from outside Ebitengine. Built with the `ebitenginedebug` tag,
+Ebitengine dumps every graphics command and every internal texture once per
+frame, and `-summarize` reduces that to the numbers worth tracking. Its
+`-golden`/`-compare` modes render fixed frames of every bundled asset to PNG,
+which is how changes to offscreen allocation are shown to be pixel-neutral.
 
 The stopwatch shows the intended game-UI pattern: ten `digit-N.json`
 animations each display digit N at frame 0 and morph to N+1 when played,
@@ -245,6 +258,14 @@ modifiers. See `.knowledge/` for the full requirement catalog.
 - `go run ./examples/stress` verifies the performance target (5 concurrent
   UI-scale animations, p99 draw under 2ms). Measured on an M3: p99 0.98ms
   at 5 players; 40 players still hold 60fps.
+- Masks, track mattes and precomps need an offscreen. Ebitengine drops an
+  image from its shared texture atlas as soon as anything is drawn into one,
+  and doubles the wait before it may rejoin on every further such use, so
+  offscreens are permanently textures of their own and their count is what
+  matters. One process-wide pool serves every `Player`, and each offscreen
+  covers only the layer's own bounds rather than the whole destination, which
+  keeps that count flat as animations are added: 20 concurrent matte
+  animations hold 6 textures totalling 6.4MiB.
 
 ## Verification
 
