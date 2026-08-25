@@ -7,17 +7,37 @@ Open a bundle with:
 
     cd editor && go run . ../testdata/editor/character/character.lottie
 
+## Naming
+
+Clips, states, markers and inputs are four separate namespaces, and dotLottie
+does nothing to keep them apart. A sample where the clip, the state, the
+marker and the event are all called `jump` reads fine on screen and is
+unreadable as data, so the samples suffix them:
+
+| kind | suffix | example |
+| --- | --- | --- |
+| animation | `-anim` | `jump-anim` |
+| state | `-state` | `jump-state` |
+| marker | `-seg` | `jump-seg` |
+| input | none | `jump` |
+
+Inputs stay bare on purpose: they are the names a game passes to
+`Fire`, so they are the sample's public surface and should read like
+one. This is a convention of these samples, not something the format
+requires.
+
 ## character/
 
 Five clips and the machine a platformer actually needs. Each clip has its own
 colour, so a state change is obvious the moment it happens.
 
 - Event inputs are the verbs a game fires: `walk`, `run`, `stop`, `jump`, `hurt`.
-- `jump` is guarded on the boolean `grounded`, which the game owns.
-- `anywhere` is a global state: its transition applies from every state,
-  which is how damage is reachable at any time.
-- `jump` and `hurt` are one-shot. An OnComplete interaction fires
-  `clipDone`, so they return to idle without a game-side timer.
+- `jump-state` is guarded on the boolean `grounded`, which the game owns.
+- `anywhere-state` is a global state: its transition applies from every
+  state, which is how damage is reachable at any time.
+- `jump-state` and `hurt-state` are one-shot. An OnComplete
+  interaction fires `clipDone`, so they return to idle without a
+  game-side timer.
 - Every state lists its jump transition first: order decides which transition
   wins when two apply on the same tick.
 

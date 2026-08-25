@@ -41,6 +41,13 @@ cd editor && go run ./gensamples
 They are generated rather than downloaded so there is no third-party
 licensing to track: every clip is authored in this repository.
 
+Their names carry what kind of thing they are — `-anim` for clips, `-state`
+for states, `-seg` for markers, nothing for inputs. dotLottie keeps those in
+four separate namespaces but does nothing to tell them apart, so a machine
+where the clip, the state, the marker and the event are all called `jump`
+reads fine on screen and is unreadable as data. Inputs stay bare because
+they are what a game passes to `Fire`.
+
 ## Layout
 
 - **Clips** — the animations in the bundle, and the machine's inputs.

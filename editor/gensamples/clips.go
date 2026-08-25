@@ -1,5 +1,9 @@
 package main
 
+// Names carry what kind of thing they are: clips end in -anim, the markers
+// inside them in -seg. Without that, a sample where the clip, the state, the
+// marker and the event are all called "jump" is unreadable as data.
+//
 // The sample character: a rounded body over a ground shadow, animated
 // differently per clip. Each clip has its own colour so a state change is
 // obvious the moment it happens in the preview.
@@ -52,7 +56,7 @@ func idleClip() obj {
 		key(0, []float64{100, 100}, true),
 		key(45, []float64{103, 96}, true),
 		key(f, []float64{100, 100}, true))
-	return doc("idle", size, size, f, []obj{
+	return doc("idle-anim", size, size, f, []obj{
 		body(f, bodyTransform(pos, scale, static(0.0)), colIdle),
 		shadow(f, static([]float64{100, 100})),
 	}, nil)
@@ -71,7 +75,7 @@ func walkClip() obj {
 		key(0, []float64{-7}, false),
 		key(24, []float64{7}, false),
 		key(f, []float64{-7}, false))
-	return doc("walk", size, size, f, []obj{
+	return doc("walk-anim", size, size, f, []obj{
 		body(f, bodyTransform(pos, static([]float64{100, 100}), rot), colWalk),
 		shadow(f, static([]float64{100, 100})),
 	}, nil)
@@ -96,7 +100,7 @@ func runClip() obj {
 		key(12, []float64{104, 96}, false),
 		key(18, []float64{96, 106}, false),
 		key(f, []float64{104, 96}, false))
-	return doc("run", size, size, f, []obj{
+	return doc("run-anim", size, size, f, []obj{
 		body(f, bodyTransform(pos, sc, rot), colRun),
 		shadow(f, static([]float64{100, 100})),
 	}, nil)
@@ -122,7 +126,7 @@ func jumpClip() obj {
 		key(0, []float64{100, 100}, true),
 		key(18, []float64{48, 48}, true),
 		key(f, []float64{100, 100}, true))
-	return doc("jump", size, size, f, []obj{
+	return doc("jump-anim", size, size, f, []obj{
 		body(f, bodyTransform(pos, sc, static(0.0)), colJump),
 		shadow(f, sh),
 	}, nil)
@@ -143,7 +147,7 @@ func hurtClip() obj {
 		key(7, []float64{-12}, false),
 		key(15, []float64{9}, false),
 		key(f, []float64{0}, false))
-	return doc("hurt", size, size, f, []obj{
+	return doc("hurt-anim", size, size, f, []obj{
 		body(f, bodyTransform(pos, static([]float64{100, 100}), rot), colHurt),
 		shadow(f, static([]float64{100, 100})),
 	}, nil)
@@ -167,13 +171,13 @@ func sheetClip() obj {
 		key(138, []float64{size / 2, 52}, true),
 		key(168, []float64{size / 2, restY}, true),
 		key(f, []float64{size / 2, restY}, true))
-	return doc("actions", size, size, f, []obj{
+	return doc("actions-anim", size, size, f, []obj{
 		body(f, bodyTransform(pos, static([]float64{100, 100}), static(0.0)), colIdle),
 		shadow(f, static([]float64{100, 100})),
 	}, []obj{
-		marker("idle", 0, 60),
-		marker("walk", 60, 60),
-		marker("jump", 120, 60),
+		marker("idle-seg", 0, 60),
+		marker("walk-seg", 60, 60),
+		marker("jump-seg", 120, 60),
 	})
 }
 
@@ -195,7 +199,7 @@ func readyClip() obj {
 		key(0, []float64{-3}, true),
 		key(36, []float64{3}, true),
 		key(f, []float64{-3}, true))
-	return doc("ready", size, size, f, []obj{
+	return doc("ready-anim", size, size, f, []obj{
 		body(f, bodyTransform(static([]float64{size / 2, restY}),
 			static([]float64{100, 100}), rot), colReady),
 		shadow(f, static([]float64{100, 100})),
@@ -214,7 +218,7 @@ func windupClip() obj {
 	rot := anim(
 		key(0, []float64{0}, true),
 		key(f, []float64{-18}, true))
-	return doc("windup", size, size, f, []obj{
+	return doc("windup-anim", size, size, f, []obj{
 		body(f, bodyTransform(pos, sc, rot), colWindup),
 		shadow(f, static([]float64{100, 100})),
 	}, nil)
@@ -235,7 +239,7 @@ func strikeClip() obj {
 		key(0, []float64{-18}, false),
 		key(6, []float64{22}, false),
 		key(f, []float64{14}, false))
-	return doc("strike", size, size, f, []obj{
+	return doc("strike-anim", size, size, f, []obj{
 		body(f, bodyTransform(pos, sc, rot), colStrike),
 		shadow(f, static([]float64{100, 100})),
 	}, nil)
@@ -254,7 +258,7 @@ func recoverClip() obj {
 	rot := anim(
 		key(0, []float64{14}, true),
 		key(f, []float64{0}, true))
-	return doc("recover", size, size, f, []obj{
+	return doc("recover-anim", size, size, f, []obj{
 		body(f, bodyTransform(pos, sc, rot), colRecover),
 		shadow(f, static([]float64{100, 100})),
 	}, nil)

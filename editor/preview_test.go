@@ -15,11 +15,11 @@ func TestPreviewOneClip(t *testing.T) {
 		t.Fatal("nothing on the stage")
 	}
 
-	m.ShowClip("jump")
-	if m.PreviewClip() != "jump" {
-		t.Errorf("PreviewClip() = %q; want jump", m.PreviewClip())
+	m.ShowClip("jump-anim")
+	if m.PreviewClip() != "jump-anim" {
+		t.Errorf("PreviewClip() = %q; want jump-anim", m.PreviewClip())
 	}
-	jump, _ := m.Bundle().Animation("jump")
+	jump, _ := m.Bundle().Animation("jump-anim")
 	if m.PreviewAnimation() != jump {
 		t.Error("the stage is not showing the selected clip")
 	}
@@ -44,21 +44,21 @@ func TestPreviewOneClip(t *testing.T) {
 	if m.PreviewClip() != "" {
 		t.Error("ShowMachine did not release the stage")
 	}
-	if m.ActiveState() != "idle" {
-		t.Errorf("ActiveState() = %q; want idle", m.ActiveState())
+	if m.ActiveState() != "idle-state" {
+		t.Errorf("ActiveState() = %q; want idle-state", m.ActiveState())
 	}
 }
 
 // Restarting is about the machine, so it also takes the stage back.
 func TestRestartReturnsToTheMachine(t *testing.T) {
 	m := openSample(t, "character", "character.lottie")
-	m.ShowClip("walk")
+	m.ShowClip("walk-anim")
 	m.RestartPreview()
 	if m.PreviewClip() != "" {
 		t.Errorf("PreviewClip() = %q; Restart should return to the machine", m.PreviewClip())
 	}
-	if m.ActiveState() != "idle" {
-		t.Errorf("ActiveState() = %q; want idle", m.ActiveState())
+	if m.ActiveState() != "idle-state" {
+		t.Errorf("ActiveState() = %q; want idle-state", m.ActiveState())
 	}
 }
 
@@ -66,18 +66,18 @@ func TestRestartReturnsToTheMachine(t *testing.T) {
 // drawn as active.
 func TestActiveStateFollowsPlayback(t *testing.T) {
 	m := openSample(t, "character", "character.lottie")
-	if m.ActiveState() != "idle" {
-		t.Fatalf("ActiveState() = %q; want idle", m.ActiveState())
+	if m.ActiveState() != "idle-state" {
+		t.Fatalf("ActiveState() = %q; want idle-state", m.ActiveState())
 	}
 	m.Fire("walk")
 	m.PreviewUpdate()
-	if m.ActiveState() != "walk" {
-		t.Errorf("ActiveState() = %q; want walk", m.ActiveState())
+	if m.ActiveState() != "walk-state" {
+		t.Errorf("ActiveState() = %q; want walk-state", m.ActiveState())
 	}
 	m.Fire("hurt")
 	m.PreviewUpdate()
-	if m.ActiveState() != "hurt" {
-		t.Errorf("ActiveState() = %q; want hurt", m.ActiveState())
+	if m.ActiveState() != "hurt-state" {
+		t.Errorf("ActiveState() = %q; want hurt-state", m.ActiveState())
 	}
 }
 
@@ -106,7 +106,7 @@ func TestSelectedInputTracesTransitions(t *testing.T) {
 		for _, tr := range st.Transitions {
 			if TransitionUsesInput(tr, "jump") {
 				traced++
-				if tr.ToState != "jump" {
+				if tr.ToState != "jump-state" {
 					t.Errorf("state %q traces a transition to %q", st.Name, tr.ToState)
 				}
 			} else {
@@ -140,8 +140,8 @@ func TestFireFromTheInputTable(t *testing.T) {
 	m := openSample(t, "character", "character.lottie")
 	m.Fire("walk")
 	m.PreviewUpdate()
-	if m.ActiveState() != "walk" {
-		t.Errorf("ActiveState() = %q; want walk", m.ActiveState())
+	if m.ActiveState() != "walk-state" {
+		t.Errorf("ActiveState() = %q; want walk-state", m.ActiveState())
 	}
 	// Firing with no machine running must not panic.
 	empty := NewModel()
@@ -159,7 +159,7 @@ func TestSetInputValueFromTheTable(t *testing.T) {
 	for range 5 {
 		m.PreviewUpdate()
 	}
-	if m.ActiveState() != "idle" {
+	if m.ActiveState() != "idle-state" {
 		t.Errorf("jumped while not grounded; state = %q", m.ActiveState())
 	}
 }
@@ -174,12 +174,12 @@ func TestShowClipRejectsUnknownID(t *testing.T) {
 
 func TestPreviewLabelDescribesTheStage(t *testing.T) {
 	m := openSample(t, "character", "character.lottie")
-	if got := m.PreviewLabel(); got != "state: idle" {
-		t.Errorf("PreviewLabel() = %q; want state: idle", got)
+	if got := m.PreviewLabel(); got != "state: idle-state" {
+		t.Errorf("PreviewLabel() = %q; want state: idle-state", got)
 	}
-	m.ShowClip("run")
-	if got := m.PreviewLabel(); got != "clip: run" {
-		t.Errorf("PreviewLabel() = %q; want clip: run", got)
+	m.ShowClip("run-anim")
+	if got := m.PreviewLabel(); got != "clip: run-anim" {
+		t.Errorf("PreviewLabel() = %q; want clip: run-anim", got)
 	}
 	empty := NewModel()
 	if got := empty.PreviewLabel(); got != "no preview" {
@@ -191,11 +191,11 @@ func TestPreviewLabelDescribesTheStage(t *testing.T) {
 // previewing one on its own.
 func TestClipPreviewNeedsNoMachine(t *testing.T) {
 	m := NewModel()
-	m.ImportClip(filepath.Join(sampleDir("character"), "idle.json"))
+	m.ImportClip(filepath.Join(sampleDir("character"), "idle-anim.json"))
 	if m.Machine() != nil {
 		t.Fatal("no machine expected yet")
 	}
-	m.ShowClip("idle")
+	m.ShowClip("idle-anim")
 	if m.PreviewAnimation() == nil {
 		t.Error("a clip should play even with no machine defined")
 	}
@@ -210,9 +210,9 @@ func TestSelectionDoesNotStaleThePreview(t *testing.T) {
 		t.Fatal("stale straight after loading")
 	}
 	m.SelectInput(1)
-	m.SelectState("walk")
+	m.SelectState("walk-state")
 	m.SelectTransition(0)
-	m.ShowClip("run")
+	m.ShowClip("run-anim")
 	m.ShowMachine()
 	m.Problems()
 	if m.PreviewStale() {
@@ -256,7 +256,7 @@ func TestTimelineFollowsTheStage(t *testing.T) {
 	}
 
 	// A clip on its own shows its whole self, markers included.
-	m.ShowClip("actions")
+	m.ShowClip("actions-anim")
 	if got := len(m.PreviewMarkers()); got != 3 {
 		t.Errorf("clip PreviewMarkers() = %d; want 3", got)
 	}
