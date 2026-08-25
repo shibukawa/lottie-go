@@ -167,3 +167,59 @@ func TestSampleClipsImportIndividually(t *testing.T) {
 		}
 	}
 }
+
+// One attack must carry the machine through all three clips on its own:
+// each ends, OnComplete fires clipDone, and the next picks it up.
+func TestComboSampleChainsClips(t *testing.T) {
+	m := openSample(t, "combo", "combo.lottie")
+	sm := m.Preview()
+	if sm.State() != "ready" {
+		t.Fatalf("initial state = %q; want ready", sm.State())
+	}
+
+	var seen []string
+	sm.OnStateChanged(func(from, to string) { seen = append(seen, to) })
+
+	sm.Fire("attack")
+	for range 300 {
+		sm.Update()
+		if len(seen) > 0 && seen[len(seen)-1] == "ready" {
+			break
+		}
+	}
+	want := []string{"windup", "strike", "recover", "ready"}
+	if len(seen) != len(want) {
+		t.Fatalf("state sequence = %v; want %v", seen, want)
+	}
+	for i := range want {
+		if seen[i] != want[i] {
+			t.Fatalf("state sequence = %v; want %v", seen, want)
+		}
+	}
+	// Only the first move needed an event from outside.
+	if sm.State() != "ready" {
+		t.Errorf("ended in %q; want ready", sm.State())
+	}
+}
+
+// The chain must not need a second attack part-way through.
+func TestComboRunsFromOneEvent(t *testing.T) {
+	m := openSample(t, "combo", "combo.lottie")
+	sm := m.Preview()
+	sm.Fire("attack")
+	sm.Update()
+	if sm.State() != "windup" {
+		t.Fatalf("state = %q; want windup", sm.State())
+	}
+	// Every later hand-over is the machine's own doing.
+	reached := map[string]bool{}
+	for range 300 {
+		sm.Update()
+		reached[sm.State()] = true
+	}
+	for _, s := range []string{"strike", "recover", "ready"} {
+		if !reached[s] {
+			t.Errorf("never reached %q without another event", s)
+		}
+	}
+}

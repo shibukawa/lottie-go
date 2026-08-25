@@ -176,3 +176,86 @@ func sheetClip() obj {
 		marker("jump", 120, 60),
 	})
 }
+
+// The combo sample: three one-shot clips that hand over to each other, so a
+// sequence plays as one motion. Nothing in the character sample chains, and
+// chaining is the thing OnComplete is really for.
+
+var (
+	colReady   = rgb{0.36, 0.70, 0.72}
+	colWindup  = rgb{0.62, 0.42, 0.85}
+	colStrike  = rgb{0.95, 0.30, 0.32}
+	colRecover = rgb{0.45, 0.55, 0.72}
+)
+
+// readyClip is the stance the combo returns to.
+func readyClip() obj {
+	const f = 72
+	rot := anim(
+		key(0, []float64{-3}, true),
+		key(36, []float64{3}, true),
+		key(f, []float64{-3}, true))
+	return doc("ready", size, size, f, []obj{
+		body(f, bodyTransform(static([]float64{size / 2, restY}),
+			static([]float64{100, 100}), rot), colReady),
+		shadow(f, static([]float64{100, 100})),
+	}, nil)
+}
+
+// windupClip leans back and compresses, the anticipation before the hit.
+func windupClip() obj {
+	const f = 18
+	pos := anim(
+		key(0, []float64{size / 2, restY}, true),
+		key(f, []float64{size/2 - 26, restY + 6}, true))
+	sc := anim(
+		key(0, []float64{100, 100}, true),
+		key(f, []float64{116, 84}, true))
+	rot := anim(
+		key(0, []float64{0}, true),
+		key(f, []float64{-18}, true))
+	return doc("windup", size, size, f, []obj{
+		body(f, bodyTransform(pos, sc, rot), colWindup),
+		shadow(f, static([]float64{100, 100})),
+	}, nil)
+}
+
+// strikeClip is the fast part: it starts where windup ended and overshoots.
+func strikeClip() obj {
+	const f = 12
+	pos := anim(
+		key(0, []float64{size/2 - 26, restY + 6}, false),
+		key(6, []float64{size/2 + 34, restY - 6}, false),
+		key(f, []float64{size/2 + 24, restY}, false))
+	sc := anim(
+		key(0, []float64{116, 84}, false),
+		key(6, []float64{78, 122}, false),
+		key(f, []float64{104, 96}, false))
+	rot := anim(
+		key(0, []float64{-18}, false),
+		key(6, []float64{22}, false),
+		key(f, []float64{14}, false))
+	return doc("strike", size, size, f, []obj{
+		body(f, bodyTransform(pos, sc, rot), colStrike),
+		shadow(f, static([]float64{100, 100})),
+	}, nil)
+}
+
+// recoverClip settles back to the ready stance, closing the sequence.
+func recoverClip() obj {
+	const f = 30
+	pos := anim(
+		key(0, []float64{size/2 + 24, restY}, true),
+		key(f, []float64{size / 2, restY}, true))
+	sc := anim(
+		key(0, []float64{104, 96}, true),
+		key(14, []float64{94, 108}, true),
+		key(f, []float64{100, 100}, true))
+	rot := anim(
+		key(0, []float64{14}, true),
+		key(f, []float64{0}, true))
+	return doc("recover", size, size, f, []obj{
+		body(f, bodyTransform(pos, sc, rot), colRecover),
+		shadow(f, static([]float64{100, 100})),
+	}, nil)
+}

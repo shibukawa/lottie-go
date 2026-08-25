@@ -24,6 +24,13 @@ colour, so a state change is obvious the moment it happens.
 The loose `.json` clips are kept next to the bundle so Import can be tried
 against them.
 
+## combo/
+
+Three one-shot clips chained end to end. Firing `attack` once plays
+windup, strike and recover as a single motion: each clip ends, the
+OnComplete interaction fires `clipDone`, and the next state picks it up.
+Watch the timeline under the stage to see each clip hand over.
+
 ## spritesheet/
 
 One document holding three actions, named by Lottie markers, with each state

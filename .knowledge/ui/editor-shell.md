@@ -27,7 +27,12 @@ ui:
             id: pane.clips
             title: Clips
             children:
-              - {kind: list, id: list.animations, columns: [id, duration, size]}
+              - {kind: list, id: list.animations, columns: [id, duration, size], action: preview the clip alone}
+              - kind: table
+                id: table.inputs
+                columns: [name, kind, control]
+                state: control is a try button for an event, a checkbox or field for a value; a Restart pseudo-row leads and is not editable
+                action: selecting a row traces its transitions on canvas.graph
           - kind: canvas
             id: canvas.graph
             title: State Graph
@@ -47,8 +52,11 @@ ui:
         title: Preview
         children:
           - {kind: image, id: view.stage, target: api:state-machine-runtime}
-          - {kind: text, id: label.state, state: current state name}
-          - {kind: list, id: list.triggers, state: one button per Event input; press fires it}
+          - {kind: text, id: label.state, state: current state name, or the clip being previewed}
+          - kind: timeline
+            id: view.timeline
+            state: document as a track, played range as a band, markers as ticks, playhead
+            action: drag to scrub
 guigui_mapping:
   window: guigui.Run root widget
   toolbar/row/panel: guigui.LinearLayout plus basicwidget.Panel
@@ -62,6 +70,9 @@ verified:
   - a custom widget must override Measure; the default 144x144 box clips its own Draw
   - validation run from Build must not bump the state key, or the tree rebuilds every tick
   - screenshots via guigui.RunWithCustomFunc, forwarding LayoutF as well as Layout
+  - basicwidget.ListItem.Content hosts a custom row widget; mark its labels passthrough so the row still selects
+  - separate a document-edit counter from the redraw counter, or selecting something reports the preview as edited
+  - a per-frame readout must be written from Tick as well as Build, or it disagrees with what Draw paints
 ```
 
 list.transitions must allow reordering because order decides which transition wins (data:state-machine).
