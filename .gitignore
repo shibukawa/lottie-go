@@ -4,3 +4,6 @@
 # Editor/OS noise
 .DS_Store
 *.swp
+
+# Example binaries built into the repo root, e.g. `go build ./examples/player`
+/player
