@@ -349,7 +349,7 @@ func (c *clipsPane) buildMarkers(context *guigui.Context, m *Model, adder *guigu
 	})
 
 	for i, mk := range markers {
-		hits := m.MarkerHits(mk.Name)
+		hits := m.MarkerHits(mk.Anim, mk.Name)
 		fired := "—"
 		if hits > 0 {
 			fired = fmt.Sprintf("×%d", hits)
@@ -408,9 +408,12 @@ func (c *clipsPane) WriteStateKey(context *guigui.Context, w *guigui.StateKeyWri
 	if m != nil {
 		w.WriteInt(m.Generation())
 		w.WriteString(m.ActiveState())
-		// Marker counts change as the animation plays.
-		for _, mk := range m.MarkerRefs() {
-			w.WriteInt(m.MarkerHits(mk.Name))
+		// Only the markers tab shows the counts, so only it needs a rebuild
+		// when one changes. Hashing a counter also keeps this off the hot
+		// path: MarkerRefs walks every clip in the bundle, and a state key
+		// is checked after every build, input pass and tick.
+		if c.tab == tabMarkers {
+			w.WriteInt(m.MarkerGeneration())
 		}
 	}
 	w.WriteString(c.selectedClip.Anim + "/" + c.selectedClip.Segment)

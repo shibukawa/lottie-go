@@ -374,10 +374,10 @@ func TestMarkersAreReportedWhilePlaying(t *testing.T) {
 	for range 200 {
 		m.PreviewUpdate()
 	}
-	if m.MarkerHits("idle-seg") == 0 {
+	if m.MarkerHits("actions-anim", "idle-seg") == 0 {
 		t.Error("the playing segment's marker never fired")
 	}
-	if got := m.MarkerHits("jump-seg"); got != 0 {
+	if got := m.MarkerHits("actions-anim", "jump-seg"); got != 0 {
 		t.Errorf("a marker outside the playing range fired %d times", got)
 	}
 }
@@ -388,11 +388,79 @@ func TestMarkerHitsResetOnRestart(t *testing.T) {
 	for range 200 {
 		m.PreviewUpdate()
 	}
-	if m.MarkerHits("idle-seg") == 0 {
+	if m.MarkerHits("actions-anim", "idle-seg") == 0 {
 		t.Fatal("no hits to reset")
 	}
 	m.RestartPreview()
-	if got := m.MarkerHits("idle-seg"); got != 0 {
+	if got := m.MarkerHits("actions-anim", "idle-seg"); got != 0 {
 		t.Errorf("MarkerHits after restart = %d; want 0", got)
+	}
+}
+
+// Two files may each carry a marker of the same name; they are different
+// signals and must not share a tally.
+func TestMarkerHitsAreKeyedByFileAndName(t *testing.T) {
+	dir := t.TempDir()
+	m := NewModel()
+	m.ImportClip(writeClip(t, dir, "left", 8, `[{"tm":2,"cm":"hit-seg","dr":2}]`))
+	m.ImportClip(writeClip(t, dir, "right", 8, `[{"tm":2,"cm":"hit-seg","dr":2}]`))
+
+	m.ShowClip(clipRef{Anim: "left"})
+	for range 20 {
+		m.PreviewUpdate()
+	}
+	if m.MarkerHits("left", "hit-seg") == 0 {
+		t.Fatal("the playing clip's marker never fired")
+	}
+	if got := m.MarkerHits("right", "hit-seg"); got != 0 {
+		t.Errorf("the other file's marker of the same name counted %d", got)
+	}
+}
+
+// The counts describe what is on the stage now, so swapping clips starts
+// them over rather than carrying the previous tally forward.
+func TestMarkerHitsResetWhenTheStageChanges(t *testing.T) {
+	m := openSample(t, "spritesheet", "spritesheet.lottie")
+	for range 200 {
+		m.PreviewUpdate()
+	}
+	if m.MarkerHits("actions-anim", "idle-seg") == 0 {
+		t.Fatal("no hits to carry over")
+	}
+	m.ShowClip(clipRef{Anim: "actions-anim", Segment: "jump-seg"})
+	if got := m.MarkerHits("actions-anim", "idle-seg"); got != 0 {
+		t.Errorf("switching clips kept the previous tally: %d", got)
+	}
+	m.ShowMachine()
+	if got := m.MarkerHits("actions-anim", "jump-seg"); got != 0 {
+		t.Errorf("returning to the machine kept the clip's tally: %d", got)
+	}
+}
+
+// A marker the machine reports is attributed to the file the playing state
+// draws from, not left unattributed.
+func TestMachineMarkersCarryTheirFile(t *testing.T) {
+	m := openSample(t, "spritesheet", "spritesheet.lottie")
+	for range 200 {
+		m.PreviewUpdate()
+	}
+	if got := m.MarkerHits("actions-anim", "idle-seg"); got == 0 {
+		t.Error("machine markers were not attributed to the state's animation")
+	}
+	if got := m.MarkerHits("", "idle-seg"); got != 0 {
+		t.Errorf("%d markers landed with no file attached", got)
+	}
+}
+
+// The generation moves on every emission, which is what widgets hash
+// instead of walking the bundle on each state-key check.
+func TestMarkerGenerationAdvancesOnEmission(t *testing.T) {
+	m := openSample(t, "spritesheet", "spritesheet.lottie")
+	before := m.MarkerGeneration()
+	for range 200 {
+		m.PreviewUpdate()
+	}
+	if m.MarkerGeneration() == before {
+		t.Error("MarkerGeneration() did not move while markers were firing")
 	}
 }

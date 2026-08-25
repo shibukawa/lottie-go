@@ -46,10 +46,15 @@ type Model struct {
 	clipPlayer     *lottie.Player
 	previewClipSet bool
 
-	// How often each marker has been passed since the preview started.
+	// How often each marker has been passed since the stage last changed.
 	// Markers are the machine's outgoing side, so the count is what shows
-	// they are actually firing.
-	markerHits map[string]int
+	// they are actually firing. Keyed by file as well as name: two clips
+	// may each carry a marker called "hit-seg" and they are not the same
+	// signal.
+	markerHits map[markerKey]int
+	// markerGen counts every emission, so a state key can notice one
+	// without walking the bundle.
+	markerGen int
 
 	// Which input is selected, so the graph can highlight the transitions
 	// that depend on it.
@@ -736,8 +741,17 @@ func (m *Model) MarkerRefs() []markerRef {
 	return out
 }
 
-// MarkerHits reports how often a marker has fired since the preview began.
-func (m *Model) MarkerHits(name string) int { return m.markerHits[name] }
+type markerKey struct{ Anim, Name string }
+
+// MarkerHits reports how often one file's marker has fired since the stage
+// last changed.
+func (m *Model) MarkerHits(anim, name string) int {
+	return m.markerHits[markerKey{anim, name}]
+}
+
+// MarkerGeneration counts every marker emission. Widgets hash it instead of
+// re-reading every marker in the bundle on each state-key check.
+func (m *Model) MarkerGeneration() int { return m.markerGen }
 
 // ClipSummaryRef describes one playable unit for the clips list.
 func (m *Model) ClipSummaryRef(c clipRef) string {
@@ -781,7 +795,10 @@ func (m *Model) ShowClip(c clipRef) {
 		return
 	}
 	p.Rewind()
-	p.OnMarker(func(mk lottie.Marker) { m.noteMarker(mk) })
+	p.OnMarker(func(mk lottie.Marker) { m.noteMarker(c.Anim, mk) })
+	// The counts describe what is on the stage, so switching clips starts
+	// them over rather than carrying the last clip's tally forward.
+	m.resetMarkerHits()
 	m.previewClip, m.clipPlayer = c, p
 	m.setStatus("previewing %s", c.Label())
 	m.generation++
@@ -793,14 +810,36 @@ func (m *Model) ShowMachine() {
 		return
 	}
 	m.previewClip, m.clipPlayer = clipRef{}, nil
+	m.resetMarkerHits()
 	m.generation++
 }
 
-func (m *Model) noteMarker(mk lottie.Marker) {
+func (m *Model) noteMarker(anim string, mk lottie.Marker) {
 	if m.markerHits == nil {
-		m.markerHits = map[string]int{}
+		m.markerHits = map[markerKey]int{}
 	}
-	m.markerHits[mk.Name]++
+	m.markerHits[markerKey{anim, mk.Name}]++
+	m.markerGen++
+}
+
+// animForState resolves which file a state plays, so a marker the machine
+// reports can be attributed to the clip it came from.
+func (m *Model) animForState(name string) string {
+	if m.machine == nil {
+		return ""
+	}
+	st, ok := m.machine.State(name)
+	if !ok {
+		return ""
+	}
+	return st.Animation
+}
+
+// resetMarkerHits starts the counts over. They describe the run currently on
+// the stage, so swapping what is playing clears them.
+func (m *Model) resetMarkerHits() {
+	clear(m.markerHits)
+	m.markerGen++
 }
 
 // ActiveState is the state the running machine is in, or "" when a clip is
@@ -919,8 +958,10 @@ func (m *Model) restartPreview() {
 		m.previewErr = err
 		return
 	}
-	clear(m.markerHits)
-	p.OnMarker(func(state string, mk lottie.Marker) { m.noteMarker(mk) })
+	m.resetMarkerHits()
+	p.OnMarker(func(state string, mk lottie.Marker) {
+		m.noteMarker(m.animForState(state), mk)
+	})
 	m.preview = p
 	m.previewGen = m.docGen
 }
