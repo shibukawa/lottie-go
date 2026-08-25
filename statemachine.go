@@ -20,7 +20,7 @@ type StateMachine struct {
 	Inputs       []Input       `json:"inputs,omitempty"`
 	Interactions []Interaction `json:"interactions,omitempty"`
 
-	Extra extraFields `json:"-"`
+	Extra ExtraFields `json:"-"`
 }
 
 // StateType discriminates the entries of StateMachine.States.
@@ -58,7 +58,7 @@ type State struct {
 	EntryActions []Action     `json:"entryActions,omitempty"`
 	ExitActions  []Action     `json:"exitActions,omitempty"`
 
-	Extra extraFields `json:"-"`
+	Extra ExtraFields `json:"-"`
 }
 
 // PlaybackSpeed returns Speed, resolving an absent value to 1. Speed is left
@@ -99,7 +99,7 @@ type Transition struct {
 	Duration float64   `json:"duration,omitempty"`
 	Easing   []float64 `json:"easing,omitempty"`
 
-	Extra extraFields `json:"-"`
+	Extra ExtraFields `json:"-"`
 }
 
 // GuardType is the kind of input a Guard inspects.
@@ -135,7 +135,7 @@ type Guard struct {
 	// and read one with BoolValue, NumberValue, or StringValue.
 	CompareTo json.RawMessage `json:"compareTo,omitempty"`
 
-	Extra extraFields `json:"-"`
+	Extra ExtraFields `json:"-"`
 }
 
 // InputType is the kind of a state machine variable.
@@ -157,7 +157,7 @@ type Input struct {
 	// survives a rewrite. Event inputs have none.
 	Value json.RawMessage `json:"value,omitempty"`
 
-	Extra extraFields `json:"-"`
+	Extra ExtraFields `json:"-"`
 }
 
 // InteractionType is the occurrence a listener reacts to.
@@ -180,7 +180,7 @@ type Interaction struct {
 	LayerName string          `json:"layerName,omitempty"`
 	Actions   []Action        `json:"actions,omitempty"`
 
-	Extra extraFields `json:"-"`
+	Extra ExtraFields `json:"-"`
 }
 
 // ActionType is the effect an Action applies.
@@ -206,7 +206,7 @@ type Action struct {
 	URL       string          `json:"url,omitempty"`
 	Target    string          `json:"target,omitempty"`
 
-	Extra extraFields `json:"-"`
+	Extra ExtraFields `json:"-"`
 }
 
 // JSONValue encodes v for use as Guard.CompareTo, Input.Value, or

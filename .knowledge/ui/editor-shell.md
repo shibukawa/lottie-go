@@ -58,6 +58,10 @@ guigui_mapping:
   contextmenu: basicwidget.ContextMenuArea
   canvas.graph: custom widget; no basicwidget equivalent (system:guigui)
   view.stage: custom widget whose Draw calls the runtime
+verified:
+  - a custom widget must override Measure; the default 144x144 box clips its own Draw
+  - validation run from Build must not bump the state key, or the tree rebuilds every tick
+  - screenshots via guigui.RunWithCustomFunc, forwarding LayoutF as well as Layout
 ```
 
 list.transitions must allow reordering because order decides which transition wins (data:state-machine).

@@ -5,5 +5,7 @@
 .DS_Store
 *.swp
 
-# Example binaries built into the repo root, e.g. `go build ./examples/player`
+# Binaries built next to their source, e.g. `go build ./examples/player` or
+# `cd editor && go build .`
 /player
+/editor/editor

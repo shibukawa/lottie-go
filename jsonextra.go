@@ -7,12 +7,13 @@ import (
 	"sync"
 )
 
-// extraFields holds object members that the enclosing Go struct does not
-// model. The dotLottie state machine schema is still growing, so a document
+// ExtraFields holds object members that the enclosing Go struct does not
+// model. It is exported so a tool rewriting a document can stash its own
+// data in one — an editor's node positions, say — and have it survive. The dotLottie state machine schema is still growing, so a document
 // this package rewrites must carry members it does not understand through
 // untouched; otherwise editing a bundle here would quietly strip features
 // other runtimes rely on.
-type extraFields map[string]json.RawMessage
+type ExtraFields map[string]json.RawMessage
 
 var knownKeysCache sync.Map // reflect.Type -> map[string]struct{}
 
@@ -39,7 +40,7 @@ func knownKeys(t reflect.Type) map[string]struct{} {
 
 // decodeExtra returns the members of data that v's fields do not cover. v
 // must be a struct value.
-func decodeExtra(data []byte, v any) (extraFields, error) {
+func decodeExtra(data []byte, v any) (ExtraFields, error) {
 	var all map[string]json.RawMessage
 	if err := json.Unmarshal(data, &all); err != nil {
 		return nil, err
@@ -55,7 +56,7 @@ func decodeExtra(data []byte, v any) (extraFields, error) {
 
 // encodeExtra marshals v and merges extra back into the object. Modeled
 // fields win, so a stale extra member can never shadow one written here.
-func encodeExtra(v any, extra extraFields) ([]byte, error) {
+func encodeExtra(v any, extra ExtraFields) ([]byte, error) {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return nil, err

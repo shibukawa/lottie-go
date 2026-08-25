@@ -1,0 +1,52 @@
+# Lottie State Machine Editor
+
+A desktop tool for bundling short Lottie clips into one dotLottie v2 archive
+and wiring the state machine a game drives by name — `sm.Fire("jump")`
+rather than tracking frame ranges.
+
+Built with [Guigui](https://github.com/guigui-gui/guigui). It is a separate
+Go module, so the `lottie-go` library itself never pulls in a GUI toolkit.
+
+```bash
+cd editor && go run . path/to/character.lottie
+```
+
+The path argument is optional; the editor also opens and saves through the
+toolbar field.
+
+The module carries a `replace` pointing at the parent directory, because the
+editor needs library changes newer than the latest tag: `ExtraFields` had to
+be exported so a tool can write vendor data into a state, and `Player` gained
+an `Animation` accessor so the preview can size its stage. Drop the replace
+and depend on a released version once those ship.
+
+## Layout
+
+- **Clips** — the animations in the bundle, and the machine's inputs. Event
+  input names are the triggers a game fires, so they are edited next to the
+  clips they drive.
+- **State graph** — states as nodes, transitions as arrows. Click to select,
+  drag to move. `▶` marks the initial state.
+- **Inspector** — the selected state's playback fields, its transitions in
+  the order that decides which one wins, and the guards on the selected
+  transition. Validation problems are listed at the bottom.
+- **Preview** — runs the machine through the same interpreter a game uses,
+  with one button per Event input.
+
+## Notes
+
+Transitions are created and edited in the inspector; the graph draws them.
+Drag-to-connect is not implemented.
+
+Node positions are stored in each state's extra fields under
+`x-lottie-go-editor`. The dotLottie schema has nowhere to record graph
+layout, and `lottie-go` writes members it does not model back unchanged, so
+positions survive a save without making the file invalid for other runtimes.
+
+Setting `LSM_EDITOR_SCREENSHOT` to a path renders a frame to a PNG and
+exits, which is how the UI is checked without a display:
+
+```bash
+LSM_EDITOR_SCREENSHOT=/tmp/shot.png LSM_EDITOR_SCREENSHOT_TICKS=45 \
+  go run . path/to/character.lottie
+```
