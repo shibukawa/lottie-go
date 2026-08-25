@@ -154,6 +154,17 @@ p.OnComplete(func() { ... })
 w, h := p.Animation().Size()   // to place or scale the drawing
 ```
 
+Markers are also cues, not just ranges. `OnMarker` fires as playback passes
+one, so a footstep or a hit frame hangs off the animation instead of a
+frame count in game code:
+
+```go
+p.OnMarker(func(m lottie.Marker) { play(m.Name) })
+
+// or, with the state machine, told which state was playing:
+sm.OnMarker(func(state string, m lottie.Marker) { play(state, m.Name) })
+```
+
 Run the demos:
 
 ```

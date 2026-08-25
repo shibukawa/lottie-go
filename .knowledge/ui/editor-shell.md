@@ -27,12 +27,20 @@ ui:
             id: pane.clips
             title: Clips
             children:
-              - {kind: list, id: list.animations, columns: [id, duration, size], action: preview the clip alone}
+              - kind: list
+                id: list.clips
+                columns: [segment-or-file, source-file, duration]
+                state: one row per file x marker; a file with no markers is one row
+                action: preview that unit alone
+              - kind: tabs
+                id: tabs.interface
+                columns: [Events, Values, Markers]
+                state: split by direction; events and values come in, markers go out
               - kind: table
-                id: table.inputs
-                columns: [name, kind, control]
-                state: control is a try button for an event, a checkbox or field for a value; a Restart pseudo-row leads and is not editable
-                action: selecting a row traces its transitions on canvas.graph
+                id: table.io
+                columns: [name, kind-or-source, control-or-hits]
+                state: try button for an event, checkbox or field for a value, fired-count for a marker; a Restart pseudo-row leads the events tab and is not editable
+                action: selecting an event or value traces its transitions on canvas.graph
           - kind: canvas
             id: canvas.graph
             title: State Graph
@@ -73,6 +81,7 @@ verified:
   - basicwidget.ListItem.Content hosts a custom row widget; mark its labels passthrough so the row still selects
   - separate a document-edit counter from the redraw counter, or selecting something reports the preview as edited
   - a per-frame readout must be written from Tick as well as Build, or it disagrees with what Draw paints
+  - build only the visible tab: an unadded widget is not laid out, drawn or sent input
 ```
 
 list.transitions must allow reordering because order decides which transition wins (data:state-machine).

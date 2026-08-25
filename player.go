@@ -38,6 +38,7 @@ type Player struct {
 
 	onComplete     func()
 	onLoopComplete func()
+	onMarker       func(Marker)
 }
 
 // NewPlayer creates an independent playback instance.
@@ -130,6 +131,30 @@ func (p *Player) OnComplete(f func()) { p.onComplete = f }
 // pass. It runs during Update.
 func (p *Player) OnLoopComplete(f func()) { p.onLoopComplete = f }
 
+// OnMarker registers a function to run when playback passes a marker's
+// start frame, which is how a game hangs a footstep, a hit frame, or any
+// other cue off the animation itself rather than off a timer. Unnamed
+// markers are skipped. It runs during Update; keep it short and do not
+// drive the player from inside it.
+func (p *Player) OnMarker(f func(Marker)) { p.onMarker = f }
+
+// emitMarkers reports the markers whose start lies in the half-open span
+// [from, to) the cursor just moved through. Reverse playback passes the
+// span the same way round, so a marker fires whichever way it is crossed.
+func (p *Player) emitMarkers(from, to float64) {
+	if p.onMarker == nil || to <= from {
+		return
+	}
+	for _, m := range p.anim.markers {
+		if m.Name == "" {
+			continue
+		}
+		if from <= m.Start && m.Start < to {
+			p.onMarker(m)
+		}
+	}
+}
+
 // Play resumes playback.
 func (p *Player) Play() { p.playing = true }
 
@@ -219,10 +244,19 @@ func (p *Player) advance(delta float64) {
 		p.frame = in
 		return
 	}
+	prev := p.frame
 	f := p.frame + delta
 	if f >= in && f < out {
 		p.frame = f
+		p.emitMarkers(min(prev, f), max(prev, f))
 		return
+	}
+	// The cursor left the range: it swept to the boundary it ran past, and
+	// on a wrap it continues from the other end.
+	if f >= out {
+		p.emitMarkers(prev, out)
+	} else {
+		p.emitMarkers(in, prev)
 	}
 	// How many times the cursor ran off an end. Normally one; a very large
 	// delta or a very short range can cross several at once.
@@ -244,6 +278,11 @@ func (p *Player) advance(delta float64) {
 		p.fireLoops(crossed)
 		p.loopsDone += crossed
 		p.frame = in + mod(f-in, span)
+		if delta >= 0 {
+			p.emitMarkers(in, p.frame)
+		} else {
+			p.emitMarkers(p.frame, out)
+		}
 	}
 }
 

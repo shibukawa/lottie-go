@@ -772,3 +772,50 @@ func TestGetRejectsMismatchedType(t *testing.T) {
 		t.Error("Get[float64] accepted a bool input")
 	}
 }
+
+// The state machine forwards its clip's markers, naming the state that was
+// playing so a game knows the context of the cue.
+func TestStateMachineForwardsMarkers(t *testing.T) {
+	b := NewBundle()
+	if err := b.SetAnimation("sheet", clipAnimation(60,
+		`[{"tm":0,"cm":"idle-seg","dr":30},{"tm":30,"cm":"step","dr":30}]`)); err != nil {
+		t.Fatal(err)
+	}
+	sm, err := ParseStateMachine([]byte(`{"initial":"walk","states":[
+	  {"name":"walk","type":"PlaybackState","animation":"sheet","loop":true,"autoplay":true}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := b.SetStateMachine("m", sm); err != nil {
+		t.Fatal(err)
+	}
+	m, err := b.NewStateMachinePlayer("m")
+	if err != nil {
+		t.Fatal(err)
+	}
+	type hit struct{ state, marker string }
+	var hits []hit
+	m.OnMarker(func(state string, mk Marker) {
+		hits = append(hits, hit{state, mk.Name})
+	})
+	for range 45 {
+		m.Update()
+	}
+	if len(hits) == 0 {
+		t.Fatal("no markers forwarded")
+	}
+	for _, h := range hits {
+		if h.state != "walk" {
+			t.Errorf("marker %q reported for state %q; want walk", h.marker, h.state)
+		}
+	}
+	var sawStep bool
+	for _, h := range hits {
+		if h.marker == "step" {
+			sawStep = true
+		}
+	}
+	if !sawStep {
+		t.Errorf("never saw the step marker; got %v", hits)
+	}
+}
