@@ -21,6 +21,15 @@ type rawAnimation struct {
 	Layers  []rawLayer   `json:"layers"`
 	Assets  []rawAsset   `json:"assets"`
 	Fonts   *rawFontList `json:"fonts"`
+	Markers []rawMarker  `json:"markers"`
+}
+
+// rawMarker is one entry of the document-level "markers" array. dotLottie
+// state machines name a marker to play only that part of an animation.
+type rawMarker struct {
+	Time     float64 `json:"tm"`
+	Comment  string  `json:"cm"`
+	Duration float64 `json:"dr"`
 }
 
 type rawFontList struct {

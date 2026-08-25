@@ -27,6 +27,7 @@ type Animation struct {
 	inPoint     float64
 	outPoint    float64
 	layers      []*layerNode // in file order (first = topmost)
+	markers     []Marker
 	unsupported map[string]struct{}
 
 	fontResolver FontResolver
@@ -75,6 +76,7 @@ func decodeJSON(data []byte, resolver AssetResolver) (*Animation, error) {
 		frameRate:   raw.FR,
 		inPoint:     raw.IP,
 		outPoint:    raw.OP,
+		markers:     buildMarkers(raw.Markers),
 		unsupported: map[string]struct{}{},
 	}
 	b := &builder{

@@ -17,4 +17,22 @@
 //	// in ebiten.Game:
 //	func (g *Game) Update() error { player.Update(); return nil }
 //	func (g *Game) Draw(screen *ebiten.Image) { player.Draw(screen, nil) }
+//
+// A dotLottie archive holding several clips is opened with DecodeBundle,
+// which reads both the version 2 layout (a/ i/ s/ t/ f/) and the older
+// version 1 one, and writes version 2.
+//
+// A bundle can also carry state machines, which let a game drive playback by
+// name rather than by frame range:
+//
+//	sm, err := bundle.NewStateMachinePlayer("character")
+//	if err != nil { ... }
+//	sm.Fire("jump")
+//
+//	// in ebiten.Game:
+//	func (g *Game) Update() error { sm.Update(); return nil }
+//	func (g *Game) Draw(screen *ebiten.Image) { sm.Draw(screen, nil) }
+//
+// See StateMachine for the document model and StateMachinePlayer for how it
+// runs.
 package lottie
