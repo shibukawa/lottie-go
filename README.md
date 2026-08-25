@@ -266,6 +266,22 @@ modifiers. See `.knowledge/` for the full requirement catalog.
   covers only the layer's own bounds rather than the whole destination, which
   keeps that count flat as animations are added: 20 concurrent matte
   animations hold 6 textures totalling 6.4MiB.
+- While a player's draw inputs repeat — same frame, transform, color scale,
+  and destination — the frame is baked once and reused, so an idle player
+  costs one texture draw and no evaluation. Ebitengine migrates the
+  read-only bake onto its source atlas after ~10 frames, at which point the
+  composites of every idle player merge: 20 paused matte animations settle
+  at 3 draw calls per frame, down from 242. Baking is skipped for
+  animations using blend modes (they must composite against the backdrop),
+  and `Player.SetSnapshotCache(false)` turns it off.
+- When one composition holds two or more masked or matted layers, their
+  offscreen work runs as shared phases over two scratch atlases — contents
+  on one, mask coverage and matte sources on the other — so the fills batch
+  across layers and the combines and composites each merge into single
+  draws. A synthetic composition with 16 masked layers renders in 14 draw
+  calls instead of 197. Whether a layer can join is decided at decode time;
+  layers that cannot (masked text, an overflowing frame) fall back to the
+  pooled path, which remains the reference behavior.
 
 ## Verification
 

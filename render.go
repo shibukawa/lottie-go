@@ -3,6 +3,7 @@ package lottie
 import (
 	"image"
 	"math"
+	"os"
 	"sync"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -150,6 +151,85 @@ func (p *imagePool) put(base *ebiten.Image) {
 	p.free[key] = append(p.free[key], base)
 }
 
+// scratchAtlas holds the two per-frame scratch textures that phase
+// compositing packs offscreen regions into: contents on img[0], mask
+// coverage and matte sources on img[1]. Two are needed because Ebitengine
+// forbids drawing an image onto itself, and two suffice for arbitrary
+// nesting because precomp surfaces are separate pooled images, so every
+// combine crosses an image boundary.
+//
+// The atlases are process-shared so their texture cost stays constant no
+// matter how many players draw. Regions live only within one render call;
+// the packer resets each time the lock is taken. TryLock keeps a concurrent
+// Draw from another goroutine correct: the loser renders through the pooled
+// fallback path instead.
+type scratchAtlas struct {
+	mu    sync.Mutex
+	img   [2]*ebiten.Image
+	x, y  int
+	shelf int
+}
+
+// scratchAtlasSize leaves room for the one-pixel padding Ebitengine adds
+// around a destination image: 1022+2 still fits a 1024-wide internal
+// backend, where a full 1024 would spill onto a 2048 one and quadruple the
+// texture cost.
+const scratchAtlasSize = 1022
+
+var sharedAtlas scratchAtlas
+
+// phaseBatchDisabled turns phase compositing off for comparison runs
+// (LOTTIE_DISABLE_PHASES=1); every layer then uses the pooled path.
+var phaseBatchDisabled = os.Getenv("LOTTIE_DISABLE_PHASES") != ""
+
+func (a *scratchAtlas) reset() { a.x, a.y, a.shelf = 0, 0, 0 }
+
+// newShelf moves the cursor to the start of an untouched row span. Each
+// planPhases call takes a fresh shelf and then clears its rows in one draw
+// per atlas — per-region clears do not merge (the builtin shader's uniforms
+// differ per destination region), and full-width rows may be cleared safely
+// only when no other plan's regions share them.
+func (a *scratchAtlas) newShelf() {
+	if a.x > 0 {
+		a.x = 0
+		a.y += a.shelf
+		a.shelf = 0
+	}
+}
+
+// alloc reserves a region valid on both atlas images, or reports that the
+// atlas is full for this frame. Each region gets a one-pixel gutter.
+func (a *scratchAtlas) alloc(w, h int) (image.Rectangle, bool) {
+	w += 2
+	h += 2
+	if w > scratchAtlasSize || h > scratchAtlasSize {
+		return image.Rectangle{}, false
+	}
+	if a.x+w > scratchAtlasSize {
+		a.x = 0
+		a.y += a.shelf
+		a.shelf = 0
+	}
+	if a.y+h > scratchAtlasSize {
+		return image.Rectangle{}, false
+	}
+	if h > a.shelf {
+		a.shelf = h
+	}
+	rect := image.Rect(a.x+1, a.y+1, a.x+w-1, a.y+h-1)
+	a.x += w
+	return rect, true
+}
+
+// ensure creates the atlas images on first actual use, so plans that end up
+// not batching never pay for them.
+func (a *scratchAtlas) ensure() {
+	if a.img[0] == nil {
+		a.img[0] = ebiten.NewImage(scratchAtlasSize, scratchAtlasSize)
+		a.img[1] = ebiten.NewImage(scratchAtlasSize, scratchAtlasSize)
+	}
+}
+
 // renderer holds reusable buffers for one Player.
 type renderer struct {
 	anim         *Animation
@@ -167,6 +247,7 @@ type renderer struct {
 	repGeoms     []geometry // repeater source snapshot
 	repCmds      []drawCmd
 	trim         trimmer
+	atlas        *scratchAtlas // non-nil while this render holds sharedAtlas
 }
 
 func nextSlot(arr []geometry, n *int) ([]geometry, *geometry) {
@@ -209,12 +290,46 @@ func copyPoints(dst, src [][2]float64) [][2]float64 {
 // render draws the whole animation at composition frame f.
 func (r *renderer) render(dst *ebiten.Image, anim *Animation, f float64, root matrix, cs ebiten.ColorScale, antialias bool) {
 	r.anim = anim
+	if anim.phaseNodes > 0 && !phaseBatchDisabled && sharedAtlas.mu.TryLock() {
+		sharedAtlas.reset()
+		r.atlas = &sharedAtlas
+		defer func() {
+			r.atlas = nil
+			sharedAtlas.mu.Unlock()
+		}()
+	}
 	r.renderLayers(dst, anim.layers, f, root, cs, antialias)
 }
 
+// animBounds returns a device-space rectangle containing everything the
+// animation draws at frame f, and whether one could be determined.
+func (r *renderer) animBounds(anim *Animation, f float64, root matrix) (image.Rectangle, bool) {
+	r.anim = anim
+	var u image.Rectangle
+	for _, l := range anim.layers {
+		if l.hidden || l.matteOnly || f < l.ip || f >= l.op {
+			continue
+		}
+		lt := l.localTime(f)
+		mat := root.mul(layerMatrix(l, f, 0))
+		b, ok := r.layerBounds(l, f, lt, mat)
+		if !ok {
+			return image.Rectangle{}, false
+		}
+		u = u.Union(b)
+	}
+	return u, true
+}
+
 // renderLayers draws a layer list bottom-up (layers are listed
-// topmost-first).
+// topmost-first). When the scratch atlases are held, the offscreen work of
+// every masked or matted layer in the list runs first as shared phases, and
+// the z-order pass then composites each with a single draw.
 func (r *renderer) renderLayers(dst *ebiten.Image, layers []*layerNode, f float64, root matrix, cs ebiten.ColorScale, antialias bool) {
+	var plan map[*layerNode]*phaseNode
+	if r.atlas != nil {
+		plan = r.planPhases(dst, layers, f, root, antialias)
+	}
 	for i := len(layers) - 1; i >= 0; i-- {
 		l := layers[i]
 		if l.hidden || l.matteOnly {
@@ -223,8 +338,163 @@ func (r *renderer) renderLayers(dst *ebiten.Image, layers []*layerNode, f float6
 		if f < l.ip || f >= l.op {
 			continue
 		}
+		if n, ok := plan[l]; ok {
+			r.emitPhase(dst, n, cs)
+			continue
+		}
 		r.renderLayer(dst, l, f, root, cs, antialias, true)
 	}
+}
+
+// phaseNode is one masked or matted layer whose offscreen work runs through
+// the scratch atlases this frame. An empty bounds means the layer draws
+// nothing this frame; the node then only marks it as handled.
+type phaseNode struct {
+	l           *layerNode
+	lt          float64
+	opacity     float64
+	mat         matrix          // dst-space transform
+	bounds      image.Rectangle // dst-space, clipped to dst
+	region      image.Rectangle // atlas coords; content on A, coverage on B
+	hasMatte    bool
+	matteRegion image.Rectangle // atlas B coords for the matte source
+}
+
+// planPhases decides which of the list's layers render through the atlases
+// this frame, allocates their regions, and runs the shared phases. Layers it
+// declines — atlas full, unknowable bounds — keep the pooled fallback path.
+func (r *renderer) planPhases(dst *ebiten.Image, layers []*layerNode, f float64, root matrix, antialias bool) map[*layerNode]*phaseNode {
+	var nodes []*phaseNode
+	var plan map[*layerNode]*phaseNode
+	add := func(l *layerNode, n *phaseNode) {
+		if plan == nil {
+			plan = map[*layerNode]*phaseNode{}
+		}
+		plan[l] = n
+	}
+	// Batching only pays from two nodes up, and the bounds evaluation below
+	// walks each candidate's shapes, so count the cheap flags first and skip
+	// the whole plan for the common single-node layer list.
+	candidates := 0
+	for _, l := range layers {
+		if l.phaseOK && !l.hidden && !l.matteOnly && f >= l.ip && f < l.op {
+			candidates++
+		}
+	}
+	if candidates < 2 {
+		return nil
+	}
+	r.atlas.newShelf()
+	rowStart := r.atlas.y
+	for i := len(layers) - 1; i >= 0; i-- {
+		l := layers[i]
+		if !l.phaseOK || l.hidden || l.matteOnly || f < l.ip || f >= l.op {
+			continue
+		}
+		lt := l.localTime(f)
+		opacity := l.transform.opacityAt(lt)
+		if opacity <= 0 {
+			continue // renderLayer draws nothing either; skip the arena walk
+		}
+		mat := root.mul(layerMatrix(l, f, 0))
+		lb, ok := r.layerBounds(l, f, lt, mat)
+		if !ok {
+			continue
+		}
+		n := &phaseNode{
+			l: l, lt: lt, opacity: opacity, mat: mat,
+			bounds:   dst.Bounds().Intersect(lb),
+			hasMatte: l.matteMode != 0 && l.matteSrc != nil,
+		}
+		if n.bounds.Empty() {
+			add(l, n) // nothing to draw; claim the layer so z-pass skips it
+			continue
+		}
+		n.region, ok = r.atlas.alloc(n.bounds.Dx(), n.bounds.Dy())
+		if !ok {
+			continue
+		}
+		if n.hasMatte {
+			n.matteRegion, ok = r.atlas.alloc(n.bounds.Dx(), n.bounds.Dy())
+			if !ok {
+				continue
+			}
+		}
+		add(l, n)
+		nodes = append(nodes, n)
+	}
+	// A single node gains nothing from batching — its draw count matches
+	// the pooled path — so do not bring the atlases into play for it.
+	if len(nodes) < 2 {
+		for _, n := range nodes {
+			delete(plan, n.l)
+		}
+		if len(plan) == 0 {
+			return nil
+		}
+		return plan
+	}
+	rows := image.Rect(0, rowStart, scratchAtlasSize, r.atlas.y+r.atlas.shelf)
+	r.atlas.ensure()
+	r.preparePhases(nodes, rows, f, root, antialias)
+	return plan
+}
+
+// preparePhases runs the batched offscreen work for one layer list. Clears
+// come first so they merge instead of flushing the deferred vector fills
+// node by node; content fills then accumulate on atlas A and coverage/matte
+// fills on atlas B until the combines flush both at once.
+func (r *renderer) preparePhases(nodes []*phaseNode, rows image.Rectangle, f float64, root matrix, antialias bool) {
+	contentImg, maskImg := r.atlas.img[0], r.atlas.img[1]
+	// One clear per atlas over this plan's private rows; see newShelf.
+	contentImg.SubImage(rows).(*ebiten.Image).Clear()
+	maskImg.SubImage(rows).(*ebiten.Image).Clear()
+	var neutral ebiten.ColorScale
+	for _, n := range nodes {
+		shift := identityMatrix.translate(
+			float64(n.region.Min.X-n.bounds.Min.X), float64(n.region.Min.Y-n.bounds.Min.Y))
+		bodyMat := shift.mul(n.mat)
+		content := contentImg.SubImage(n.region).(*ebiten.Image)
+		r.renderBody(content, n.l, f, n.lt, bodyMat, 1, neutral, ebiten.BlendSourceOver, antialias)
+		if len(n.l.masks) > 0 {
+			r.renderCoverage(maskImg.SubImage(n.region).(*ebiten.Image), n.l.masks, n.lt, bodyMat, antialias)
+		}
+		if n.hasMatte {
+			mshift := identityMatrix.translate(
+				float64(n.matteRegion.Min.X-n.bounds.Min.X), float64(n.matteRegion.Min.Y-n.bounds.Min.Y))
+			src := n.l.matteSrc
+			if !src.hidden && f >= src.ip && f < src.op {
+				matte := maskImg.SubImage(n.matteRegion).(*ebiten.Image)
+				r.renderLayer(matte, src, f, mshift.mul(root), neutral, antialias, false)
+			}
+		}
+	}
+	for _, n := range nodes {
+		content := contentImg.SubImage(n.region).(*ebiten.Image)
+		if len(n.l.masks) > 0 {
+			var op ebiten.DrawImageOptions
+			op.GeoM.Translate(float64(n.region.Min.X), float64(n.region.Min.Y))
+			op.Blend = ebiten.BlendDestinationIn
+			content.DrawImage(maskImg.SubImage(n.region).(*ebiten.Image), &op)
+		}
+		if n.hasMatte {
+			combineMatte(content, maskImg.SubImage(n.matteRegion).(*ebiten.Image), n.l.matteMode)
+		}
+	}
+}
+
+// emitPhase composites one prepared node into dst. Consecutive emits share
+// dst, source atlas, and blend, so they merge into a single draw call.
+func (r *renderer) emitPhase(dst *ebiten.Image, n *phaseNode, cs ebiten.ColorScale) {
+	if n.bounds.Empty() {
+		return
+	}
+	var op ebiten.DrawImageOptions
+	op.GeoM.Translate(float64(n.bounds.Min.X), float64(n.bounds.Min.Y))
+	op.ColorScale = cs
+	op.ColorScale.ScaleAlpha(float32(n.opacity))
+	op.Blend = blendFor(n.l.blend)
+	dst.DrawImage(r.atlas.img[0].SubImage(n.region).(*ebiten.Image), &op)
 }
 
 // renderLayer draws one layer, including its masks and track matte.
@@ -467,6 +737,17 @@ func (r *renderer) renderBody(dst *ebiten.Image, l *layerNode, f, lt float64, ma
 func (r *renderer) applyMasks(content *ebiten.Image, masks []maskNode, lt float64, mat matrix, antialias bool) {
 	b := content.Bounds()
 	coverage, coverageBase := sharedPool.get(b.Dx(), b.Dy())
+	r.renderCoverage(coverage, masks, lt, mat, antialias)
+	var op ebiten.DrawImageOptions
+	op.GeoM.Translate(float64(b.Min.X), float64(b.Min.Y))
+	op.Blend = ebiten.BlendDestinationIn
+	content.DrawImage(coverage, &op)
+	sharedPool.put(coverageBase)
+}
+
+// renderCoverage fills the combined mask shapes into coverage, whose bounds
+// must be positioned so that mat lands the shapes inside it.
+func (r *renderer) renderCoverage(coverage *ebiten.Image, masks []maskNode, lt float64, mat matrix, antialias bool) {
 	for i := range masks {
 		m := &masks[i]
 		alpha := clamp01(m.opacity.scalarAt(lt, 100) / 100)
@@ -487,10 +768,6 @@ func (r *renderer) applyMasks(content *ebiten.Image, masks []maskNode, lt float6
 		}
 		vector.FillPath(coverage, &r.maskPath, &vector.FillOptions{FillRule: vector.FillRuleNonZero}, &op)
 	}
-	var op ebiten.DrawImageOptions
-	op.Blend = ebiten.BlendDestinationIn
-	content.DrawImage(coverage, &op)
-	sharedPool.put(coverageBase)
 }
 
 var (
@@ -515,15 +792,19 @@ func Fragment(dst vec4, src vec2, color vec4) vec4 {
 `
 
 // combineMatte intersects content with the matte according to the tt mode.
+// content and matte must be the same size but may sit at different positions
+// of their images, as atlas regions do.
 func combineMatte(content, matte *ebiten.Image, mode int) {
 	b := content.Bounds()
 	switch mode {
 	case 1: // alpha
 		var op ebiten.DrawImageOptions
+		op.GeoM.Translate(float64(b.Min.X), float64(b.Min.Y))
 		op.Blend = ebiten.BlendDestinationIn
 		content.DrawImage(matte, &op)
 	case 2: // alpha inverted
 		var op ebiten.DrawImageOptions
+		op.GeoM.Translate(float64(b.Min.X), float64(b.Min.Y))
 		op.Blend = ebiten.BlendDestinationOut
 		content.DrawImage(matte, &op)
 	case 3, 4: // luma, luma inverted
@@ -535,6 +816,7 @@ func combineMatte(content, matte *ebiten.Image, mode int) {
 			lumaShader = s
 		})
 		var op ebiten.DrawRectShaderOptions
+		op.GeoM.Translate(float64(b.Min.X), float64(b.Min.Y))
 		op.Images[0] = matte
 		op.Blend = ebiten.BlendDestinationIn
 		invert := 0.0

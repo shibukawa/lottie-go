@@ -31,6 +31,11 @@ type Animation struct {
 	unsupported map[string]struct{}
 
 	fontResolver FontResolver
+
+	// Compiled at decode; see analyzeCompositing.
+	snapshotOK bool
+	phaseNodes int
+	generation int // bumped when mutable state (font resolver) changes
 }
 
 // Decode parses a Lottie JSON document. Image assets must be embedded as
@@ -99,7 +104,45 @@ func decodeJSON(data []byte, resolver AssetResolver) (*Animation, error) {
 		}
 	}
 	a.layers = b.buildLayers(raw.Layers)
+	a.analyzeCompositing()
 	return a, nil
+}
+
+// analyzeCompositing derives the render-plan flags that depend only on file
+// structure: which layers may batch their offscreen work through the scratch
+// atlases, and whether the whole animation may be snapshotted while idle.
+// Both are static properties of the layer tree; only geometry animates.
+func (a *Animation) analyzeCompositing() {
+	a.snapshotOK = true
+	for _, l := range a.layers {
+		// Root layers with a non-normal blend mode composite against
+		// whatever the game drew beneath the animation, so flattening
+		// them into a snapshot would change the result. Precomp children
+		// already flatten into the precomp's offscreen today.
+		if l.blend != 0 {
+			a.snapshotOK = false
+		}
+	}
+	// Precomp layer lists are cached per asset and shared between the
+	// layers referencing them, so guard against revisiting.
+	seen := map[*layerNode]bool{}
+	var walk func(layers []*layerNode)
+	walk = func(layers []*layerNode) {
+		for _, l := range layers {
+			if seen[l] {
+				continue
+			}
+			seen[l] = true
+			// Text extent is only known after shaping, so a masked text
+			// layer cannot be given an atlas region up front.
+			l.phaseOK = (len(l.masks) > 0 || l.matteMode != 0 && l.matteSrc != nil) && l.typ != 5
+			if l.phaseOK {
+				a.phaseNodes++
+			}
+			walk(l.comp)
+		}
+	}
+	walk(a.layers)
 }
 
 // Size returns the composition size in pixels.
@@ -158,6 +201,7 @@ type layerNode struct {
 	matteSrc  *layerNode
 	matteOnly bool // td: matte source, not drawn directly
 	blend     int  // bm
+	phaseOK   bool // may use the scratch atlases (analyzeCompositing)
 
 	// Text (ty: 5).
 	text *textNode

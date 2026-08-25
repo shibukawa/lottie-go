@@ -46,6 +46,8 @@ var (
 	compare   = flag.String("compare", "", "compare rendered output against reference PNGs in this directory")
 	tolerance = flag.Int("tolerance", 0, "maximum allowed per-channel difference when comparing")
 	summarize = flag.Bool("summarize", false, "read an ebitenginedebug log on stdin and summarize its last frame")
+	paused    = flag.Bool("paused", false, "probe mode: do not advance the animations, so the idle snapshot cache engages")
+	nosnap    = flag.Bool("nosnap", false, "disable the idle snapshot cache on every player")
 )
 
 const defaultAssetDir = "examples/gallery/assets"
@@ -77,10 +79,12 @@ func main() {
 			log.Fatalf("%s: %v", p, err)
 		}
 		for i := 0; i < *copies; i++ {
+			play := anim.NewPlayer()
+			play.SetSnapshotCache(!*nosnap)
 			entries = append(entries, entry{
 				name: strings.TrimSuffix(filepath.Base(p), ".json"),
 				anim: anim,
-				play: anim.NewPlayer(),
+				play: play,
 			})
 		}
 	}
@@ -146,7 +150,7 @@ func (g *game) Update() error {
 	if g.done || (g.mode == modeProbe && g.n >= *frames) {
 		return ebiten.Termination
 	}
-	if g.mode == modeProbe {
+	if g.mode == modeProbe && !*paused {
 		for i := range g.entries {
 			g.entries[i].play.Update()
 		}
@@ -171,8 +175,14 @@ func (g *game) Draw(screen *ebiten.Image) {
 		start, end := e.play.Range()
 		for s := 0; s < *frames; s++ {
 			f := start + (end-start)*float64(s)/float64(*frames)
-			off.Clear()
 			e.play.SetFrame(f)
+			// Draw twice: the first draw records the snapshot key and
+			// renders directly, the second is served by the idle snapshot
+			// cache. Comparing the second verifies both paths, since the
+			// cache bakes with the same renderer the first draw used.
+			off.Clear()
+			e.play.Draw(off, nil)
+			off.Clear()
 			e.play.Draw(off, nil)
 			name := fmt.Sprintf("%s-%02d.png", e.name, s)
 			if err := g.record(name, off, w, h); err != nil {

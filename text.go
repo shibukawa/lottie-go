@@ -19,6 +19,7 @@ const textResolverNote = "text layer (set a font with SetFontResolver)"
 // resolver, text layers are skipped and reported as unsupported.
 func (a *Animation) SetFontResolver(r FontResolver) {
 	a.fontResolver = r
+	a.generation++ // invalidate idle snapshots that may include text
 	if r != nil {
 		delete(a.unsupported, textResolverNote)
 	}

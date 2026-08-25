@@ -1,6 +1,7 @@
 package lottie
 
 import (
+	"image"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -38,6 +39,25 @@ type Player struct {
 
 	onComplete     func()
 	onLoopComplete func()
+
+	// Idle snapshot cache; see drawSnapshot.
+	snapKey      snapshotKey
+	snapKeyValid bool
+	snap         *ebiten.Image
+	snapOffset   image.Point
+	snapEmpty    bool
+	snapOff      bool
+}
+
+// snapshotKey captures every input Draw depends on. While it repeats, the
+// output repeats, so the previous frame's pixels can be reused.
+type snapshotKey struct {
+	frame      float64
+	root       matrix
+	cs         ebiten.ColorScale
+	antialias  bool
+	dst        image.Rectangle
+	generation int
 }
 
 // NewPlayer creates an independent playback instance.
@@ -312,5 +332,72 @@ func (p *Player) Draw(dst *ebiten.Image, opts *DrawOptions) {
 	if _, out := p.bounds(); f >= out {
 		f = out - 1e-6
 	}
+	if p.drawSnapshot(dst, f, root, cs, antialias) {
+		return
+	}
 	p.r.render(dst, p.anim, f, root, cs, antialias)
+}
+
+// SetSnapshotCache toggles the idle snapshot cache (default on). While a
+// player's draw inputs repeat — same frame, transform, color, and
+// destination — the frame is baked once and reused, which reduces an idle
+// player to a single texture draw and no per-frame evaluation.
+func (p *Player) SetSnapshotCache(enabled bool) {
+	p.snapOff = !enabled
+	if !enabled {
+		p.dropSnapshot()
+		p.snapKeyValid = false
+	}
+}
+
+// drawSnapshot serves Draw from the cache when the key repeats. The first
+// frame with a new key renders directly and only records the key; the bake
+// happens on the second frame, so a continuously animating player never
+// pays for one. Each bake uses a fresh image: Ebitengine returns an image
+// that is only ever read to its shared source atlas after ~10 frames, at
+// which point the composites of every idle player merge into one draw call,
+// and re-baking into a kept image would defer that rejoin exponentially.
+func (p *Player) drawSnapshot(dst *ebiten.Image, f float64, root matrix, cs ebiten.ColorScale, antialias bool) bool {
+	if p.snapOff || !p.anim.snapshotOK {
+		return false
+	}
+	key := snapshotKey{f, root, cs, antialias, dst.Bounds(), p.anim.generation}
+	if !p.snapKeyValid || key != p.snapKey {
+		p.snapKey = key
+		p.snapKeyValid = true
+		p.dropSnapshot()
+		return false
+	}
+	if p.snap == nil && !p.snapEmpty {
+		b, ok := p.r.animBounds(p.anim, f, root)
+		if ok {
+			b = b.Intersect(dst.Bounds())
+		} else {
+			b = dst.Bounds()
+		}
+		if b.Empty() {
+			p.snapEmpty = true
+			return true
+		}
+		img := ebiten.NewImage(b.Dx(), b.Dy())
+		shift := identityMatrix.translate(-float64(b.Min.X), -float64(b.Min.Y))
+		p.r.render(img, p.anim, f, shift.mul(root), cs, antialias)
+		p.snap = img
+		p.snapOffset = b.Min
+	}
+	if p.snapEmpty {
+		return true
+	}
+	var op ebiten.DrawImageOptions
+	op.GeoM.Translate(float64(p.snapOffset.X), float64(p.snapOffset.Y))
+	dst.DrawImage(p.snap, &op)
+	return true
+}
+
+func (p *Player) dropSnapshot() {
+	if p.snap != nil {
+		p.snap.Deallocate()
+		p.snap = nil
+	}
+	p.snapEmpty = false
 }

@@ -41,9 +41,13 @@ var Colors [16]vec4
 
 func Fragment(dst vec4, src vec2, color vec4) vec4 {
 	cov := imageSrc0At(src).a
+	// dst.xy is a position on the internal texture, where the destination
+	// image can sit anywhere; imageDstOrigin turns it into a position
+	// relative to the destination's bounds, which is what InvT is built for.
+	q := dst.xy - imageDstOrigin()
 	p := vec2(
-		InvA.x*dst.x+InvA.y*dst.y+InvT.x,
-		InvA.z*dst.x+InvA.w*dst.y+InvT.y,
+		InvA.x*q.x+InvA.y*q.y+InvT.x,
+		InvA.z*q.x+InvA.w*q.y+InvT.y,
 	)
 	var t float
 	if Kind == 2 {
@@ -192,6 +196,13 @@ func (r *renderer) executeGradient(dst *ebiten.Image, cmd *drawCmd, arr []geomet
 		gradShader = s
 	})
 
+	// The shader receives positions relative to the destination's bounds
+	// (see gradShaderSrc), so fold the bounds origin into the inverse
+	// translation: p = inv·(q + min) = inv·q + (inv·min).
+	ox := float64(dst.Bounds().Min.X)
+	oy := float64(dst.Bounds().Min.Y)
+	invTX, invTY := inv.apply(ox, oy)
+
 	stops := make([]float32, maxGradStops)
 	colors := make([]float32, maxGradStops*4)
 	for i := 0; i < grad.count; i++ {
@@ -233,7 +244,7 @@ func (r *renderer) executeGradient(dst *ebiten.Image, cmd *drawCmd, arr []geomet
 		"End":    []float32{float32(grad.ex), float32(grad.ey)},
 		"Count":  float32(grad.count),
 		"InvA":   []float32{float32(inv.A), float32(inv.C), float32(inv.B), float32(inv.D)},
-		"InvT":   []float32{float32(inv.TX), float32(inv.TY)},
+		"InvT":   []float32{float32(invTX), float32(invTY)},
 		"Stops":  stops,
 		"Colors": colors,
 	}

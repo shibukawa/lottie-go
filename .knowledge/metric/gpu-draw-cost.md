@@ -28,5 +28,13 @@ asset_prevalence:  # 61 bundled files
   nested_depth_2: 1
 ```
 
+```yaml
+after_draw_call_reduction:  # 2026-08-26
+  idle_matte_x20: {draws: 242 -> 3, converges: frame 13}
+  playing_16_masked_layers_one_comp: {draws: 197 -> 14}
+  playing_nested_masked_precomp: {draws: 204 -> 24}
+  playing_separate_single_node_animations: unchanged (by design)
+```
+
 CPU draw time is not the bottleneck (decision:defer-vertex-caching); draw
 call count matters mainly for WebGL/mobile targets.
