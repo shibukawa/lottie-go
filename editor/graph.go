@@ -21,6 +21,9 @@ import (
 
 type palette struct {
 	edge, node, nodeBorder, selected, initial, global color.Color
+	// active marks the state the preview is in right now; traced marks the
+	// transitions that read the selected input.
+	active, activeBorder, traced color.Color
 }
 
 func paletteFor(context *guigui.Context) palette {
@@ -32,6 +35,10 @@ func paletteFor(context *guigui.Context) palette {
 			selected:   color.NRGBA{0x5b, 0x9d, 0xf0, 0xff},
 			initial:    color.NRGBA{0x4c, 0xc2, 0x8a, 0xff},
 			global:     color.NRGBA{0xd0, 0x9a, 0x3c, 0xff},
+
+			active:       color.NRGBA{0x1f, 0x5c, 0x40, 0xff},
+			activeBorder: color.NRGBA{0x4c, 0xc2, 0x8a, 0xff},
+			traced:       color.NRGBA{0xf0, 0x8a, 0x3c, 0xff},
 		}
 	}
 	return palette{
@@ -41,6 +48,10 @@ func paletteFor(context *guigui.Context) palette {
 		selected:   color.NRGBA{0x1f, 0x6f, 0xd0, 0xff},
 		initial:    color.NRGBA{0x1e, 0x9c, 0x63, 0xff},
 		global:     color.NRGBA{0xb5, 0x7c, 0x1a, 0xff},
+
+		active:       color.NRGBA{0xd4, 0xf3, 0xe2, 0xff},
+		activeBorder: color.NRGBA{0x1e, 0x9c, 0x63, 0xff},
+		traced:       color.NRGBA{0xd4, 0x6a, 0x10, 0xff},
 	}
 }
 
@@ -84,13 +95,17 @@ func (g *graphView) Build(context *guigui.Context, adder *guigui.ChildAdder) err
 	for i := range states {
 		adder.AddWidget(g.nodes.At(i))
 	}
+	active := m.ActiveState()
 	for i := range states {
 		st := &states[i]
 		n := g.nodes.At(i)
 		n.SetState(st.Name, st.Type == lottie.StateGlobal,
-			st.Name == m.Machine().Initial, st.Name == m.SelectedStateName())
+			st.Name == m.Machine().Initial, st.Name == m.SelectedStateName(),
+			st.Name == active)
 		n.OnSelected(func(context *guigui.Context) {
 			m.SelectState(st.Name)
+			// Working on a state means watching the machine, not a clip.
+			m.ShowMachine()
 		})
 		n.OnDragged(func(context *guigui.Context, delta image.Point) {
 			m.SetNodePos(i, m.NodePos(i).Add(delta))
@@ -160,19 +175,29 @@ func (g *graphView) Draw(context *guigui.Context, widgetBounds *guigui.WidgetBou
 		index[st.Name] = i
 	}
 	u := float32(basicwidget.UnitSize(context))
-	for i, st := range states {
-		from := g.nodeRect(context, origin, m, i)
-		for _, tr := range st.Transitions {
-			j, ok := index[tr.ToState]
-			if !ok {
-				continue
+	traced := m.SelectedInputName()
+	// Traced edges are drawn last so they sit on top of the plain ones.
+	for _, highlight := range []bool{false, true} {
+		for i, st := range states {
+			from := g.nodeRect(context, origin, m, i)
+			for _, tr := range st.Transitions {
+				if TransitionUsesInput(tr, traced) != highlight {
+					continue
+				}
+				j, ok := index[tr.ToState]
+				if !ok {
+					continue
+				}
+				clr, width := pal.edge, u/8
+				if highlight {
+					clr, width = pal.traced, u/5
+				}
+				if j == i {
+					drawSelfLoop(dst, from, width, clr)
+					continue
+				}
+				drawEdge(dst, from, g.nodeRect(context, origin, m, j), width, clr)
 			}
-			if j == i {
-				drawSelfLoop(dst, from, u/8, pal.edge)
-				continue
-			}
-			to := g.nodeRect(context, origin, m, j)
-			drawEdge(dst, from, to, u/8, pal.edge)
 		}
 	}
 }
@@ -265,6 +290,7 @@ type graphNode struct {
 	global   bool
 	initial  bool
 	selected bool
+	active   bool
 
 	dragging   bool
 	lastCursor image.Point
@@ -272,8 +298,9 @@ type graphNode struct {
 	items []guigui.LinearLayoutItem
 }
 
-func (n *graphNode) SetState(name string, global, initial, selected bool) {
+func (n *graphNode) SetState(name string, global, initial, selected, active bool) {
 	n.name, n.global, n.initial, n.selected = name, global, initial, selected
+	n.active = active
 }
 
 func (n *graphNode) OnSelected(f func(context *guigui.Context)) {
@@ -317,13 +344,21 @@ func (n *graphNode) Draw(context *guigui.Context, widgetBounds *guigui.WidgetBou
 	b := widgetBounds.Bounds()
 	x, y := float32(b.Min.X), float32(b.Min.Y)
 	w, h := float32(b.Dx()), float32(b.Dy())
-	vector.DrawFilledRect(dst, x, y, w, h, pal.node, true)
+	fillColor := pal.node
+	if n.active {
+		fillColor = pal.active
+	}
+	vector.DrawFilledRect(dst, x, y, w, h, fillColor, true)
 
 	border := pal.nodeBorder
 	width := float32(basicwidget.UnitSize(context)) / 12
 	switch {
+	// Selection is what you are editing; active is what is playing. Both
+	// can be true, and the selection border wins so editing stays legible.
 	case n.selected:
 		border, width = pal.selected, width*2.5
+	case n.active:
+		border, width = pal.activeBorder, width*2
 	case n.initial:
 		border = pal.initial
 	case n.global:

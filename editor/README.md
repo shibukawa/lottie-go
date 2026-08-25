@@ -43,17 +43,23 @@ licensing to track: every clip is authored in this repository.
 
 ## Layout
 
-- **Clips** — the animations in the bundle, and the machine's inputs. Event
-  input names are the triggers a game fires, so they are edited next to the
-  clips they drive.
+- **Clips** — the animations in the bundle, and the machine's inputs.
+  Selecting a clip plays it on its own, so it can be judged before being
+  wired into any state.
+- **Inputs** — every input carries the control that exercises it: a *Try*
+  button for an event, a checkbox or field for a value. `Restart` sits at the
+  top as a pseudo-input: it can be triggered like the rest but not renamed or
+  removed, since the document does not declare it. Selecting an input traces
+  the transitions that read it, in orange, on the graph.
 - **State graph** — states as nodes, transitions as arrows. Click to select,
-  drag to move. `▶` marks the initial state.
+  drag to move. `▶` marks the initial state, and the state the preview is
+  currently in is filled green, so the machine can be watched running.
 - **Inspector** — the selected state's playback fields, its transitions in
   the order that decides which one wins, and the guards on the selected
   transition. Validation problems are listed at the bottom.
-- **Preview** — runs the machine through the same interpreter a game uses,
-  with one button per Event input and a control for every value input, so a
-  transition guarded on a boolean can be exercised here.
+- **Preview** — the stage. It runs the machine through the same interpreter
+  a game uses, or plays a single clip. Everything that drives it lives in the
+  Inputs table.
 
 ## Notes
 

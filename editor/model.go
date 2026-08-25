@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/hajimehoshi/ebiten/v2"
 	lottie "github.com/shibukawa/lottie-go"
 )
 
@@ -40,9 +41,20 @@ type Model struct {
 	previewGen int
 	previewErr error
 
-	// generation counts every change that the UI must redraw for. Widgets
-	// hash it in WriteStateKey instead of the whole document.
+	// The preview shows either the machine or one clip on its own.
+	previewClip string
+	clipPlayer  *lottie.Player
+
+	// Which input is selected, so the graph can highlight the transitions
+	// that depend on it.
+	selectedInput int
+
+	// generation counts every change the UI must redraw for, including
+	// selection; widgets hash it in WriteStateKey instead of the whole
+	// document. docGen counts document edits only, so merely selecting
+	// something never reports the running preview as out of date.
 	generation int
+	docGen     int
 	status     string
 
 	problemsCache []string
@@ -57,6 +69,7 @@ func NewModel() *Model {
 	m := &Model{
 		bundle:        lottie.NewBundle(),
 		selectedTrans: -1,
+		selectedInput: -1,
 		dialog:        make(chan dialogResult, 1),
 	}
 	m.status = "New bundle. Import a clip to begin."
@@ -89,9 +102,10 @@ func (m *Model) syncMachine() {
 	}
 }
 
-// touch records a change: it syncs and bumps the generation.
+// touch records a document edit: it syncs and bumps both counters.
 func (m *Model) touch() {
 	m.syncMachine()
+	m.docGen++
 	m.generation++
 }
 
@@ -133,8 +147,6 @@ func (m *Model) Open(path string) {
 	m.path = path
 	m.selectedState, m.selectedTrans = "", -1
 	m.machineID, m.machine = "", nil
-	// Bump before selecting: SelectMachine starts the preview and records
-	// the generation it was built at, so nothing may bump it afterwards.
 	m.generation++
 	if ids := b.StateMachineIDs(); len(ids) > 0 {
 		m.SelectMachine(ids[0])
@@ -593,24 +605,158 @@ func (m *Model) Problems() []string {
 	return out
 }
 
+// ---- input selection ----
+
+// SelectInput records which input the graph should trace. Selecting one
+// highlights every transition guarded on it.
+func (m *Model) SelectInput(i int) {
+	m.selectedInput = i
+	m.generation++
+}
+
+func (m *Model) SelectedInputIndex() int { return m.selectedInput }
+
+// SelectedInputName returns the highlighted input's name, or "" for none.
+func (m *Model) SelectedInputName() string {
+	if m.machine == nil || m.selectedInput < 0 || m.selectedInput >= len(m.machine.Inputs) {
+		return ""
+	}
+	return m.machine.Inputs[m.selectedInput].Name
+}
+
+// TransitionUsesInput reports whether any of a transition's guards read the
+// given input.
+func TransitionUsesInput(tr lottie.Transition, name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, g := range tr.Guards {
+		if g.InputName == name {
+			return true
+		}
+	}
+	return false
+}
+
+// Fire raises an event on the running machine, which is what the try button
+// beside each event input does.
+func (m *Model) Fire(name string) {
+	if m.preview != nil {
+		m.preview.Fire(name)
+	}
+}
+
+// SetInputValue writes a value input on the running machine.
+func SetInputValue[T lottie.InputValue](m *Model, name string, v T) {
+	if m.preview != nil {
+		m.preview.Set(name, v)
+	}
+}
+
 // ---- preview ----
 
 func (m *Model) Preview() *lottie.StateMachinePlayer { return m.preview }
 func (m *Model) PreviewErr() error                   { return m.previewErr }
 
-// PreviewStale reports whether the document changed since the running
-// preview was built.
+// PreviewClip returns the clip being previewed on its own, or "" when the
+// preview is running the machine.
+func (m *Model) PreviewClip() string { return m.previewClip }
+
+// ShowClip switches the preview to one clip, played on a loop so it can be
+// judged without wiring it into a machine first.
+func (m *Model) ShowClip(id string) {
+	anim, err := m.bundle.Animation(id)
+	if err != nil {
+		m.setStatus("cannot play clip %q: %v", id, err)
+		m.generation++
+		return
+	}
+	p := anim.NewPlayer()
+	p.SetLoop(true)
+	m.previewClip, m.clipPlayer = id, p
+	m.setStatus("previewing clip %q", id)
+	m.generation++
+}
+
+// ShowMachine returns the preview to the state machine.
+func (m *Model) ShowMachine() {
+	if m.previewClip == "" {
+		return
+	}
+	m.previewClip, m.clipPlayer = "", nil
+	m.generation++
+}
+
+// ActiveState is the state the running machine is in, or "" when a clip is
+// being previewed on its own.
+func (m *Model) ActiveState() string {
+	if m.previewClip != "" || m.preview == nil {
+		return ""
+	}
+	return m.preview.State()
+}
+
+// PreviewLabel describes what the stage is showing.
+func (m *Model) PreviewLabel() string {
+	switch {
+	case m.previewClip != "":
+		return "clip: " + m.previewClip
+	case m.previewErr != nil:
+		return "preview error"
+	case m.preview == nil:
+		return "no preview"
+	default:
+		return "state: " + m.preview.State()
+	}
+}
+
+// PreviewUpdate advances whichever player the stage is showing.
+func (m *Model) PreviewUpdate() {
+	if m.clipPlayer != nil {
+		m.clipPlayer.Update()
+		return
+	}
+	if m.preview != nil {
+		m.preview.Update()
+	}
+}
+
+// PreviewDraw renders whichever player the stage is showing.
+func (m *Model) PreviewDraw(dst *ebiten.Image, opts *lottie.DrawOptions) {
+	if m.clipPlayer != nil {
+		m.clipPlayer.Draw(dst, opts)
+		return
+	}
+	if m.preview != nil {
+		m.preview.Draw(dst, opts)
+	}
+}
+
+// PreviewAnimation is the animation on the stage, for sizing the drawing.
+func (m *Model) PreviewAnimation() *lottie.Animation {
+	if m.clipPlayer != nil {
+		return m.clipPlayer.Animation()
+	}
+	if m.preview == nil || m.preview.Player() == nil {
+		return nil
+	}
+	return m.preview.Player().Animation()
+}
+
+// PreviewStale reports whether the document was edited since the running
+// preview was built. Selection and playback do not count.
 func (m *Model) PreviewStale() bool {
-	return m.preview != nil && m.previewGen != m.generation
+	return m.preview != nil && m.previewGen != m.docGen
 }
 
 func (m *Model) RestartPreview() {
+	m.previewClip, m.clipPlayer = "", nil
 	m.generation++
 	m.restartPreview()
 }
 
-// restartPreview rebuilds the running player. The generation must already be
-// at its final value, since previewGen is what PreviewStale compares against.
+// restartPreview rebuilds the running player and records the document
+// revision it was built from.
 func (m *Model) restartPreview() {
 	m.preview, m.previewErr = nil, nil
 	if m.machine == nil || m.machineID == "" {
@@ -626,7 +772,7 @@ func (m *Model) restartPreview() {
 		return
 	}
 	m.preview = p
-	m.previewGen = m.generation
+	m.previewGen = m.docGen
 }
 
 // ---- node positions ----
