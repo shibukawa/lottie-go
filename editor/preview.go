@@ -3,6 +3,8 @@ package main
 import (
 	"image"
 	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/guigui-gui/guigui"
 	"github.com/guigui-gui/guigui/basicwidget"
@@ -21,6 +23,14 @@ type previewPane struct {
 	hint       basicwidget.Text
 	restart    basicwidget.Button
 	triggers   guigui.WidgetSlice[*basicwidget.Button]
+
+	// Value inputs need controls too, or a machine guarded on a boolean
+	// cannot be exercised here at all.
+	valueForm   basicwidget.Form
+	valueLabels guigui.WidgetSlice[*basicwidget.Text]
+	valueChecks guigui.WidgetSlice[*basicwidget.Checkbox]
+	valueTexts  guigui.WidgetSlice[*basicwidget.TextInput]
+	valueItems  []basicwidget.FormItem
 
 	items        []guigui.LinearLayoutItem
 	triggerRow   guigui.LinearLayout
@@ -62,6 +72,9 @@ func (p *previewPane) Build(context *guigui.Context, adder *guigui.ChildAdder) e
 		context.SetEnabled(b, m.Preview() != nil)
 	}
 
+	adder.AddWidget(&p.valueForm)
+	p.buildValueInputs(context, m)
+
 	switch {
 	case m.PreviewErr() != nil:
 		p.stateLabel.SetValue("preview error")
@@ -92,6 +105,91 @@ func (p *previewPane) Build(context *guigui.Context, adder *guigui.ChildAdder) e
 		m.RestartPreview()
 	})
 	return nil
+}
+
+// buildValueInputs gives every non-event input a control: a checkbox for a
+// boolean, a field for a number or string.
+func (p *previewPane) buildValueInputs(context *guigui.Context, m *Model) {
+	var inputs []lottie.Input
+	if sm := m.Machine(); sm != nil {
+		for _, in := range sm.Inputs {
+			if in.Type != lottie.InputEvent {
+				inputs = append(inputs, in)
+			}
+		}
+	}
+	var bools, texts int
+	for _, in := range inputs {
+		if in.Type == lottie.InputBoolean {
+			bools++
+		} else {
+			texts++
+		}
+	}
+	p.valueLabels.SetLen(len(inputs))
+	p.valueChecks.SetLen(bools)
+	p.valueTexts.SetLen(texts)
+
+	p.valueItems = slices.Delete(p.valueItems, 0, len(p.valueItems))
+	sm := m.Preview()
+	bi, ti := 0, 0
+	for i, in := range inputs {
+		label := p.valueLabels.At(i)
+		adderLabel(label, in.Name)
+		var control guigui.Widget
+		switch in.Type {
+		case lottie.InputBoolean:
+			c := p.valueChecks.At(bi)
+			bi++
+			if sm != nil {
+				v, _ := sm.Get[bool](in.Name)
+				c.SetValue(v)
+			}
+			c.OnValueChanged(func(context *guigui.Context, value bool) {
+				if sm != nil {
+					sm.Set(in.Name, value)
+				}
+			})
+			control = c
+		default:
+			t := p.valueTexts.At(ti)
+			ti++
+			if sm != nil {
+				if in.Type == lottie.InputNumeric {
+					v, _ := sm.Get[float64](in.Name)
+					t.SetValue(strconv.FormatFloat(v, 'g', -1, 64))
+				} else {
+					v, _ := sm.Get[string](in.Name)
+					t.SetValue(v)
+				}
+			}
+			kind := in.Type
+			t.OnValueChanged(func(context *guigui.Context, text string, committed bool) {
+				if !committed || sm == nil {
+					return
+				}
+				if kind == lottie.InputNumeric {
+					if v, err := strconv.ParseFloat(strings.TrimSpace(text), 64); err == nil {
+						sm.Set(in.Name, v)
+					}
+					return
+				}
+				sm.Set(in.Name, text)
+			})
+			control = t
+		}
+		context.SetEnabled(control, sm != nil)
+		p.valueItems = append(p.valueItems, basicwidget.FormItem{
+			PrimaryWidget: label, SecondaryWidget: control,
+		})
+	}
+	p.valueForm.SetItems(p.valueItems)
+}
+
+func adderLabel(t *basicwidget.Text, s string) {
+	t.SetValue(s)
+	t.SetVerticalAlign(basicwidget.VerticalAlignMiddle)
+	t.SetScale(0.85)
 }
 
 // WriteStateKey rebuilds when the machine moves to another state, so the
@@ -132,6 +230,7 @@ func (p *previewPane) Layout(context *guigui.Context, widgetBounds *guigui.Widge
 		guigui.LinearLayoutItem{Widget: &p.stage, Size: guigui.FlexibleSize(1)},
 		guigui.LinearLayoutItem{Widget: &p.stateLabel, Size: guigui.FixedSize(u)},
 		guigui.LinearLayoutItem{Widget: &p.hint, Size: guigui.FixedSize(u)},
+		guigui.LinearLayoutItem{Widget: &p.valueForm},
 		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &p.triggerRow},
 	)
 	(guigui.LinearLayout{

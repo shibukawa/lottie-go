@@ -8,4 +8,6 @@
 # Binaries built next to their source, e.g. `go build ./examples/player` or
 # `cd editor && go build .`
 /player
+/player.exe
 /editor/editor
+/editor/editor.exe

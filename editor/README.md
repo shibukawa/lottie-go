@@ -8,7 +8,7 @@ Built with [Guigui](https://github.com/guigui-gui/guigui). It is a separate
 Go module, so the `lottie-go` library itself never pulls in a GUI toolkit.
 
 ```bash
-cd editor && go run . path/to/character.lottie
+cd editor && go run . ../testdata/editor/character/character.lottie
 ```
 
 The path argument is optional; **Open…**, **Save As…**, and **Import…** open
@@ -21,6 +21,19 @@ be exported so a tool can write vendor data into a state, and `Player` gained
 an `Animation` accessor so the preview can size its stage. Drop the replace
 and depend on a released version once those ship.
 
+## Samples
+
+`testdata/editor/` holds two generated bundles — a platformer character and
+a marker-segmented spritesheet. See its README for what each one
+demonstrates. Regenerate them with:
+
+```bash
+cd editor && go run ./gensamples
+```
+
+They are generated rather than downloaded so there is no third-party
+licensing to track: every clip is authored in this repository.
+
 ## Layout
 
 - **Clips** — the animations in the bundle, and the machine's inputs. Event
@@ -32,7 +45,8 @@ and depend on a released version once those ship.
   the order that decides which one wins, and the guards on the selected
   transition. Validation problems are listed at the bottom.
 - **Preview** — runs the machine through the same interpreter a game uses,
-  with one button per Event input.
+  with one button per Event input and a control for every value input, so a
+  transition guarded on a boolean can be exercised here.
 
 ## Notes
 
