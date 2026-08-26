@@ -448,8 +448,8 @@ func TestOverlayToggles(t *testing.T) {
 	if !m.ShowHitboxes() || !m.ShowSockets() || !m.OverlayVisible() {
 		t.Fatal("hitboxes and sockets should show by default")
 	}
-	if m.CollisionTab() != colHitboxes || m.BodyVisible() {
-		t.Fatal("the body must stay hidden off its tab")
+	if m.CollisionTab() != colSegment || m.BodyVisible() {
+		t.Fatal("the strip opens on the segment overview, body hidden")
 	}
 	m.SetCollisionTab(colBody)
 	if !m.BodyVisible() {
@@ -458,7 +458,7 @@ func TestOverlayToggles(t *testing.T) {
 	// With the config excluding cp, the tab clamps away and the body
 	// stays hidden even though the stored tab still says Body.
 	m.SetPhysicsBackend("resolv")
-	if m.BodyVisible() || m.CollisionTab() == colBody {
+	if m.BodyVisible() || m.CollisionTab() != colSegment {
 		t.Fatalf("clamp: tab=%v visible=%v", m.CollisionTab(), m.BodyVisible())
 	}
 	m.SetPhysicsBackend("both")

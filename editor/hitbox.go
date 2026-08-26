@@ -117,8 +117,8 @@ func (m *Model) SetShowSockets(v bool) {
 	m.generation++
 }
 
-// CollisionTab is the annotation group the strip edits, clamped to what
-// the physics config leaves standing. The zero value is Hitboxes.
+// CollisionTab is what the strip shows, clamped to what the physics
+// config leaves standing. The zero value is the segment overview.
 func (m *Model) CollisionTab() colTab {
 	switch m.colTab {
 	case colHitboxes:
@@ -132,13 +132,7 @@ func (m *Model) CollisionTab() colTab {
 	case colSockets:
 		return colSockets
 	}
-	if m.ResolvEnabled() {
-		return colHitboxes
-	}
-	if m.CPEnabled() {
-		return colBody
-	}
-	return colSockets
+	return colSegment
 }
 
 func (m *Model) SetCollisionTab(t colTab) {

@@ -323,12 +323,14 @@ func pointInConvex(vs []lottiecp.Point, x, y float64) bool {
 
 // ---- panel ----
 
-// colTab picks which annotation group the strip under the chart edits.
-// The physics config decides which tabs exist at all.
+// colTab picks what the strip under the stage shows: the whole-clip
+// segment overview, or one annotation group. The physics config decides
+// which annotation tabs exist at all.
 type colTab int
 
 const (
-	colHitboxes colTab = iota
+	colSegment colTab = iota
+	colHitboxes
 	colBody
 	colSockets
 )
@@ -340,8 +342,9 @@ const (
 type collisionPanel struct {
 	guigui.DefaultWidget
 
-	tabs  basicwidget.SegmentedControl[colTab]
-	chart chartView
+	tabs     basicwidget.SegmentedControl[colTab]
+	timeline timelineView
+	chart    chartView
 
 	addRect   basicwidget.Button
 	addCircle basicwidget.Button
@@ -376,9 +379,10 @@ func (c *collisionPanel) model(context *guigui.Context) *Model {
 	return m
 }
 
-// availableTabs is the tab set the physics config leaves standing.
+// availableTabs is the tab set the physics config leaves standing. The
+// segment overview and sockets are always there.
 func availableTabs(m *Model) []colTab {
-	var out []colTab
+	out := []colTab{colSegment}
 	if m.ResolvEnabled() {
 		out = append(out, colHitboxes)
 	}
@@ -399,7 +403,7 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 	adder.AddWidget(&c.tabs)
 	c.tabItems = slices.Delete(c.tabItems, 0, len(c.tabItems))
 	for _, t := range avail {
-		text := map[colTab]string{colHitboxes: "Hitboxes", colBody: "Body", colSockets: "Sockets"}[t]
+		text := map[colTab]string{colSegment: "Segment", colHitboxes: "Hitboxes", colBody: "Body", colSockets: "Sockets"}[t]
 		c.tabItems = append(c.tabItems, basicwidget.SegmentedControlItem[colTab]{Text: text, Value: t})
 	}
 	c.tabs.SetItems(c.tabItems)
@@ -414,6 +418,10 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 
 	onStage := m.StageAnimID() != ""
 	switch tab {
+	case colSegment:
+		// The whole-clip overview: where the played range (a state's
+		// segment) sits inside the full timeline, markers included.
+		adder.AddWidget(&c.timeline)
 	case colHitboxes:
 		adder.AddWidget(&c.chart)
 		for _, w := range []guigui.Widget{&c.addRect, &c.addCircle, &c.addWin, &c.delBox} {
@@ -531,7 +539,7 @@ func (c *collisionPanel) WriteStateKey(context *guigui.Context, w *guigui.StateK
 func (c *collisionPanel) layout(context *guigui.Context) guigui.LinearLayout {
 	u := basicwidget.UnitSize(context)
 
-	tab := colSockets
+	tab := colSegment
 	if m := c.model(context); m != nil {
 		tab = m.CollisionTab()
 	}
@@ -568,6 +576,8 @@ func (c *collisionPanel) layout(context *guigui.Context) guigui.LinearLayout {
 		guigui.LinearLayoutItem{Widget: &c.tabs, Size: guigui.FixedSize(u)},
 	)
 	switch tab {
+	case colSegment:
+		c.items = append(c.items, guigui.LinearLayoutItem{Widget: &c.timeline})
 	case colHitboxes:
 		c.items = append(c.items, guigui.LinearLayoutItem{Widget: &c.chart})
 	case colBody:
@@ -575,9 +585,12 @@ func (c *collisionPanel) layout(context *guigui.Context) guigui.LinearLayout {
 	case colSockets:
 		c.items = append(c.items, guigui.LinearLayoutItem{Widget: &c.sockList, Size: guigui.FixedSize(3 * u)})
 	}
-	c.items = append(c.items,
-		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.btnRow},
-	)
+	// The segment overview is display plus scrubbing; it has no buttons.
+	if tab != colSegment {
+		c.items = append(c.items,
+			guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.btnRow},
+		)
+	}
 	return guigui.LinearLayout{
 		Direction: guigui.LayoutDirectionVertical, Items: c.items, Gap: u / 4,
 	}

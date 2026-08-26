@@ -18,7 +18,8 @@ ui:
   panel:
     kind: tabs
     id: tabs.collision
-    columns: [Hitboxes, Body, Sockets]
+    columns: [Segment, Hitboxes, Body, Sockets]
+    state: Segment (default) holds the whole-clip overview timeline — where the played range sits in the full extent, markers included; scrub-only, no buttons
     state: tabs the physics config leaves standing; Hitboxes holds the chart + add buttons (the redundant box dropdown is gone — chart rows select), Body and Sockets hold lists whose rows select for the inspector
     state: socket rows read "name / layer … · front|behind"; socket crosses drag on the stage, writing the layer-local dx/dy trim (also numeric in the socket pane)
   panel_tabs:
