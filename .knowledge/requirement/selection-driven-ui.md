@@ -21,6 +21,8 @@ lists:
 interface_tabs:
   now: +Event / +Bool / +Num always visible under the tabs
   target: +Event only on the Events tab; +Bool and +Num only on the Values tab
+pickers: every fixed-choice field is a dropdown (basicwidget.Select), not an editable combobox — typed text blocked re-picking (segment was the worst: clearing the text was the only way back to the list)
+guard_form: labeled (kind/input/cond/value) and shown only while a guard is selected; unlabeled always-on editors read as mystery boxes
 motivation: current UI shows many always-on buttons (three per list, three add-input, nine collision); actions detached from selection read as clutter and mis-afford
 ```
 

@@ -28,6 +28,25 @@ func label(t *basicwidget.Text, s string) {
 	t.SetVerticalAlign(basicwidget.VerticalAlignMiddle)
 }
 
+// setOptions fills a dropdown whose values are their own labels. Dropdowns
+// replaced the editable comboboxes here: every one of these fields picks
+// from a closed set, and typed text only got in the way of picking.
+func setOptions(s *basicwidget.Select[string], values ...string) {
+	items := make([]basicwidget.SelectItem[string], len(values))
+	for i, v := range values {
+		items[i] = basicwidget.SelectItem[string]{Text: v, Value: v}
+	}
+	s.SetItems(items)
+}
+
+// selectedValue is the dropdown's current value, or "" for none.
+func selectedValue(s *basicwidget.Select[string]) string {
+	if it, ok := s.SelectedItem(); ok {
+		return it.Value
+	}
+	return ""
+}
+
 // inspectorPane is the parameter pane for whatever is selected: a state
 // (with its transitions and guards), a machine, or one collision item.
 // Model.InspectTarget says which; every Select records itself there. It
@@ -63,29 +82,33 @@ type inspectorContent struct {
 	segLabel, modeLabel, speedLabel basicwidget.Text
 	loopLabel, autoplayLabel        basicwidget.Text
 	nameInput                       basicwidget.TextInput
-	typeCombo, animCombo, segCombo  basicwidget.Combobox
-	modeCombo                       basicwidget.Combobox
+	typeSel, animSel, segSel        basicwidget.Select[string]
+	modeSel                         basicwidget.Select[string]
 	speedInput                      basicwidget.TextInput
 	loopCheck, autoplayCheck        basicwidget.Checkbox
 	form                            basicwidget.Form
 
 	transTitle  basicwidget.Text
 	transList   basicwidget.List[int]
-	transTarget basicwidget.Combobox
+	transTarget basicwidget.Select[string]
 	addTrans    basicwidget.Button
 	upTrans     basicwidget.Button
 	downTrans   basicwidget.Button
 	delTrans    basicwidget.Button
 
-	guardTitle basicwidget.Text
-	guardList  basicwidget.List[int]
-	addGuard   basicwidget.Button
-	delGuard   basicwidget.Button
-	guardType  basicwidget.Combobox
-	guardInput basicwidget.Combobox
-	guardCond  basicwidget.Combobox
-	guardValue basicwidget.TextInput
-	guardForm  basicwidget.Form
+	guardTitle      basicwidget.Text
+	guardList       basicwidget.List[int]
+	addGuard        basicwidget.Button
+	delGuard        basicwidget.Button
+	guardTypeLabel  basicwidget.Text
+	guardInputLabel basicwidget.Text
+	guardCondLabel  basicwidget.Text
+	guardValueLabel basicwidget.Text
+	guardType       basicwidget.Select[string]
+	guardInput      basicwidget.Select[string]
+	guardCond       basicwidget.Select[string]
+	guardValue      basicwidget.TextInput
+	guardForm       basicwidget.Form
 
 	problemsTitle basicwidget.Text
 	problems      basicwidget.Text
@@ -198,9 +221,14 @@ func (c *inspectorContent) Build(context *guigui.Context, adder *guigui.ChildAdd
 			&c.stateTitle, &c.addState, &c.delState, &c.setInitial, &c.form,
 			&c.transTitle, &c.transList, &c.transTarget, &c.addTrans,
 			&c.upTrans, &c.downTrans, &c.delTrans,
-			&c.guardTitle, &c.guardList, &c.addGuard, &c.delGuard, &c.guardForm,
+			&c.guardTitle, &c.guardList, &c.addGuard, &c.delGuard,
 		} {
 			adder.AddWidget(w)
+		}
+		// The guard form appears only while a guard is selected; empty
+		// unlabeled editors below the list read as mystery boxes.
+		if c.selectedGuardOf(m) != nil {
+			adder.AddWidget(&c.guardForm)
 		}
 		st := m.SelectedState()
 		setBold(&c.stateTitle, "State")
@@ -477,12 +505,12 @@ func (c *inspectorContent) buildStateForm(context *guigui.Context, m *Model, st 
 
 	playback := st != nil && st.Type != lottie.StateGlobal
 	for _, w := range []guigui.Widget{
-		&c.nameInput, &c.typeCombo, &c.animCombo, &c.segCombo,
-		&c.modeCombo, &c.speedInput, &c.loopCheck, &c.autoplayCheck,
+		&c.nameInput, &c.typeSel, &c.animSel, &c.segSel,
+		&c.modeSel, &c.speedInput, &c.loopCheck, &c.autoplayCheck,
 	} {
 		context.SetEnabled(w, st != nil)
 	}
-	for _, w := range []guigui.Widget{&c.animCombo, &c.segCombo, &c.modeCombo, &c.speedInput, &c.loopCheck, &c.autoplayCheck} {
+	for _, w := range []guigui.Widget{&c.animSel, &c.segSel, &c.modeSel, &c.speedInput, &c.loopCheck, &c.autoplayCheck} {
 		context.SetEnabled(w, playback)
 	}
 
@@ -499,41 +527,58 @@ func (c *inspectorContent) buildStateForm(context *guigui.Context, m *Model, st 
 		}
 	})
 
-	c.typeCombo.SetItems([]string{string(lottie.StatePlayback), string(lottie.StateGlobal)})
-	c.typeCombo.SetValue(string(st.Type))
-	c.typeCombo.OnValueChanged(func(context *guigui.Context, value string, committed bool) {
-		if committed && value != string(st.Type) {
-			st.Type = lottie.StateType(value)
-			m.Touch()
+	setOptions(&c.typeSel, string(lottie.StatePlayback), string(lottie.StateGlobal))
+	c.typeSel.SelectItemByValue(string(st.Type))
+	c.typeSel.OnItemSelected(func(context *guigui.Context, index int) {
+		it, ok := c.typeSel.ItemByIndex(index)
+		st := m.SelectedState()
+		if !ok || st == nil || it.Value == string(st.Type) {
+			return
 		}
+		st.Type = lottie.StateType(it.Value)
+		m.Touch()
 	})
 
-	c.animCombo.SetItems(m.AnimationIDs())
-	c.animCombo.SetValue(st.Animation)
-	c.animCombo.OnValueChanged(func(context *guigui.Context, value string, committed bool) {
-		if committed && value != st.Animation {
-			st.Animation = value
-			st.Segment = ""
-			m.Touch()
+	setOptions(&c.animSel, m.AnimationIDs()...)
+	c.animSel.SelectItemByValue(st.Animation)
+	c.animSel.OnItemSelected(func(context *guigui.Context, index int) {
+		it, ok := c.animSel.ItemByIndex(index)
+		st := m.SelectedState()
+		if !ok || st == nil || it.Value == st.Animation {
+			return
 		}
+		st.Animation = it.Value
+		st.Segment = ""
+		m.Touch()
 	})
 
-	c.segCombo.SetItems(append([]string{""}, m.Markers(st.Animation)...))
-	c.segCombo.SetValue(st.Segment)
-	c.segCombo.OnValueChanged(func(context *guigui.Context, value string, committed bool) {
-		if committed && value != st.Segment {
-			st.Segment = value
-			m.Touch()
+	// The empty segment means "the whole clip"; give it a readable label.
+	segItems := []basicwidget.SelectItem[string]{{Text: "(whole clip)", Value: ""}}
+	for _, name := range m.Markers(st.Animation) {
+		segItems = append(segItems, basicwidget.SelectItem[string]{Text: name, Value: name})
+	}
+	c.segSel.SetItems(segItems)
+	c.segSel.SelectItemByValue(st.Segment)
+	c.segSel.OnItemSelected(func(context *guigui.Context, index int) {
+		it, ok := c.segSel.ItemByIndex(index)
+		st := m.SelectedState()
+		if !ok || st == nil || it.Value == st.Segment {
+			return
 		}
+		st.Segment = it.Value
+		m.Touch()
 	})
 
-	c.modeCombo.SetItems([]string{string(lottie.PlayForward), string(lottie.PlayReverse)})
-	c.modeCombo.SetValue(string(st.PlaybackMode()))
-	c.modeCombo.OnValueChanged(func(context *guigui.Context, value string, committed bool) {
-		if committed && value != string(st.Mode) {
-			st.Mode = lottie.PlayMode(value)
-			m.Touch()
+	setOptions(&c.modeSel, string(lottie.PlayForward), string(lottie.PlayReverse))
+	c.modeSel.SelectItemByValue(string(st.PlaybackMode()))
+	c.modeSel.OnItemSelected(func(context *guigui.Context, index int) {
+		it, ok := c.modeSel.ItemByIndex(index)
+		st := m.SelectedState()
+		if !ok || st == nil || it.Value == string(st.PlaybackMode()) {
+			return
 		}
+		st.Mode = lottie.PlayMode(it.Value)
+		m.Touch()
 	})
 
 	c.speedInput.SetValue(strconv.FormatFloat(st.PlaybackSpeed(), 'g', -1, 64))
@@ -564,10 +609,10 @@ func (c *inspectorContent) buildFormItems() []basicwidget.FormItem {
 	c.formItems = slices.Delete(c.formItems, 0, len(c.formItems))
 	c.formItems = append(c.formItems,
 		basicwidget.FormItem{PrimaryWidget: &c.nameLabel, SecondaryWidget: &c.nameInput},
-		basicwidget.FormItem{PrimaryWidget: &c.typeLabel, SecondaryWidget: &c.typeCombo},
-		basicwidget.FormItem{PrimaryWidget: &c.animLabel, SecondaryWidget: &c.animCombo},
-		basicwidget.FormItem{PrimaryWidget: &c.segLabel, SecondaryWidget: &c.segCombo},
-		basicwidget.FormItem{PrimaryWidget: &c.modeLabel, SecondaryWidget: &c.modeCombo},
+		basicwidget.FormItem{PrimaryWidget: &c.typeLabel, SecondaryWidget: &c.typeSel},
+		basicwidget.FormItem{PrimaryWidget: &c.animLabel, SecondaryWidget: &c.animSel},
+		basicwidget.FormItem{PrimaryWidget: &c.segLabel, SecondaryWidget: &c.segSel},
+		basicwidget.FormItem{PrimaryWidget: &c.modeLabel, SecondaryWidget: &c.modeSel},
 		basicwidget.FormItem{PrimaryWidget: &c.speedLabel, SecondaryWidget: &c.speedInput},
 		basicwidget.FormItem{PrimaryWidget: &c.loopLabel, SecondaryWidget: &c.loopCheck},
 		basicwidget.FormItem{PrimaryWidget: &c.autoplayLabel, SecondaryWidget: &c.autoplayCheck},
@@ -599,10 +644,10 @@ func (c *inspectorContent) buildTransitions(context *guigui.Context, m *Model, s
 		c.selectedGuard = -1
 	})
 
-	c.transTarget.SetItems(m.StateNames())
+	setOptions(&c.transTarget, m.StateNames()...)
 	c.addTrans.SetText("Add →")
 	c.addTrans.OnDown(func(context *guigui.Context) {
-		to := c.transTarget.Value()
+		to := selectedValue(&c.transTarget)
 		if to == "" {
 			if names := m.StateNames(); len(names) > 0 {
 				to = names[0]
@@ -681,71 +726,91 @@ func (c *inspectorContent) buildGuards(context *guigui.Context, m *Model) {
 	context.SetEnabled(&c.addGuard, tr != nil)
 	context.SetEnabled(&c.delGuard, c.selectedGuard >= 0)
 
-	var g *lottie.Guard
-	if tr != nil && c.selectedGuard >= 0 && c.selectedGuard < len(tr.Guards) {
-		g = &tr.Guards[c.selectedGuard]
-	}
-	for _, w := range []guigui.Widget{&c.guardType, &c.guardInput, &c.guardCond, &c.guardValue} {
-		context.SetEnabled(w, g != nil)
+	g := c.selectedGuardOf(m)
+	if g == nil {
+		// No guard selected: the form is not even shown (Build and layout
+		// skip it), so there is nothing to wire.
+		return
 	}
 
-	c.guardType.SetItems([]string{
+	label(&c.guardTypeLabel, "kind")
+	label(&c.guardInputLabel, "input")
+	label(&c.guardCondLabel, "cond")
+	label(&c.guardValueLabel, "value")
+
+	setOptions(&c.guardType,
 		string(lottie.GuardEvent), string(lottie.GuardBoolean),
 		string(lottie.GuardNumeric), string(lottie.GuardString),
+	)
+	c.guardType.SelectItemByValue(string(g.Type))
+	c.guardType.OnItemSelected(func(context *guigui.Context, index int) {
+		it, ok := c.guardType.ItemByIndex(index)
+		g := c.selectedGuardOf(m)
+		if !ok || g == nil || it.Value == string(g.Type) {
+			return
+		}
+		g.Type = lottie.GuardType(it.Value)
+		m.Touch()
 	})
-	c.guardCond.SetItems([]string{
+
+	setOptions(&c.guardInput, m.InputNames()...)
+	c.guardInput.SelectItemByValue(g.InputName)
+	c.guardInput.OnItemSelected(func(context *guigui.Context, index int) {
+		it, ok := c.guardInput.ItemByIndex(index)
+		g := c.selectedGuardOf(m)
+		if !ok || g == nil || it.Value == g.InputName {
+			return
+		}
+		g.InputName = it.Value
+		m.Touch()
+	})
+
+	setOptions(&c.guardCond,
 		string(lottie.ConditionEqual), string(lottie.ConditionNotEqual),
 		string(lottie.ConditionGreaterThan), string(lottie.ConditionGreaterThanOrEqual),
 		string(lottie.ConditionLessThan), string(lottie.ConditionLessThanOrEqual),
+	)
+	c.guardCond.SelectItemByValue(string(g.ConditionType))
+	c.guardCond.OnItemSelected(func(context *guigui.Context, index int) {
+		it, ok := c.guardCond.ItemByIndex(index)
+		g := c.selectedGuardOf(m)
+		if !ok || g == nil || it.Value == string(g.ConditionType) {
+			return
+		}
+		g.ConditionType = lottie.ConditionType(it.Value)
+		m.Touch()
 	})
-	c.guardInput.SetItems(m.InputNames())
 
-	if g == nil {
-		c.guardType.SetValue("")
-		c.guardInput.SetValue("")
-		c.guardCond.SetValue("")
-		c.guardValue.SetValue("")
-	} else {
-		c.guardType.SetValue(string(g.Type))
-		c.guardType.OnValueChanged(func(context *guigui.Context, value string, committed bool) {
-			if committed {
-				g.Type = lottie.GuardType(value)
-				m.Touch()
-			}
-		})
-		c.guardInput.SetValue(g.InputName)
-		c.guardInput.OnValueChanged(func(context *guigui.Context, value string, committed bool) {
-			if committed {
-				g.InputName = value
-				m.Touch()
-			}
-		})
-		c.guardCond.SetValue(string(g.ConditionType))
-		c.guardCond.OnValueChanged(func(context *guigui.Context, value string, committed bool) {
-			if committed {
-				g.ConditionType = lottie.ConditionType(value)
-				m.Touch()
-			}
-		})
-		c.guardValue.SetValue(string(g.CompareTo))
-		c.guardValue.OnValueChanged(func(context *guigui.Context, text string, committed bool) {
-			if committed {
-				g.CompareTo = parseCompareTo(g.Type, text)
-				m.Touch()
-			}
-		})
-		// Event guards have no comparison at all.
-		isEvent := g.Type == lottie.GuardEvent
-		context.SetEnabled(&c.guardCond, !isEvent)
-		context.SetEnabled(&c.guardValue, !isEvent)
-	}
+	c.guardValue.SetValue(string(g.CompareTo))
+	c.guardValue.OnValueChanged(func(context *guigui.Context, text string, committed bool) {
+		g := c.selectedGuardOf(m)
+		if committed && g != nil {
+			g.CompareTo = parseCompareTo(g.Type, text)
+			m.Touch()
+		}
+	})
+	// Event guards have no comparison at all.
+	isEvent := g.Type == lottie.GuardEvent
+	context.SetEnabled(&c.guardCond, !isEvent)
+	context.SetEnabled(&c.guardValue, !isEvent)
 
 	c.guardFormItems = slices.Delete(c.guardFormItems, 0, len(c.guardFormItems))
 	c.guardFormItems = append(c.guardFormItems,
-		basicwidget.FormItem{PrimaryWidget: &c.guardType, SecondaryWidget: &c.guardInput},
-		basicwidget.FormItem{PrimaryWidget: &c.guardCond, SecondaryWidget: &c.guardValue},
+		basicwidget.FormItem{PrimaryWidget: &c.guardTypeLabel, SecondaryWidget: &c.guardType},
+		basicwidget.FormItem{PrimaryWidget: &c.guardInputLabel, SecondaryWidget: &c.guardInput},
+		basicwidget.FormItem{PrimaryWidget: &c.guardCondLabel, SecondaryWidget: &c.guardCond},
+		basicwidget.FormItem{PrimaryWidget: &c.guardValueLabel, SecondaryWidget: &c.guardValue},
 	)
 	c.guardForm.SetItems(c.guardFormItems)
+}
+
+// selectedGuardOf resolves the guard the guard form edits, or nil.
+func (c *inspectorContent) selectedGuardOf(m *Model) *lottie.Guard {
+	tr := m.SelectedTransition()
+	if tr == nil || c.selectedGuard < 0 || c.selectedGuard >= len(tr.Guards) {
+		return nil
+	}
+	return &tr.Guards[c.selectedGuard]
 }
 
 // parseCompareTo encodes the typed-in comparison for the guard's kind.
@@ -824,7 +889,8 @@ func (c *inspectorContent) layout(context *guigui.Context) guigui.LinearLayout {
 }
 
 // stateItems is the state pane's layout: the form plus the transition and
-// guard sections.
+// guard sections. The guard form joins only while a guard is selected,
+// mirroring Build.
 func (c *inspectorContent) stateItems(context *guigui.Context, u int) []guigui.LinearLayoutItem {
 	c.stateBtnItems = slices.Delete(c.stateBtnItems, 0, len(c.stateBtnItems))
 	c.stateBtnItems = append(c.stateBtnItems,
@@ -858,7 +924,7 @@ func (c *inspectorContent) stateItems(context *guigui.Context, u int) []guigui.L
 	}
 
 	items := slices.Delete(c.items, 0, len(c.items))
-	return append(items,
+	items = append(items,
 		guigui.LinearLayoutItem{Widget: &c.stateTitle, Size: guigui.FixedSize(u)},
 		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.stateBtnRow},
 		guigui.LinearLayoutItem{Widget: &c.form},
@@ -868,8 +934,11 @@ func (c *inspectorContent) stateItems(context *guigui.Context, u int) []guigui.L
 		guigui.LinearLayoutItem{Widget: &c.guardTitle, Size: guigui.FixedSize(u)},
 		guigui.LinearLayoutItem{Widget: &c.guardList, Size: guigui.FixedSize(4 * u)},
 		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.guardBtnRow},
-		guigui.LinearLayoutItem{Widget: &c.guardForm},
 	)
+	if m := c.model(context); m != nil && c.selectedGuardOf(m) != nil {
+		items = append(items, guigui.LinearLayoutItem{Widget: &c.guardForm})
+	}
+	return items
 }
 
 func (c *inspectorContent) Layout(context *guigui.Context, widgetBounds *guigui.WidgetBounds, layouter *guigui.ChildLayouter) {

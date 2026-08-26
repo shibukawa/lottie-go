@@ -6,8 +6,6 @@ import (
 	"image/color"
 	"math"
 	"slices"
-	"strconv"
-	"strings"
 
 	"github.com/guigui-gui/guigui"
 	"github.com/guigui-gui/guigui/basicwidget"
@@ -297,7 +295,7 @@ type collisionPanel struct {
 
 	showLabel basicwidget.Text
 	showCheck basicwidget.Checkbox
-	boxCombo  basicwidget.Combobox
+	boxCombo  basicwidget.Select[int]
 	addRect   basicwidget.Button
 	addCircle basicwidget.Button
 	addWin    basicwidget.Button
@@ -309,9 +307,9 @@ type collisionPanel struct {
 	delCP     basicwidget.Button
 
 	sockLabel  basicwidget.Text
-	layerCombo basicwidget.Combobox
+	layerCombo basicwidget.Select[string]
 	addSock    basicwidget.Button
-	sockCombo  basicwidget.Combobox
+	sockCombo  basicwidget.Select[int]
 	delSock    basicwidget.Button
 
 	rowA      guigui.LinearLayout
@@ -354,26 +352,22 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 		m.SetShowCollision(v)
 	})
 
-	var labels []string
+	var boxItems []basicwidget.SelectItem[int]
 	if t := m.StageTrack(); t != nil {
 		for i, b := range t.Boxes {
-			labels = append(labels, HitboxLabel(i, b))
+			boxItems = append(boxItems, basicwidget.SelectItem[int]{Text: HitboxLabel(i, b), Value: i})
 		}
 	}
-	c.boxCombo.SetItems(labels)
-	if i := m.SelectedHitboxIndex(); i >= 0 && i < len(labels) {
-		c.boxCombo.SetValue(labels[i])
+	c.boxCombo.SetItems(boxItems)
+	if i := m.SelectedHitboxIndex(); i >= 0 && i < len(boxItems) {
+		c.boxCombo.SelectItemByValue(i)
 	} else {
-		c.boxCombo.SetValue("")
+		c.boxCombo.SelectItemByIndex(-1)
 	}
-	c.boxCombo.OnValueChanged(func(context *guigui.Context, value string, committed bool) {
-		if !committed {
-			return
-		}
-		if n, _, ok := strings.Cut(value, ":"); ok {
-			if i, err := strconv.Atoi(n); err == nil {
-				m.SelectHitbox(i - 1)
-			}
+	c.boxCombo.OnItemSelected(func(context *guigui.Context, index int) {
+		it, ok := c.boxCombo.ItemByIndex(index)
+		if ok && it.Value != m.SelectedHitboxIndex() {
+			m.SelectHitbox(it.Value)
 		}
 	})
 
@@ -414,34 +408,32 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 func (c *collisionPanel) buildSockets(context *guigui.Context, m *Model, onStage bool) {
 	label(&c.sockLabel, "sockets")
 
-	c.layerCombo.SetItems(m.StageLayerNames())
+	setOptions(&c.layerCombo, m.StageLayerNames()...)
 	c.addSock.SetText("+Socket")
-	c.addSock.OnDown(func(context *guigui.Context) { m.AddSocket(c.layerCombo.Value()) })
+	c.addSock.OnDown(func(context *guigui.Context) { m.AddSocket(selectedValue(&c.layerCombo)) })
 
 	socks := m.Sockets()
-	labels := make([]string, 0, len(socks))
+	sockItems := make([]basicwidget.SelectItem[int], 0, len(socks))
 	for i, s := range socks {
 		z := "front"
 		if s.Z == lottiesockets.ZBehind {
 			z = "behind"
 		}
-		labels = append(labels, fmt.Sprintf("%d: %s (%s)", i+1, s.Name, z))
+		sockItems = append(sockItems, basicwidget.SelectItem[int]{
+			Text: fmt.Sprintf("%d: %s (%s)", i+1, s.Name, z), Value: i,
+		})
 	}
-	c.sockCombo.SetItems(labels)
+	c.sockCombo.SetItems(sockItems)
 	selSock := m.SelectedSocketIndex()
-	if selSock >= 0 && selSock < len(labels) {
-		c.sockCombo.SetValue(labels[selSock])
+	if selSock >= 0 && selSock < len(sockItems) {
+		c.sockCombo.SelectItemByValue(selSock)
 	} else {
-		c.sockCombo.SetValue("")
+		c.sockCombo.SelectItemByIndex(-1)
 	}
-	c.sockCombo.OnValueChanged(func(context *guigui.Context, value string, committed bool) {
-		if !committed {
-			return
-		}
-		if n, _, ok := strings.Cut(value, ":"); ok {
-			if i, err := strconv.Atoi(n); err == nil {
-				m.SelectSocket(i - 1)
-			}
+	c.sockCombo.OnItemSelected(func(context *guigui.Context, index int) {
+		it, ok := c.sockCombo.ItemByIndex(index)
+		if ok && it.Value != m.SelectedSocketIndex() {
+			m.SelectSocket(it.Value)
 		}
 	})
 
@@ -449,7 +441,7 @@ func (c *collisionPanel) buildSockets(context *guigui.Context, m *Model, onStage
 	c.delSock.OnDown(func(context *guigui.Context) { m.DeleteSocket() })
 
 	context.SetEnabled(&c.layerCombo, onStage)
-	context.SetEnabled(&c.addSock, onStage && c.layerCombo.Value() != "")
+	context.SetEnabled(&c.addSock, onStage && selectedValue(&c.layerCombo) != "")
 	context.SetEnabled(&c.delSock, selSock >= 0 && selSock < len(socks))
 }
 
