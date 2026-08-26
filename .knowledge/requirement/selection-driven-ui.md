@@ -4,7 +4,7 @@ type: requirement
 title: Selection-Driven Editor UI
 ---
 
-Status: proposed. Restructure ui:editor-shell so available actions follow
+Status: implemented — inspector switches on Model.InspectTarget (state | machine | hitbox/window | body shape | socket), machine rename and the initial toggle moved into the machine pane, list footers slimmed to add/delete with delete gated on selection, interface add buttons scoped per tab; body-shape material (friction/elasticity/sensor) and socket rename became editable for the first time via their panes. The Config pane (requirement:editor-config) and the collision strip replacement (requirement:collision-timeline) remain separate work. Restructure ui:editor-shell so available actions follow
 the current selection instead of every action being visible at once.
 
 ```yaml

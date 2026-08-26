@@ -18,6 +18,19 @@ import (
 	lottiesockets "github.com/shibukawa/lottie-go/plugin/sockets"
 )
 
+// inspectTarget names what kind of thing the inspector pane edits. The
+// selection itself lives in the fields that already track it (selectedState,
+// selBox, ...); this only says which of them is current.
+type inspectTarget int
+
+const (
+	inspectState inspectTarget = iota
+	inspectMachine
+	inspectHitbox
+	inspectCPShape
+	inspectSocket
+)
+
 // editorExtraKey names the member this editor stashes in a State's extra
 // fields. The dotLottie schema has nowhere to record graph layout, so node
 // positions ride along there: other runtimes ignore the member and
@@ -63,6 +76,11 @@ type Model struct {
 	// Which input is selected, so the graph can highlight the transitions
 	// that depend on it.
 	selectedInput int
+
+	// What the inspector edits: the most recently selected thing. Every
+	// Select*/Add* records itself here, so the right pane always shows the
+	// parameters of what was last touched.
+	inspect inspectTarget
 
 	// Collision editing (see hitbox.go). hideCollision is inverted so the
 	// zero value shows the overlay. The caches hold parsed plugin
@@ -286,6 +304,11 @@ func (m *Model) Markers(animID string) []string {
 
 func (m *Model) MachineIDs() []string { return m.bundle.StateMachineIDs() }
 
+// InspectTarget reports what kind of thing the inspector should edit.
+func (m *Model) InspectTarget() inspectTarget { return m.inspect }
+
+func (m *Model) setInspect(t inspectTarget) { m.inspect = t }
+
 func (m *Model) SelectMachine(id string) {
 	sm, err := m.bundle.StateMachine(id)
 	if err != nil {
@@ -295,6 +318,7 @@ func (m *Model) SelectMachine(id string) {
 	}
 	m.machineID, m.machine = id, sm
 	m.selectedState, m.selectedTrans = sm.Initial, -1
+	m.setInspect(inspectMachine)
 	m.generation++
 	m.restartPreview()
 }
@@ -310,6 +334,7 @@ func (m *Model) NewMachine() {
 	}
 	m.machineID, m.machine = id, sm
 	m.selectedState, m.selectedTrans = "", -1
+	m.setInspect(inspectMachine)
 	m.setStatus("created machine %q", id)
 	m.generation++
 }
@@ -439,6 +464,7 @@ func (m *Model) SelectedState() *lottie.State {
 func (m *Model) SelectState(name string) {
 	m.selectedState = name
 	m.selectedTrans = -1
+	m.setInspect(inspectState)
 	m.generation++
 }
 
@@ -468,6 +494,7 @@ func (m *Model) AddState() {
 		m.machine.Initial = name
 	}
 	m.selectedState, m.selectedTrans = name, -1
+	m.setInspect(inspectState)
 	m.setStatus("added state %q", name)
 	m.touch()
 }

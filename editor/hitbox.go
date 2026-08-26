@@ -114,6 +114,7 @@ func (m *Model) SelectHitbox(i int) {
 	m.selBox = i
 	if i >= 0 {
 		m.selCPShape = -1
+		m.setInspect(inspectHitbox)
 	}
 	m.generation++
 }
@@ -172,6 +173,7 @@ func (m *Model) AddHitbox(kind lottieresolv.Kind) {
 		Spans: []lottieresolv.Span{span},
 	})
 	m.selBox, m.selCPShape = len(t.Boxes)-1, -1
+	m.setInspect(inspectHitbox)
 	m.setStatus("added hitbox %q", t.Boxes[m.selBox].Name)
 	m.touchTrack()
 }
@@ -184,6 +186,7 @@ func (m *Model) DeleteHitbox() {
 	name := t.Boxes[m.selBox].Name
 	t.Boxes = slices.Delete(t.Boxes, m.selBox, m.selBox+1)
 	m.selBox = -1
+	m.setInspect(inspectState)
 	m.setStatus("deleted hitbox %q", name)
 	m.touchTrack()
 }
@@ -403,6 +406,7 @@ func (m *Model) SelectCPShape(i int) {
 	m.selCPShape = i
 	if i >= 0 {
 		m.selBox = -1
+		m.setInspect(inspectCPShape)
 	}
 	m.generation++
 }
@@ -438,6 +442,7 @@ func (m *Model) AddCPShape(kind lottiecp.ShapeType) {
 	}
 	body.Shapes = append(body.Shapes, s)
 	m.selCPShape, m.selBox = len(body.Shapes)-1, -1
+	m.setInspect(inspectCPShape)
 	m.setStatus("added %s to body", kind)
 	m.touchCPBody()
 }
@@ -449,6 +454,7 @@ func (m *Model) DeleteCPShape() {
 	}
 	body.Shapes = slices.Delete(body.Shapes, m.selCPShape, m.selCPShape+1)
 	m.selCPShape = -1
+	m.setInspect(inspectState)
 	m.setStatus("deleted body shape")
 	m.touchCPBody()
 }
@@ -544,6 +550,9 @@ func (m *Model) SelectedSocketIndex() int { return m.selSocket }
 
 func (m *Model) SelectSocket(i int) {
 	m.selSocket = i
+	if i >= 0 {
+		m.setInspect(inspectSocket)
+	}
 	m.generation++
 }
 
@@ -565,6 +574,7 @@ func (m *Model) AddSocket(layer string) {
 	}
 	set.Sockets = append(set.Sockets, lottiesockets.Socket{Name: layer})
 	m.selSocket = len(set.Sockets) - 1
+	m.setInspect(inspectSocket)
 	m.setStatus("added socket %q", layer)
 	m.touchSockets()
 }
@@ -577,7 +587,30 @@ func (m *Model) DeleteSocket() {
 	name := set.Sockets[m.selSocket].Name
 	set.Sockets = slices.Delete(set.Sockets, m.selSocket, m.selSocket+1)
 	m.selSocket = -1
+	m.setInspect(inspectState)
 	m.setStatus("deleted socket %q", name)
+	m.touchSockets()
+}
+
+// SelectedSocket returns the socket the inspector edits.
+func (m *Model) SelectedSocket() *lottiesockets.Socket {
+	set := m.loadSockets()
+	if set == nil || m.selSocket < 0 || m.selSocket >= len(set.Sockets) {
+		return nil
+	}
+	return &set.Sockets[m.selSocket]
+}
+
+// RenameSocket gives the selected socket a game-facing name of its own,
+// pinning the layer binding first so the rename does not rebind it.
+func (m *Model) RenameSocket(name string) {
+	s := m.SelectedSocket()
+	name = strings.TrimSpace(name)
+	if s == nil || name == "" || s.Name == name {
+		return
+	}
+	s.Layer = s.LayerName()
+	s.Name = name
 	m.touchSockets()
 }
 

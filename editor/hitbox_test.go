@@ -243,6 +243,62 @@ func TestSocketAuthoring(t *testing.T) {
 	}
 }
 
+// The inspector edits whatever was last selected; every selection path
+// must record itself so the pane follows.
+func TestInspectTargetFollowsSelection(t *testing.T) {
+	m := stageModel(t)
+
+	if m.InspectTarget() != inspectState {
+		t.Fatalf("default target: %v", m.InspectTarget())
+	}
+	m.AddHitbox(lottieresolv.KindRect)
+	if m.InspectTarget() != inspectHitbox {
+		t.Fatal("adding a hitbox should focus it")
+	}
+	m.AddCPShape(lottiecp.ShapeCircle)
+	if m.InspectTarget() != inspectCPShape {
+		t.Fatal("adding a body shape should focus it")
+	}
+	m.AddSocket(m.StageLayerNames()[0])
+	if m.InspectTarget() != inspectSocket {
+		t.Fatal("adding a socket should focus it")
+	}
+	m.SelectHitbox(0)
+	if m.InspectTarget() != inspectHitbox {
+		t.Fatal("selecting a hitbox should focus it")
+	}
+	m.NewMachine()
+	if m.InspectTarget() != inspectMachine {
+		t.Fatal("creating a machine should focus it")
+	}
+	m.AddState()
+	if m.InspectTarget() != inspectState {
+		t.Fatal("adding a state should focus it")
+	}
+	m.SelectMachine(m.MachineIDs()[0])
+	if m.InspectTarget() != inspectMachine {
+		t.Fatal("selecting a machine should focus it")
+	}
+	// Deleting the focused thing falls back to the state pane rather than
+	// showing an empty editor.
+	m.SelectHitbox(0)
+	m.DeleteHitbox()
+	if m.InspectTarget() != inspectState {
+		t.Fatalf("after delete: %v", m.InspectTarget())
+	}
+}
+
+func TestRenameSocketKeepsBinding(t *testing.T) {
+	m := stageModel(t)
+	layer := m.StageLayerNames()[0]
+	m.AddSocket(layer)
+	m.RenameSocket("weapon")
+	s := m.SelectedSocket()
+	if s == nil || s.Name != "weapon" || s.LayerName() != layer {
+		t.Fatalf("rename broke the binding: %+v", s)
+	}
+}
+
 // Dropping a clip drops its hitbox track too: that cleanup moved from the
 // core to this editor when the data became a plugin payload.
 func TestRemoveClipDropsTrack(t *testing.T) {

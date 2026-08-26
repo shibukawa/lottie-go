@@ -37,12 +37,10 @@ type clipsPane struct {
 	importBtn  basicwidget.Button
 	removeBtn  basicwidget.Button
 
-	machinesTitle  basicwidget.Text
-	machineList    basicwidget.List[string]
-	machineName    basicwidget.TextInput
-	newMachineBtn  basicwidget.Button
-	delMachineBtn  basicwidget.Button
-	initMachineBtn basicwidget.Button
+	machinesTitle basicwidget.Text
+	machineList   basicwidget.List[string]
+	newMachineBtn basicwidget.Button
+	delMachineBtn basicwidget.Button
 
 	ioTitle basicwidget.Text
 	tabs    basicwidget.SegmentedControl[ioTab]
@@ -107,8 +105,8 @@ func (c *clipsPane) Build(context *guigui.Context, adder *guigui.ChildAdder) err
 	}
 	for _, w := range []guigui.Widget{
 		&c.clipsTitle, &c.clipList, &c.importBtn, &c.removeBtn,
-		&c.machinesTitle, &c.machineList, &c.machineName,
-		&c.newMachineBtn, &c.delMachineBtn, &c.initMachineBtn,
+		&c.machinesTitle, &c.machineList,
+		&c.newMachineBtn, &c.delMachineBtn,
 		&c.ioTitle, &c.tabs,
 	} {
 		adder.AddWidget(w)
@@ -131,11 +129,17 @@ func (c *clipsPane) Build(context *guigui.Context, adder *guigui.ChildAdder) err
 		c.buildMarkers(context, m, adder)
 	}
 
-	// Editing the declaration is only meaningful for the incoming side.
-	if c.tab != tabMarkers {
+	// Editing the declaration is only meaningful for the incoming side,
+	// and each tab offers only the kinds it lists: an event cannot be
+	// added while looking at values, nor the reverse.
+	switch c.tab {
+	case tabEvents:
 		adder.AddWidget(&c.inputName)
 		adder.AddWidget(&c.removeInput)
 		adder.AddWidget(&c.addEvent)
+	case tabValues:
+		adder.AddWidget(&c.inputName)
+		adder.AddWidget(&c.removeInput)
 		adder.AddWidget(&c.addBool)
 		adder.AddWidget(&c.addNumber)
 	}
@@ -215,32 +219,15 @@ func (c *clipsPane) buildMachines(context *guigui.Context, m *Model) {
 		}
 	})
 
+	// Rename and the initial toggle live in the inspector's machine pane:
+	// they are parameters of the selected machine, not list actions. The
+	// list keeps only add and delete, delete gated on a selection.
 	current := m.MachineID()
-	c.machineName.SetValue(current)
-	c.machineName.SetPlaceholder("machine id")
-	c.machineName.OnValueChanged(func(context *guigui.Context, text string, committed bool) {
-		if committed {
-			m.RenameMachine(current, text)
-		}
-	})
-	context.SetEnabled(&c.machineName, current != "")
-
 	c.newMachineBtn.SetText("New")
 	c.newMachineBtn.OnDown(func(context *guigui.Context) { m.NewMachine() })
 	c.delMachineBtn.SetText("Del")
 	c.delMachineBtn.OnDown(func(context *guigui.Context) { m.DeleteMachine(current) })
 	context.SetEnabled(&c.delMachineBtn, current != "")
-
-	// Toggles: naming the machine that is already default clears the
-	// choice, which puts "the first listed" back.
-	if current != "" && current == initial {
-		c.initMachineBtn.SetText("Unset initial")
-		c.initMachineBtn.OnDown(func(context *guigui.Context) { m.SetInitialMachine("") })
-	} else {
-		c.initMachineBtn.SetText("Set initial")
-		c.initMachineBtn.OnDown(func(context *guigui.Context) { m.SetInitialMachine(current) })
-	}
-	context.SetEnabled(&c.initMachineBtn, current != "")
 }
 
 func (c *clipsPane) buildTabs(context *guigui.Context) {
@@ -523,11 +510,16 @@ func (c *clipsPane) Layout(context *guigui.Context, widgetBounds *guigui.WidgetB
 	}
 
 	c.addRowItems = slices.Delete(c.addRowItems, 0, len(c.addRowItems))
-	c.addRowItems = append(c.addRowItems,
-		guigui.LinearLayoutItem{Widget: &c.addEvent, Size: guigui.FlexibleSize(1)},
-		guigui.LinearLayoutItem{Widget: &c.addBool, Size: guigui.FlexibleSize(1)},
-		guigui.LinearLayoutItem{Widget: &c.addNumber, Size: guigui.FlexibleSize(1)},
-	)
+	if c.tab == tabEvents {
+		c.addRowItems = append(c.addRowItems,
+			guigui.LinearLayoutItem{Widget: &c.addEvent, Size: guigui.FlexibleSize(1)},
+		)
+	} else {
+		c.addRowItems = append(c.addRowItems,
+			guigui.LinearLayoutItem{Widget: &c.addBool, Size: guigui.FlexibleSize(1)},
+			guigui.LinearLayoutItem{Widget: &c.addNumber, Size: guigui.FlexibleSize(1)},
+		)
+	}
 	c.addRow = guigui.LinearLayout{
 		Direction: guigui.LayoutDirectionHorizontal,
 		Items:     c.addRowItems, Gap: u / 4,
@@ -568,9 +560,7 @@ func (c *clipsPane) Layout(context *guigui.Context, widgetBounds *guigui.WidgetB
 	c.machineColItems = append(c.machineColItems,
 		guigui.LinearLayoutItem{Widget: &c.machinesTitle, Size: guigui.FixedSize(u)},
 		guigui.LinearLayoutItem{Widget: &c.machineList, Size: guigui.FlexibleSize(1)},
-		guigui.LinearLayoutItem{Widget: &c.machineName, Size: guigui.FixedSize(u)},
 		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.machineBtnRow},
-		guigui.LinearLayoutItem{Widget: &c.initMachineBtn, Size: guigui.FixedSize(u)},
 	)
 	c.machineCol = guigui.LinearLayout{
 		Direction: guigui.LayoutDirectionVertical,

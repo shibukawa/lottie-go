@@ -23,11 +23,8 @@ ui:
       - {kind: select, id: sel.box, state: "N: name per box in the stage clip's track"}
       - {kind: button, label: +Rect / +Circle, action: add hitbox with span at playhead, mid-stage}
       - {kind: button, label: +Win, action: add geometry-less window box; shares tag/span editing, never drawn on stage}
-      - {kind: field, id: fld.name}
-      - {kind: field, id: fld.tags, state: comma-separated, free-form}
-      - {kind: field, id: fld.from-to, state: span under playhead; [from, to)}
-      - {kind: button, label: +Span, action: new span at playhead, copies nearest earlier pose, clipped to next span}
-      - {kind: button, label: Del span / Del}
+      - {kind: button, label: Del, state: enabled only with a hitbox selected}
+      - note: name, tags, span from/to, +Span/Del span moved to the inspector panes (requirement:selection-driven-ui)
       - {kind: button, label: body +Circle / +Box / Del, state: bundle-level cp body, count shown}
       - kind: row
         id: rows.sockets
@@ -35,8 +32,8 @@ ui:
           - {kind: select, id: sel.layer, state: stage clip layer names (anim.LayerNames)}
           - {kind: button, label: +Socket, action: bind layer as socket, socket name = layer name}
           - {kind: select, id: sel.socket, state: "N: name (front|behind)"}
-          - {kind: button, label: "z: front|behind", action: toggle draw side}
-          - {kind: button, label: Del}
+          - {kind: button, label: Del, state: enabled only with a socket selected}
+          - note: socket rename and the z toggle live in the inspector socket pane
   socket_overlay:
     state: cyan cross + angle tick per socket resolved on the stage clip (api:sockets); dimmed when the layer is outside its active window; selected cross thicker
   timeline:

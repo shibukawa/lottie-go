@@ -302,14 +302,7 @@ type collisionPanel struct {
 	addCircle basicwidget.Button
 	addWin    basicwidget.Button
 	delBox    basicwidget.Button
-	nameInput basicwidget.TextInput
-	tagsInput basicwidget.TextInput
 
-	spanLabel basicwidget.Text
-	fromInput basicwidget.TextInput
-	toInput   basicwidget.TextInput
-	addSpan   basicwidget.Button
-	delSpan   basicwidget.Button
 	bodyLabel basicwidget.Text
 	addCPCirc basicwidget.Button
 	addCPBox  basicwidget.Button
@@ -319,15 +312,12 @@ type collisionPanel struct {
 	layerCombo basicwidget.Combobox
 	addSock    basicwidget.Button
 	sockCombo  basicwidget.Combobox
-	zBtn       basicwidget.Button
 	delSock    basicwidget.Button
 
 	rowA      guigui.LinearLayout
 	rowAItems []guigui.LinearLayoutItem
 	rowB      guigui.LinearLayout
 	rowBItems []guigui.LinearLayoutItem
-	rowC      guigui.LinearLayout
-	rowCItems []guigui.LinearLayoutItem
 	items     []guigui.LinearLayoutItem
 }
 
@@ -345,12 +335,13 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 	if m == nil {
 		return nil
 	}
+	// Parameters of the selected item (name, tags, span, material, z) are
+	// edited in the inspector; this strip only adds, selects, and deletes.
 	for _, w := range []guigui.Widget{
 		&c.showLabel, &c.showCheck, &c.boxCombo, &c.addRect, &c.addCircle,
-		&c.addWin, &c.delBox, &c.nameInput, &c.tagsInput,
-		&c.spanLabel, &c.fromInput, &c.toInput, &c.addSpan, &c.delSpan,
+		&c.addWin, &c.delBox,
 		&c.bodyLabel, &c.addCPCirc, &c.addCPBox, &c.delCP,
-		&c.sockLabel, &c.layerCombo, &c.addSock, &c.sockCombo, &c.zBtn, &c.delSock,
+		&c.sockLabel, &c.layerCombo, &c.addSock, &c.sockCombo, &c.delSock,
 	} {
 		adder.AddWidget(w)
 	}
@@ -397,55 +388,6 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 	c.delBox.SetText("Del")
 	c.delBox.OnDown(func(context *guigui.Context) { m.DeleteHitbox() })
 
-	sel := m.SelectedHitbox()
-	if sel != nil {
-		c.nameInput.SetValue(sel.Name)
-	} else {
-		c.nameInput.SetValue("")
-	}
-	c.nameInput.OnValueChanged(func(context *guigui.Context, text string, committed bool) {
-		if committed {
-			m.RenameHitbox(text)
-		}
-	})
-	c.tagsInput.SetValue(m.HitboxTagsCSV())
-	c.tagsInput.OnValueChanged(func(context *guigui.Context, text string, committed bool) {
-		if committed {
-			m.SetHitboxTagsCSV(text)
-		}
-	})
-
-	label(&c.spanLabel, "span")
-	sp := m.SelectedSpan()
-	if sp != nil {
-		c.fromInput.SetValue(strconv.FormatFloat(sp.From, 'g', -1, 64))
-		c.toInput.SetValue(strconv.FormatFloat(sp.To, 'g', -1, 64))
-	} else {
-		c.fromInput.SetValue("")
-		c.toInput.SetValue("")
-	}
-	commitRange := func(context *guigui.Context) {
-		from, err1 := strconv.ParseFloat(strings.TrimSpace(c.fromInput.Value()), 64)
-		to, err2 := strconv.ParseFloat(strings.TrimSpace(c.toInput.Value()), 64)
-		if err1 == nil && err2 == nil {
-			m.SetSpanRange(from, to)
-		}
-	}
-	c.fromInput.OnValueChanged(func(context *guigui.Context, text string, committed bool) {
-		if committed {
-			commitRange(context)
-		}
-	})
-	c.toInput.OnValueChanged(func(context *guigui.Context, text string, committed bool) {
-		if committed {
-			commitRange(context)
-		}
-	})
-	c.addSpan.SetText("+Span")
-	c.addSpan.OnDown(func(context *guigui.Context) { m.AddHitboxSpan() })
-	c.delSpan.SetText("Del span")
-	c.delSpan.OnDown(func(context *guigui.Context) { m.DeleteHitboxSpan() })
-
 	label(&c.bodyLabel, fmt.Sprintf("body (%d)", len(m.CPBodyShapes())))
 	c.addCPCirc.SetText("+Circle")
 	c.addCPCirc.OnDown(func(context *guigui.Context) { m.AddCPShape(lottiecp.ShapeCircle) })
@@ -459,12 +401,7 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 	for _, w := range []guigui.Widget{&c.boxCombo, &c.addRect, &c.addCircle, &c.addWin} {
 		context.SetEnabled(w, onStage)
 	}
-	for _, w := range []guigui.Widget{&c.delBox, &c.nameInput, &c.tagsInput, &c.addSpan} {
-		context.SetEnabled(w, sel != nil)
-	}
-	for _, w := range []guigui.Widget{&c.fromInput, &c.toInput, &c.delSpan} {
-		context.SetEnabled(w, sp != nil)
-	}
+	context.SetEnabled(&c.delBox, m.SelectedHitbox() != nil)
 	for _, w := range []guigui.Widget{&c.addCPCirc, &c.addCPBox} {
 		context.SetEnabled(w, onStage)
 	}
@@ -473,7 +410,7 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 }
 
 // buildSockets wires the socket row: bind a stage layer as a socket, pick
-// one, flip its z side, drop it.
+// one, drop it. Rename and the z side are the inspector's business.
 func (c *collisionPanel) buildSockets(context *guigui.Context, m *Model, onStage bool) {
 	label(&c.sockLabel, "sockets")
 
@@ -508,20 +445,12 @@ func (c *collisionPanel) buildSockets(context *guigui.Context, m *Model, onStage
 		}
 	})
 
-	zText := "z: front"
-	if selSock >= 0 && selSock < len(socks) && socks[selSock].Z == lottiesockets.ZBehind {
-		zText = "z: behind"
-	}
-	c.zBtn.SetText(zText)
-	c.zBtn.OnDown(func(context *guigui.Context) { m.ToggleSocketZ() })
 	c.delSock.SetText("Del")
 	c.delSock.OnDown(func(context *guigui.Context) { m.DeleteSocket() })
 
 	context.SetEnabled(&c.layerCombo, onStage)
 	context.SetEnabled(&c.addSock, onStage && c.layerCombo.Value() != "")
-	hasSel := selSock >= 0 && selSock < len(socks)
-	context.SetEnabled(&c.zBtn, hasSel)
-	context.SetEnabled(&c.delSock, hasSel)
+	context.SetEnabled(&c.delSock, selSock >= 0 && selSock < len(socks))
 }
 
 func (c *collisionPanel) WriteStateKey(context *guigui.Context, w *guigui.StateKeyWriter) {
@@ -542,8 +471,6 @@ func (c *collisionPanel) layout(context *guigui.Context) guigui.LinearLayout {
 		guigui.LinearLayoutItem{Widget: &c.addCircle, Size: guigui.FixedSize(5 * u / 2)},
 		guigui.LinearLayoutItem{Widget: &c.addWin, Size: guigui.FixedSize(2 * u)},
 		guigui.LinearLayoutItem{Widget: &c.delBox, Size: guigui.FixedSize(3 * u / 2)},
-		guigui.LinearLayoutItem{Widget: &c.nameInput, Size: guigui.FlexibleSize(3)},
-		guigui.LinearLayoutItem{Widget: &c.tagsInput, Size: guigui.FlexibleSize(4)},
 	)
 	c.rowA = guigui.LinearLayout{
 		Direction: guigui.LayoutDirectionHorizontal, Items: c.rowAItems, Gap: u / 4,
@@ -551,38 +478,24 @@ func (c *collisionPanel) layout(context *guigui.Context) guigui.LinearLayout {
 
 	c.rowBItems = slices.Delete(c.rowBItems, 0, len(c.rowBItems))
 	c.rowBItems = append(c.rowBItems,
-		guigui.LinearLayoutItem{Widget: &c.spanLabel, Size: guigui.FixedSize(3 * u / 2)},
-		guigui.LinearLayoutItem{Widget: &c.fromInput, Size: guigui.FlexibleSize(2)},
-		guigui.LinearLayoutItem{Widget: &c.toInput, Size: guigui.FlexibleSize(2)},
-		guigui.LinearLayoutItem{Widget: &c.addSpan, Size: guigui.FixedSize(2 * u)},
-		guigui.LinearLayoutItem{Widget: &c.delSpan, Size: guigui.FixedSize(5 * u / 2)},
 		guigui.LinearLayoutItem{Widget: &c.bodyLabel, Size: guigui.FixedSize(3 * u)},
 		guigui.LinearLayoutItem{Widget: &c.addCPCirc, Size: guigui.FixedSize(5 * u / 2)},
 		guigui.LinearLayoutItem{Widget: &c.addCPBox, Size: guigui.FixedSize(2 * u)},
 		guigui.LinearLayoutItem{Widget: &c.delCP, Size: guigui.FixedSize(3 * u / 2)},
-	)
-	c.rowB = guigui.LinearLayout{
-		Direction: guigui.LayoutDirectionHorizontal, Items: c.rowBItems, Gap: u / 4,
-	}
-
-	c.rowCItems = slices.Delete(c.rowCItems, 0, len(c.rowCItems))
-	c.rowCItems = append(c.rowCItems,
 		guigui.LinearLayoutItem{Widget: &c.sockLabel, Size: guigui.FixedSize(5 * u / 2)},
 		guigui.LinearLayoutItem{Widget: &c.layerCombo, Size: guigui.FlexibleSize(3)},
 		guigui.LinearLayoutItem{Widget: &c.addSock, Size: guigui.FixedSize(3 * u)},
 		guigui.LinearLayoutItem{Widget: &c.sockCombo, Size: guigui.FlexibleSize(3)},
-		guigui.LinearLayoutItem{Widget: &c.zBtn, Size: guigui.FixedSize(3 * u)},
 		guigui.LinearLayoutItem{Widget: &c.delSock, Size: guigui.FixedSize(3 * u / 2)},
 	)
-	c.rowC = guigui.LinearLayout{
-		Direction: guigui.LayoutDirectionHorizontal, Items: c.rowCItems, Gap: u / 4,
+	c.rowB = guigui.LinearLayout{
+		Direction: guigui.LayoutDirectionHorizontal, Items: c.rowBItems, Gap: u / 4,
 	}
 
 	c.items = slices.Delete(c.items, 0, len(c.items))
 	c.items = append(c.items,
 		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.rowA},
 		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.rowB},
-		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.rowC},
 	)
 	return guigui.LinearLayout{
 		Direction: guigui.LayoutDirectionVertical, Items: c.items, Gap: u / 4,
