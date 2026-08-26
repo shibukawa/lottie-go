@@ -3,6 +3,7 @@ package main
 import (
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	lottie "github.com/shibukawa/lottie-go"
@@ -87,5 +88,101 @@ func TestMachinesShareClipsButNotStates(t *testing.T) {
 	}
 	if st.Type != lottie.StatePlayback {
 		t.Errorf("state type = %q", st.Type)
+	}
+}
+
+func TestRenameMachine(t *testing.T) {
+	dir := t.TempDir()
+	m := NewModel()
+	m.ImportClip(writeClip(t, dir, "a-anim", 30, ""))
+	m.NewMachine()
+	m.AddState()
+	old := m.MachineID()
+
+	m.RenameMachine(old, "hero")
+	if m.MachineID() != "hero" {
+		t.Fatalf("MachineID() = %q; want hero", m.MachineID())
+	}
+	if got := m.MachineIDs(); !slices.Equal(got, []string{"hero"}) {
+		t.Fatalf("MachineIDs() = %v; the old id should be gone", got)
+	}
+	// The states came with it: renaming moves the file, not its contents.
+	if got := m.StateNames(); len(got) != 1 {
+		t.Errorf("StateNames() = %v; want the state to survive", got)
+	}
+	// And it is written under the new name.
+	out := filepath.Join(dir, "r.lottie")
+	m.Save(out)
+	reopened := NewModel()
+	reopened.Open(out)
+	if got := reopened.MachineIDs(); !slices.Equal(got, []string{"hero"}) {
+		t.Errorf("after reopen MachineIDs() = %v", got)
+	}
+}
+
+func TestRenameMachineRefusesACollision(t *testing.T) {
+	dir := t.TempDir()
+	m := NewModel()
+	m.ImportClip(writeClip(t, dir, "a-anim", 30, ""))
+	m.NewMachine()
+	first := m.MachineID()
+	m.NewMachine()
+	second := m.MachineID()
+
+	m.RenameMachine(second, first)
+	if got := m.MachineIDs(); !slices.Equal(got, []string{first, second}) {
+		t.Errorf("MachineIDs() = %v; a colliding rename should change nothing", got)
+	}
+	if !strings.Contains(m.Status(), "already exists") {
+		t.Errorf("Status() = %q; want it to say why", m.Status())
+	}
+}
+
+func TestDeleteMachineMovesToWhatIsLeft(t *testing.T) {
+	dir := t.TempDir()
+	m := NewModel()
+	m.ImportClip(writeClip(t, dir, "a-anim", 30, ""))
+	m.NewMachine()
+	first := m.MachineID()
+	m.AddState()
+	m.NewMachine()
+	second := m.MachineID()
+	m.AddState()
+
+	m.DeleteMachine(second)
+	if got := m.MachineIDs(); !slices.Equal(got, []string{first}) {
+		t.Fatalf("MachineIDs() = %v; want just %q", got, first)
+	}
+	// Deleting the open one lands on whatever remains, still running.
+	if m.MachineID() != first {
+		t.Errorf("MachineID() = %q; want %q", m.MachineID(), first)
+	}
+	if m.Preview() == nil {
+		t.Errorf("preview did not follow: %v", m.PreviewErr())
+	}
+}
+
+// Deleting the last machine leaves the editor with nothing to run rather
+// than a stale player.
+func TestDeleteLastMachineClearsThePreview(t *testing.T) {
+	dir := t.TempDir()
+	m := NewModel()
+	m.ImportClip(writeClip(t, dir, "a-anim", 30, ""))
+	m.NewMachine()
+	m.AddState()
+
+	m.DeleteMachine(m.MachineID())
+	if got := m.MachineIDs(); len(got) != 0 {
+		t.Fatalf("MachineIDs() = %v; want none", got)
+	}
+	if m.Machine() != nil {
+		t.Error("a machine is still selected")
+	}
+	if m.Preview() != nil {
+		t.Error("the preview kept running a deleted machine")
+	}
+	// The clips are untouched: they belong to the bundle, not the machine.
+	if got := m.AnimationIDs(); !slices.Equal(got, []string{"a-anim"}) {
+		t.Errorf("AnimationIDs() = %v; deleting a machine took the clips", got)
 	}
 }

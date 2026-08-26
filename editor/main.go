@@ -24,12 +24,10 @@ type Root struct {
 
 	background basicwidget.Background
 
-	pathLabel    basicwidget.Text
-	openBtn      basicwidget.Button
-	saveBtn      basicwidget.Button
-	saveAsBtn    basicwidget.Button
-	machineCombo basicwidget.Combobox
-	newMachine   basicwidget.Button
+	pathLabel basicwidget.Text
+	openBtn   basicwidget.Button
+	saveBtn   basicwidget.Button
+	saveAsBtn basicwidget.Button
 
 	clips        clipsPane
 	graph        graphView
@@ -64,8 +62,6 @@ func (r *Root) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 	adder.AddWidget(&r.openBtn)
 	adder.AddWidget(&r.saveBtn)
 	adder.AddWidget(&r.saveAsBtn)
-	adder.AddWidget(&r.machineCombo)
-	adder.AddWidget(&r.newMachine)
 	adder.AddWidget(&r.clips)
 	adder.AddWidget(&r.graphFrame)
 	adder.AddWidget(&r.previewFrame)
@@ -103,18 +99,6 @@ func (r *Root) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 		context.SetEnabled(w, !m.DialogOpen())
 	}
 
-	ids := m.MachineIDs()
-	r.machineCombo.SetItems(ids)
-	r.machineCombo.SetValue(m.MachineID())
-	r.machineCombo.OnValueChanged(func(context *guigui.Context, value string, committed bool) {
-		if committed && value != "" && value != m.MachineID() {
-			m.SelectMachine(value)
-		}
-	})
-	context.SetEnabled(&r.machineCombo, len(ids) > 0 && !m.DialogOpen())
-	r.newMachine.SetText("New machine")
-	r.newMachine.OnDown(func(context *guigui.Context) { m.NewMachine() })
-
 	r.graphPanel.SetContent(&r.graph)
 	// The graph and the stage are the two working surfaces; outline both so
 	// they read as areas rather than as loose content between control panes.
@@ -150,8 +134,6 @@ func (r *Root) Layout(context *guigui.Context, widgetBounds *guigui.WidgetBounds
 		guigui.LinearLayoutItem{Widget: &r.openBtn, Size: guigui.FixedSize(4 * u)},
 		guigui.LinearLayoutItem{Widget: &r.saveBtn, Size: guigui.FixedSize(3 * u)},
 		guigui.LinearLayoutItem{Widget: &r.saveAsBtn, Size: guigui.FixedSize(4 * u)},
-		guigui.LinearLayoutItem{Widget: &r.machineCombo, Size: guigui.FixedSize(6 * u)},
-		guigui.LinearLayoutItem{Widget: &r.newMachine, Size: guigui.FixedSize(5 * u)},
 	)
 	r.toolbar = guigui.LinearLayout{
 		Direction: guigui.LayoutDirectionHorizontal, Items: r.toolbarItems, Gap: u / 4,
@@ -172,8 +154,8 @@ func (r *Root) Layout(context *guigui.Context, widgetBounds *guigui.WidgetBounds
 	r.middleItems = append(r.middleItems,
 		// The clips pane carries three columns now — name, source, control —
 		// so it needs more than the fifth of the width it had.
-		guigui.LinearLayoutItem{Widget: &r.clips, Size: guigui.FlexibleSize(3)},
-		guigui.LinearLayoutItem{Size: guigui.FlexibleSize(6), Layout: &r.center},
+		guigui.LinearLayoutItem{Widget: &r.clips, Size: guigui.FlexibleSize(4)},
+		guigui.LinearLayoutItem{Size: guigui.FlexibleSize(7), Layout: &r.center},
 		guigui.LinearLayoutItem{Widget: &r.inspector, Size: guigui.FlexibleSize(3)},
 	)
 	r.middle = guigui.LinearLayout{
@@ -199,9 +181,12 @@ func main() {
 		root.model.Open(os.Args[1])
 	}
 	op := &guigui.RunOptions{
-		Title:         "Lottie State Machine Editor",
-		WindowSize:    image.Pt(1280, 800),
-		WindowMinSize: image.Pt(900, 600),
+		Title: "Lottie State Machine Editor",
+		// Four columns of content: clips and machines, the graph, the
+		// stage, and the inspector. The old 1280 default left the
+		// inspector too narrow to show a transition's target.
+		WindowSize:    image.Pt(1520, 920),
+		WindowMinSize: image.Pt(1180, 700),
 	}
 	if err := runWithOptionalScreenshot(root, op); err != nil {
 		fmt.Fprintln(os.Stderr, err)

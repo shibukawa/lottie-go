@@ -7,6 +7,7 @@ import (
 	"image"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -284,6 +285,62 @@ func (m *Model) NewMachine() {
 	m.machineID, m.machine = id, sm
 	m.selectedState, m.selectedTrans = "", -1
 	m.setStatus("created machine %q", id)
+	m.generation++
+}
+
+// RenameMachine changes a machine's id, which is also the name of its file
+// under s/.
+func (m *Model) RenameMachine(old, name string) {
+	name = strings.TrimSpace(name)
+	if name == "" || name == old {
+		return
+	}
+	if slices.Contains(m.bundle.StateMachineIDs(), name) {
+		m.setStatus("a machine named %q already exists", name)
+		m.generation++
+		return
+	}
+	sm, err := m.bundle.StateMachine(old)
+	if err != nil {
+		m.setStatus("cannot rename %q: %v", old, err)
+		m.generation++
+		return
+	}
+	if err := m.bundle.SetStateMachine(name, sm); err != nil {
+		m.setStatus("cannot rename %q: %v", old, err)
+		m.generation++
+		return
+	}
+	m.bundle.RemoveStateMachine(old)
+	if m.machineID == old {
+		m.machineID = name
+	}
+	m.setStatus("renamed machine %q to %q", old, name)
+	m.docGen++
+	m.generation++
+}
+
+// DeleteMachine drops a machine and moves to whatever is left.
+func (m *Model) DeleteMachine(id string) {
+	if id == "" {
+		return
+	}
+	m.bundle.RemoveStateMachine(id)
+	m.setStatus("deleted machine %q", id)
+	m.docGen++
+	if m.machineID != id {
+		m.generation++
+		return
+	}
+	m.machineID, m.machine = "", nil
+	m.selectedState, m.selectedTrans = "", -1
+	if ids := m.bundle.StateMachineIDs(); len(ids) > 0 {
+		m.generation++
+		m.SelectMachine(ids[0])
+		return
+	}
+	// Nothing left to run.
+	m.preview, m.previewErr = nil, nil
 	m.generation++
 }
 

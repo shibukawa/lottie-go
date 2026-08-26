@@ -37,6 +37,12 @@ type clipsPane struct {
 	importBtn  basicwidget.Button
 	removeBtn  basicwidget.Button
 
+	machinesTitle basicwidget.Text
+	machineList   basicwidget.List[string]
+	machineName   basicwidget.TextInput
+	newMachineBtn basicwidget.Button
+	delMachineBtn basicwidget.Button
+
 	ioTitle basicwidget.Text
 	tabs    basicwidget.SegmentedControl[ioTab]
 
@@ -59,11 +65,21 @@ type clipsPane struct {
 	selectedClip clipRef
 	selectedRow  int
 
-	clipItems   []basicwidget.ListItem[clipRef]
-	eventItems  []basicwidget.ListItem[int]
-	valueItems  []basicwidget.ListItem[int]
-	markerItems []basicwidget.ListItem[int]
-	tabItems    []basicwidget.SegmentedControlItem[ioTab]
+	clipItems    []basicwidget.ListItem[clipRef]
+	machineItems []basicwidget.ListItem[string]
+	eventItems   []basicwidget.ListItem[int]
+	valueItems   []basicwidget.ListItem[int]
+	markerItems  []basicwidget.ListItem[int]
+	tabItems     []basicwidget.SegmentedControlItem[ioTab]
+
+	topRow          guigui.LinearLayout
+	topRowItems     []guigui.LinearLayoutItem
+	clipsCol        guigui.LinearLayout
+	clipsColItems   []guigui.LinearLayoutItem
+	machineCol      guigui.LinearLayout
+	machineColItems []guigui.LinearLayoutItem
+	machineBtnRow   guigui.LinearLayout
+	machineBtnItems []guigui.LinearLayoutItem
 
 	importRow      guigui.LinearLayout
 	importRowItems []guigui.LinearLayoutItem
@@ -90,11 +106,14 @@ func (c *clipsPane) Build(context *guigui.Context, adder *guigui.ChildAdder) err
 	}
 	for _, w := range []guigui.Widget{
 		&c.clipsTitle, &c.clipList, &c.importBtn, &c.removeBtn,
+		&c.machinesTitle, &c.machineList, &c.machineName,
+		&c.newMachineBtn, &c.delMachineBtn,
 		&c.ioTitle, &c.tabs,
 	} {
 		adder.AddWidget(w)
 	}
 	c.buildClips(context, m)
+	c.buildMachines(context, m)
 	c.buildTabs(context)
 
 	// Only the visible tab is added: an unbuilt list is not laid out, drawn
@@ -163,6 +182,46 @@ func (c *clipsPane) buildClips(context *guigui.Context, m *Model) {
 		}
 	})
 	context.SetEnabled(&c.removeBtn, c.selectedClip.Anim != "")
+}
+
+// buildMachines is the machine list beside the clips. A bundle can hold
+// several — they are alternative entry points a game picks between — so they
+// need somewhere to be created, renamed and deleted.
+func (c *clipsPane) buildMachines(context *guigui.Context, m *Model) {
+	setBold(&c.machinesTitle, "Machines")
+
+	ids := m.MachineIDs()
+	c.machineItems = slices.Delete(c.machineItems, 0, len(c.machineItems))
+	for _, id := range ids {
+		c.machineItems = append(c.machineItems, basicwidget.ListItem[string]{
+			Text: id, Value: id,
+		})
+	}
+	c.machineList.SetItems(c.machineItems)
+	if cur := m.MachineID(); cur != "" {
+		c.machineList.SelectItemByValue(cur)
+	}
+	c.machineList.OnItemSelected(func(context *guigui.Context, index int) {
+		if index >= 0 && index < len(ids) && ids[index] != m.MachineID() {
+			m.SelectMachine(ids[index])
+		}
+	})
+
+	current := m.MachineID()
+	c.machineName.SetValue(current)
+	c.machineName.SetPlaceholder("machine id")
+	c.machineName.OnValueChanged(func(context *guigui.Context, text string, committed bool) {
+		if committed {
+			m.RenameMachine(current, text)
+		}
+	})
+	context.SetEnabled(&c.machineName, current != "")
+
+	c.newMachineBtn.SetText("New")
+	c.newMachineBtn.OnDown(func(context *guigui.Context) { m.NewMachine() })
+	c.delMachineBtn.SetText("Del")
+	c.delMachineBtn.OnDown(func(context *guigui.Context) { m.DeleteMachine(current) })
+	context.SetEnabled(&c.delMachineBtn, current != "")
 }
 
 func (c *clipsPane) buildTabs(context *guigui.Context) {
@@ -463,11 +522,54 @@ func (c *clipsPane) Layout(context *guigui.Context, widgetBounds *guigui.WidgetB
 		list = &c.markerList
 	}
 
+	// Clips and machines sit side by side: both name things the states below
+	// refer to.
+	c.clipsColItems = slices.Delete(c.clipsColItems, 0, len(c.clipsColItems))
+	c.clipsColItems = append(c.clipsColItems,
+		guigui.LinearLayoutItem{Widget: &c.clipsTitle, Size: guigui.FixedSize(u)},
+		guigui.LinearLayoutItem{Widget: &c.clipList, Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.importRow},
+	)
+	c.clipsCol = guigui.LinearLayout{
+		Direction: guigui.LayoutDirectionVertical,
+		Items:     c.clipsColItems, Gap: u / 4,
+	}
+
+	c.machineBtnItems = slices.Delete(c.machineBtnItems, 0, len(c.machineBtnItems))
+	c.machineBtnItems = append(c.machineBtnItems,
+		guigui.LinearLayoutItem{Widget: &c.newMachineBtn, Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Widget: &c.delMachineBtn, Size: guigui.FlexibleSize(1)},
+	)
+	c.machineBtnRow = guigui.LinearLayout{
+		Direction: guigui.LayoutDirectionHorizontal,
+		Items:     c.machineBtnItems, Gap: u / 4,
+	}
+
+	c.machineColItems = slices.Delete(c.machineColItems, 0, len(c.machineColItems))
+	c.machineColItems = append(c.machineColItems,
+		guigui.LinearLayoutItem{Widget: &c.machinesTitle, Size: guigui.FixedSize(u)},
+		guigui.LinearLayoutItem{Widget: &c.machineList, Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Widget: &c.machineName, Size: guigui.FixedSize(u)},
+		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.machineBtnRow},
+	)
+	c.machineCol = guigui.LinearLayout{
+		Direction: guigui.LayoutDirectionVertical,
+		Items:     c.machineColItems, Gap: u / 4,
+	}
+
+	c.topRowItems = slices.Delete(c.topRowItems, 0, len(c.topRowItems))
+	c.topRowItems = append(c.topRowItems,
+		guigui.LinearLayoutItem{Size: guigui.FlexibleSize(5), Layout: &c.clipsCol},
+		guigui.LinearLayoutItem{Size: guigui.FlexibleSize(3), Layout: &c.machineCol},
+	)
+	c.topRow = guigui.LinearLayout{
+		Direction: guigui.LayoutDirectionHorizontal,
+		Items:     c.topRowItems, Gap: u / 2,
+	}
+
 	c.items = slices.Delete(c.items, 0, len(c.items))
 	c.items = append(c.items,
-		guigui.LinearLayoutItem{Widget: &c.clipsTitle, Size: guigui.FixedSize(u)},
-		guigui.LinearLayoutItem{Widget: &c.clipList, Size: guigui.FlexibleSize(2)},
-		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.importRow},
+		guigui.LinearLayoutItem{Size: guigui.FlexibleSize(2), Layout: &c.topRow},
 		guigui.LinearLayoutItem{Widget: &c.ioTitle, Size: guigui.FixedSize(u)},
 		guigui.LinearLayoutItem{Widget: &c.tabs, Size: guigui.FixedSize(u)},
 		guigui.LinearLayoutItem{Widget: list, Size: guigui.FlexibleSize(3)},

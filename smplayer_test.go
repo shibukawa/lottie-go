@@ -819,3 +819,62 @@ func TestStateMachineForwardsMarkers(t *testing.T) {
 		t.Errorf("never saw the step marker; got %v", hits)
 	}
 }
+
+// A bundle may hold several machines, but nothing in the schema switches
+// between them: no action does it, and a player is bound to one machine at
+// construction. They are alternative entry points the host picks, so a game
+// makes a player per machine and drives whichever it wants.
+func TestSeveralMachinesRunIndependently(t *testing.T) {
+	b := NewBundle()
+	if err := b.SetAnimation("move-anim", clipAnimation(30, "")); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.SetAnimation("fight-anim", clipAnimation(30, "")); err != nil {
+		t.Fatal(err)
+	}
+	mustSet := func(id, anim string) {
+		t.Helper()
+		sm, err := ParseStateMachine([]byte(`{"initial":"idle-state","states":[
+		  {"name":"idle-state","type":"PlaybackState","animation":"` + anim + `","loop":true,"autoplay":true,
+		   "transitions":[{"type":"Transition","toState":"busy-state","guards":[{"type":"Event","inputName":"go"}]}]},
+		  {"name":"busy-state","type":"PlaybackState","animation":"` + anim + `","loop":true,"autoplay":true}],
+		  "inputs":[{"type":"Event","name":"go"}]}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := b.SetStateMachine(id, sm); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustSet("move", "move-anim")
+	mustSet("fight", "fight-anim")
+
+	move, err := b.NewStateMachinePlayer("move")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fight, err := b.NewStateMachinePlayer("fight")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Driving one leaves the other where it was: the host decides which is
+	// live, and switching means drawing the other player, not sending it an
+	// event.
+	move.Fire("go")
+	move.Update()
+	if move.State() != "busy-state" {
+		t.Errorf("move machine = %q; want busy-state", move.State())
+	}
+	if fight.State() != "idle-state" {
+		t.Errorf("fight machine moved to %q on the other machine's event", fight.State())
+	}
+
+	// They share the bundle, so a clip decodes once however many machines
+	// reference it.
+	a1, _ := b.Animation("move-anim")
+	a2, _ := b.Animation("move-anim")
+	if a1 != a2 {
+		t.Error("the same clip decoded twice")
+	}
+}

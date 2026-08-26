@@ -58,6 +58,12 @@ they are what a game passes to `Fire`.
   its markers. A document carrying three markers is three clips here, so the
   same file name repeats down the source column. Selecting one plays it on
   its own, so it can be judged before being wired into any state.
+- **Machines** — beside the clips. A bundle may hold several state machines,
+  each its own file under `s/`, sharing the bundle's clips but not each
+  other's states. Create, rename and delete them here; selecting one opens
+  it in the graph. Nothing in the format switches between machines at
+  runtime, so they are alternative entry points a game picks between: it
+  makes a `StateMachinePlayer` per machine and drives whichever it wants.
 - **Interface** — the machine's external surface, split by direction:
   - *Events* come in from the game. Each carries a *Try* button. `Restart`
     leads the tab as a pseudo-event: triggerable like the rest, but not

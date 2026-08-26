@@ -32,6 +32,11 @@ ui:
                 columns: [segment-or-file, source-file, duration]
                 state: one row per file x marker; a file with no markers is one row
                 action: preview that unit alone
+              - kind: list
+                id: list.machines
+                columns: [id]
+                state: a bundle may hold several; they share clips, not states
+                action: select opens it in canvas.graph; new, rename, delete
               - kind: tabs
                 id: tabs.interface
                 columns: [Events, Values, Markers]
