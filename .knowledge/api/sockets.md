@@ -10,7 +10,7 @@ and requirement:root-motion. Implemented.
 
 ```yaml
 storage: extensions/sockets.json, bundle-level (socket names are a cross-clip convention)
-socket: {name: game-facing id, layer: bound layer (empty = name), z: front|behind, dx/dy: layer-local trim applied through the layer transform — rides rotation and scale; the layer stays the position source of truth}
+socket: {name: game-facing id, layer: bound layer (empty = name), z: front|behind, dx/dy: layer-local position trim (rides rotation and scale), dr: angle trim in degrees, rotate: follow (default) | none — none pins Angle to dr alone (a level health bar over a tilting head); the layer stays the position source of truth}
 bundle_io:
   - "lottiesockets.Load(b) (*Set, error) / Store(b, *Set) / Remove(b)"
 query:

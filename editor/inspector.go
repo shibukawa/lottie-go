@@ -167,10 +167,13 @@ type inspectorContent struct {
 	sockLayerValue basicwidget.Text
 	sockDXLabel    basicwidget.Text
 	sockDYLabel    basicwidget.Text
+	sockDRLabel    basicwidget.Text
 	sockNameInput  basicwidget.TextInput
 	sockDXInput    basicwidget.TextInput
 	sockDYInput    basicwidget.TextInput
+	sockDRInput    basicwidget.TextInput
 	sockZBtn       basicwidget.Button
+	sockRotBtn     basicwidget.Button
 	sockForm       basicwidget.Form
 	sockFormItems  []basicwidget.FormItem
 
@@ -227,6 +230,7 @@ func (c *inspectorContent) Build(context *guigui.Context, adder *guigui.ChildAdd
 		adder.AddWidget(&c.sockTitle)
 		adder.AddWidget(&c.sockForm)
 		adder.AddWidget(&c.sockZBtn)
+		adder.AddWidget(&c.sockRotBtn)
 		c.buildSocketPane(context, m)
 	case inspectConfig:
 		adder.AddWidget(&c.cfgTitle)
@@ -469,6 +473,7 @@ func (c *inspectorContent) buildSocketPane(context *guigui.Context, m *Model) {
 	label(&c.sockLayerLabel, "layer")
 	label(&c.sockDXLabel, "offset x")
 	label(&c.sockDYLabel, "offset y")
+	label(&c.sockDRLabel, "angle +°")
 	c.sockLayerValue.SetVerticalAlign(basicwidget.VerticalAlignMiddle)
 
 	if s != nil {
@@ -476,11 +481,13 @@ func (c *inspectorContent) buildSocketPane(context *guigui.Context, m *Model) {
 		c.sockLayerValue.SetValue(s.LayerName())
 		c.sockDXInput.SetValue(strconv.FormatFloat(s.DX, 'g', -1, 64))
 		c.sockDYInput.SetValue(strconv.FormatFloat(s.DY, 'g', -1, 64))
+		c.sockDRInput.SetValue(strconv.FormatFloat(s.DR, 'g', -1, 64))
 	} else {
 		c.sockNameInput.SetValue("")
 		c.sockLayerValue.SetValue("")
 		c.sockDXInput.SetValue("")
 		c.sockDYInput.SetValue("")
+		c.sockDRInput.SetValue("")
 	}
 	c.sockNameInput.OnValueChanged(func(context *guigui.Context, text string, committed bool) {
 		if committed {
@@ -504,6 +511,14 @@ func (c *inspectorContent) buildSocketPane(context *guigui.Context, m *Model) {
 	}
 	c.sockDXInput.OnValueChanged(offset(func(s *lottiesockets.Socket) *float64 { return &s.DX }))
 	c.sockDYInput.OnValueChanged(offset(func(s *lottiesockets.Socket) *float64 { return &s.DY }))
+	c.sockDRInput.OnValueChanged(offset(func(s *lottiesockets.Socket) *float64 { return &s.DR }))
+
+	rotText := "rotate: follow"
+	if s != nil && s.Rotate == lottiesockets.RotateNone {
+		rotText = "rotate: none"
+	}
+	c.sockRotBtn.SetText(rotText)
+	c.sockRotBtn.OnDown(func(context *guigui.Context) { m.ToggleSocketRotate() })
 
 	zText := "z: front"
 	if s != nil && s.Z == lottiesockets.ZBehind {
@@ -512,7 +527,7 @@ func (c *inspectorContent) buildSocketPane(context *guigui.Context, m *Model) {
 	c.sockZBtn.SetText(zText)
 	c.sockZBtn.OnDown(func(context *guigui.Context) { m.ToggleSocketZ() })
 
-	for _, w := range []guigui.Widget{&c.sockNameInput, &c.sockZBtn, &c.sockDXInput, &c.sockDYInput} {
+	for _, w := range []guigui.Widget{&c.sockNameInput, &c.sockZBtn, &c.sockRotBtn, &c.sockDXInput, &c.sockDYInput, &c.sockDRInput} {
 		context.SetEnabled(w, s != nil)
 	}
 
@@ -522,6 +537,7 @@ func (c *inspectorContent) buildSocketPane(context *guigui.Context, m *Model) {
 		basicwidget.FormItem{PrimaryWidget: &c.sockLayerLabel, SecondaryWidget: &c.sockLayerValue},
 		basicwidget.FormItem{PrimaryWidget: &c.sockDXLabel, SecondaryWidget: &c.sockDXInput},
 		basicwidget.FormItem{PrimaryWidget: &c.sockDYLabel, SecondaryWidget: &c.sockDYInput},
+		basicwidget.FormItem{PrimaryWidget: &c.sockDRLabel, SecondaryWidget: &c.sockDRInput},
 	)
 	c.sockForm.SetItems(c.sockFormItems)
 }
@@ -941,6 +957,7 @@ func (c *inspectorContent) layout(context *guigui.Context) guigui.LinearLayout {
 			guigui.LinearLayoutItem{Widget: &c.sockTitle, Size: guigui.FixedSize(u)},
 			guigui.LinearLayoutItem{Widget: &c.sockForm},
 			guigui.LinearLayoutItem{Widget: &c.sockZBtn, Size: guigui.FixedSize(u)},
+			guigui.LinearLayoutItem{Widget: &c.sockRotBtn, Size: guigui.FixedSize(u)},
 		)
 	case inspectConfig:
 		c.items = append(c.items,

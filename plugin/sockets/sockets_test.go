@@ -106,6 +106,29 @@ func TestLocalOffset(t *testing.T) {
 	}
 }
 
+// The angle trims: DR adds onto the layer's rotation, and RotateNone
+// pins the angle to DR alone.
+func TestAngleTrims(t *testing.T) {
+	a := anim(t)
+	s := &Set{Sockets: []Socket{
+		{Name: "tilted", Layer: "hand_r", DR: 45}, // hand_r sits at 90°
+		{Name: "level", Layer: "hand_r", Rotate: RotateNone},
+		{Name: "pinned", Layer: "hand_r", Rotate: RotateNone, DR: 10},
+	}}
+	p, _ := s.At(a, 30, "tilted")
+	if !near(p.Angle, 135*math.Pi/180) {
+		t.Fatalf("follow+dr: got %v", p.Angle)
+	}
+	p, _ = s.At(a, 30, "level")
+	if !near(p.Angle, 0) {
+		t.Fatalf("none: got %v", p.Angle)
+	}
+	p, _ = s.At(a, 30, "pinned")
+	if !near(p.Angle, 10*math.Pi/180) {
+		t.Fatalf("none+dr: got %v", p.Angle)
+	}
+}
+
 func TestDisplacement(t *testing.T) {
 	a := anim(t)
 	dx, dy, ok := Displacement(a, "root", 0, 30)

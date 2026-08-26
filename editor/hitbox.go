@@ -755,6 +755,21 @@ func (m *Model) RenameSocket(name string) {
 	m.touchSockets()
 }
 
+// ToggleSocketRotate flips the selected socket between following the
+// layer's rotation and staying pinned.
+func (m *Model) ToggleSocketRotate() {
+	s := m.SelectedSocket()
+	if s == nil {
+		return
+	}
+	if s.Rotate == lottiesockets.RotateNone {
+		s.Rotate = lottiesockets.RotateFollow
+	} else {
+		s.Rotate = lottiesockets.RotateNone
+	}
+	m.touchSockets()
+}
+
 // ToggleSocketZ flips the selected socket between drawing an attached item
 // in front of and behind the character.
 func (m *Model) ToggleSocketZ() {

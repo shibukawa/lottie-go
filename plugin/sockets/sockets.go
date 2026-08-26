@@ -34,6 +34,17 @@ const (
 	ZBehind Z = "behind"
 )
 
+// Rotate says whether the socket's angle follows the bound layer.
+type Rotate string
+
+const (
+	// RotateFollow (the empty default) hands the layer's rotation on.
+	RotateFollow Rotate = ""
+	// RotateNone pins the angle regardless of the layer — a health bar
+	// over the head stays level however the head tilts.
+	RotateNone Rotate = "none"
+)
+
 // Socket binds one game-facing name to a layer.
 type Socket struct {
 	Name string `json:"name"`
@@ -47,6 +58,11 @@ type Socket struct {
 	// when re-authoring the animation is not worth it.
 	DX float64 `json:"dx,omitempty"`
 	DY float64 `json:"dy,omitempty"`
+	// DR trims the returned angle, in degrees: added onto the layer's
+	// rotation, or the whole angle when Rotate is none.
+	DR float64 `json:"dr,omitempty"`
+	// Rotate picks whether the angle follows the layer at all.
+	Rotate Rotate `json:"rotate,omitempty"`
 
 	Extra lottie.ExtraFields `json:"-"`
 }
@@ -194,14 +210,22 @@ func (s *Set) All(a *lottie.Animation, frame float64) []Placed {
 	return out
 }
 
-// place applies the socket's local offset through the layer transform:
-// the nudge rides the layer's rotation and scale like anything attached.
+// place applies the socket's trims through the layer transform: the
+// positional nudge rides the layer's rotation and scale like anything
+// attached (whatever Rotate says — the attachment point is on the hand
+// either way), and the angle then follows the layer or stays pinned.
 func place(sock Socket, pl lottie.LayerPlacement) Placed {
 	if sock.DX != 0 || sock.DY != 0 {
 		sin, cos := math.Sincos(pl.Angle)
 		lx, ly := pl.ScaleX*sock.DX, pl.ScaleY*sock.DY
 		pl.X += cos*lx - sin*ly
 		pl.Y += sin*lx + cos*ly
+	}
+	dr := sock.DR * math.Pi / 180
+	if sock.Rotate == RotateNone {
+		pl.Angle = dr
+	} else {
+		pl.Angle += dr
 	}
 	return Placed{Socket: sock, LayerPlacement: pl}
 }
