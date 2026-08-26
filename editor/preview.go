@@ -119,16 +119,11 @@ func (p *previewPane) Layout(context *guigui.Context, widgetBounds *guigui.Widge
 
 // previewStage renders whatever the preview is showing, scaled to fit. The
 // collision overlay is drawn and dragged here: what you grab is the shape
-// at the pixel you see. The overlay visibility toggles sit in the stage's
-// own top-right corner — they change what this widget shows, so they live
-// on it, apart from the authoring strip below.
+// at the pixel you see. What shows follows the strip's active tab — the
+// Segment tab is the clean, undecorated preview — so the stage carries no
+// toggles of its own.
 type previewStage struct {
 	guigui.DefaultWidget
-
-	hitLbl    basicwidget.Text
-	hitCheck  basicwidget.Checkbox
-	sockLbl   basicwidget.Text
-	sockCheck basicwidget.Checkbox
 
 	dragMode   stageDrag
 	dragKind   stageDragKind
@@ -143,63 +138,6 @@ const (
 	dragBody
 	dragSocket
 )
-
-func (s *previewStage) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
-	m := s.model(context)
-	if m == nil {
-		return nil
-	}
-	// The body silhouette follows the Body tab instead of a toggle; only
-	// hitboxes and sockets, which stay useful across contexts, keep one.
-	if m.ResolvEnabled() {
-		adder.AddWidget(&s.hitLbl)
-		adder.AddWidget(&s.hitCheck)
-	}
-	adder.AddWidget(&s.sockLbl)
-	adder.AddWidget(&s.sockCheck)
-
-	label(&s.hitLbl, "hit")
-	label(&s.sockLbl, "sock")
-	for _, l := range []*basicwidget.Text{&s.hitLbl, &s.sockLbl} {
-		l.SetScale(0.8)
-		l.SetHorizontalAlign(basicwidget.HorizontalAlignEnd)
-		context.SetPassthrough(l, true)
-	}
-	s.hitCheck.SetValue(m.ShowHitboxes())
-	s.hitCheck.OnValueChanged(func(context *guigui.Context, v bool) { m.SetShowHitboxes(v) })
-	s.sockCheck.SetValue(m.ShowSockets())
-	s.sockCheck.OnValueChanged(func(context *guigui.Context, v bool) { m.SetShowSockets(v) })
-	return nil
-}
-
-// Layout stacks the toggle groups in from the top-right corner.
-func (s *previewStage) Layout(context *guigui.Context, widgetBounds *guigui.WidgetBounds, layouter *guigui.ChildLayouter) {
-	m := s.model(context)
-	if m == nil {
-		return
-	}
-	u := basicwidget.UnitSize(context)
-	b := widgetBounds.Bounds()
-	x := b.Max.X - u/4
-	y := b.Min.Y + u/4
-	place := func(lbl *basicwidget.Text, chk *basicwidget.Checkbox, lblW int) {
-		x -= u
-		layouter.LayoutWidget(chk, image.Rect(x, y, x+u, y+u))
-		x -= lblW
-		layouter.LayoutWidget(lbl, image.Rect(x, y, x+lblW, y+u))
-		x -= u / 4
-	}
-	place(&s.sockLbl, &s.sockCheck, 3*u/2)
-	if m.ResolvEnabled() {
-		place(&s.hitLbl, &s.hitCheck, u)
-	}
-}
-
-func (s *previewStage) WriteStateKey(context *guigui.Context, w *guigui.StateKeyWriter) {
-	if m := s.model(context); m != nil {
-		w.WriteInt(m.Generation())
-	}
-}
 
 type stageDrag int
 

@@ -82,12 +82,12 @@ func drawCollisionOverlay(dst *ebiten.Image, m *Model, tr stageTransform, u floa
 		}
 	}
 	frame := m.stageFrame()
-	if track := m.StageTrack(); track != nil && m.ResolvEnabled() && m.ShowHitboxes() {
+	if track := m.StageTrack(); track != nil && m.HitboxesVisible() {
 		for _, ab := range track.At(frame) {
 			drawActiveBox(dst, tr, ab, stroke, ab.Index == m.SelectedHitboxIndex(), u)
 		}
 	}
-	if anim := m.PreviewAnimation(); anim != nil && m.ShowSockets() {
+	if anim := m.PreviewAnimation(); anim != nil && m.SocketsVisible() {
 		set := m.loadSockets()
 		if set != nil {
 			// Resolved by name so the layer-local offset applies; names
@@ -227,7 +227,7 @@ func handleAt(m *Model, tr stageTransform) (float32, float32, bool) {
 // point. Later boxes draw later, so they win.
 func hitTestBoxes(m *Model, ax, ay float64) (int, bool) {
 	track := m.StageTrack()
-	if track == nil || !m.ResolvEnabled() || !m.ShowHitboxes() {
+	if track == nil || !m.HitboxesVisible() {
 		return 0, false
 	}
 	live := track.At(m.stageFrame())
@@ -278,7 +278,7 @@ func hitTestCPShapes(m *Model, ax, ay float64) (int, bool) {
 // hitTestSockets returns the socket whose cross sits within radius of an
 // animation-space point.
 func hitTestSockets(m *Model, ax, ay, radius float64) (int, bool) {
-	if !m.ShowSockets() {
+	if !m.SocketsVisible() {
 		return 0, false
 	}
 	anim := m.PreviewAnimation()
@@ -403,7 +403,14 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 	adder.AddWidget(&c.tabs)
 	c.tabItems = slices.Delete(c.tabItems, 0, len(c.tabItems))
 	for _, t := range avail {
-		text := map[colTab]string{colSegment: "Segment", colHitboxes: "Hitboxes", colBody: "Body", colSockets: "Sockets"}[t]
+		// The engine names say where each group's data goes: hitboxes
+		// feed resolv detection, the body feeds a cp space.
+		text := map[colTab]string{
+			colSegment:  "Segment",
+			colHitboxes: "Hitbox (resolv)",
+			colBody:     "Body (cp)",
+			colSockets:  "Sockets",
+		}[t]
 		c.tabItems = append(c.tabItems, basicwidget.SegmentedControlItem[colTab]{Text: text, Value: t})
 	}
 	c.tabs.SetItems(c.tabItems)

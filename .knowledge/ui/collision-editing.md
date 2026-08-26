@@ -18,7 +18,8 @@ ui:
   panel:
     kind: tabs
     id: tabs.collision
-    columns: [Segment, Hitboxes, Body, Sockets]
+    columns: ["Segment", "Hitbox (resolv)", "Body (cp)", "Sockets"]
+    state: annotation tab labels carry their engine so the destination of each group's data is legible at a glance
     state: Segment (default) holds the whole-clip overview timeline — where the played range sits in the full extent, markers included; scrub-only, no buttons
     state: tabs the physics config leaves standing; Hitboxes holds the chart + add buttons (the redundant box dropdown is gone — chart rows select), Body and Sockets hold lists whose rows select for the inspector
     state: socket rows read "name / layer … · front|behind"; socket crosses drag on the stage, writing the layer-local dx/dy trim (also numeric in the socket pane)
@@ -26,8 +27,8 @@ ui:
     hitboxes: {kind: buttons, labels: "+Rect / +Circle / +Win / Del", state: chart above; Del gated on selection}
     body: {kind: list, id: list.body, columns: [index, shape summary], action: row selects for inspector; +Circle / +Box / Del below}
     sockets: {kind: list, id: list.sockets, columns: [name, "layer … · front|behind"], action: row selects; layer dropdown + +Socket + Del below}
-  stage_toggles:
-    note: hit and sock toggles sit in the stage's top-right corner (gated by the physics config); each also mutes its group's stage hit-testing. The body silhouette has no toggle — it shows exactly while the Body tab is active, since the tab already names the working context
+  stage_visibility:
+    note: no toggles — the active tab decides. Each overlay group (and its stage hit-testing) shows exactly while its tab is the working context; the Segment tab is the clean, undecorated preview
   socket_overlay:
     state: cyan cross + angle tick per socket resolved on the stage clip (api:sockets), local dx/dy trim applied; dimmed when the layer is outside its active window; selected cross thicker
     action: drag a cross to write the socket's layer-local offset (inverse of the layer's rotate-and-scale, so the cross follows the cursor)

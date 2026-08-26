@@ -441,40 +441,34 @@ func TestAddSpanClampsToClip(t *testing.T) {
 	}
 }
 
-// Hitboxes and sockets toggle on their own; the body silhouette follows
-// the Body tab instead of a toggle.
-func TestOverlayToggles(t *testing.T) {
+// The active tab decides which overlay group shows; the Segment tab is
+// the clean preview.
+func TestOverlayFollowsTab(t *testing.T) {
 	m := stageModel(t)
-	if !m.ShowHitboxes() || !m.ShowSockets() || !m.OverlayVisible() {
-		t.Fatal("hitboxes and sockets should show by default")
+	if m.CollisionTab() != colSegment {
+		t.Fatalf("default tab: %v", m.CollisionTab())
 	}
-	if m.CollisionTab() != colSegment || m.BodyVisible() {
-		t.Fatal("the strip opens on the segment overview, body hidden")
+	if m.OverlayVisible() || m.HitboxesVisible() || m.BodyVisible() || m.SocketsVisible() {
+		t.Fatal("the segment overview must show a clean stage")
+	}
+	m.SetCollisionTab(colHitboxes)
+	if !m.HitboxesVisible() || m.BodyVisible() || m.SocketsVisible() {
+		t.Fatal("hitbox tab shows only hitboxes")
 	}
 	m.SetCollisionTab(colBody)
-	if !m.BodyVisible() {
-		t.Fatal("the Body tab should show the silhouette")
+	if !m.BodyVisible() || m.HitboxesVisible() {
+		t.Fatal("body tab shows only the silhouette")
 	}
-	// With the config excluding cp, the tab clamps away and the body
-	// stays hidden even though the stored tab still says Body.
+	m.SetCollisionTab(colSockets)
+	if !m.SocketsVisible() || m.BodyVisible() || !m.OverlayVisible() {
+		t.Fatal("socket tab shows only sockets")
+	}
+	// With the config excluding cp, a stored Body tab clamps back to the
+	// overview and the silhouette stays hidden.
+	m.SetCollisionTab(colBody)
 	m.SetPhysicsBackend("resolv")
 	if m.BodyVisible() || m.CollisionTab() != colSegment {
 		t.Fatalf("clamp: tab=%v visible=%v", m.CollisionTab(), m.BodyVisible())
-	}
-	m.SetPhysicsBackend("both")
-
-	m.SetCollisionTab(colHitboxes)
-	m.SetShowHitboxes(false)
-	if !m.OverlayVisible() {
-		t.Fatal("sockets still show, so the overlay stays on")
-	}
-	m.SetShowSockets(false)
-	if m.OverlayVisible() {
-		t.Fatal("all off should disable the overlay")
-	}
-	m.SetCollisionTab(colBody)
-	if !m.OverlayVisible() {
-		t.Fatal("the Body tab alone keeps the overlay on")
 	}
 }
 

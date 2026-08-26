@@ -100,23 +100,6 @@ func (m *Model) touchTrack() {
 	m.generation++
 }
 
-// The overlay groups toggle independently: tuning hitboxes with the body
-// and sockets in the way (or the reverse) was the annoyance.
-
-func (m *Model) ShowHitboxes() bool { return !m.hideHitboxes }
-
-func (m *Model) SetShowHitboxes(v bool) {
-	m.hideHitboxes = !v
-	m.generation++
-}
-
-func (m *Model) ShowSockets() bool { return !m.hideSockets }
-
-func (m *Model) SetShowSockets(v bool) {
-	m.hideSockets = !v
-	m.generation++
-}
-
 // CollisionTab is what the strip shows, clamped to what the physics
 // config leaves standing. The zero value is the segment overview.
 func (m *Model) CollisionTab() colTab {
@@ -140,18 +123,26 @@ func (m *Model) SetCollisionTab(t colTab) {
 	m.generation++
 }
 
-// BodyVisible reports whether the rigid-body silhouette overlays the
-// stage: only while the Body tab is the working context. The tab already
-// says what is being edited, so the silhouette needs no toggle of its
-// own and stays out of the way the rest of the time.
+// The active tab is what shows on the stage: each overlay group appears
+// exactly while its tab is the working context, and the Segment tab is
+// the clean, undecorated preview. No toggles to remember.
+
+func (m *Model) HitboxesVisible() bool {
+	return m.ResolvEnabled() && m.CollisionTab() == colHitboxes
+}
+
 func (m *Model) BodyVisible() bool {
 	return m.CPEnabled() && m.CollisionTab() == colBody
+}
+
+func (m *Model) SocketsVisible() bool {
+	return m.CollisionTab() == colSockets
 }
 
 // OverlayVisible reports whether any overlay group shows, which is what
 // the stage checks before drawing or hit-testing at all.
 func (m *Model) OverlayVisible() bool {
-	return m.ShowHitboxes() || m.BodyVisible() || m.ShowSockets()
+	return m.HitboxesVisible() || m.BodyVisible() || m.SocketsVisible()
 }
 
 // stageFrameLimit is the last meaningful frame of the stage animation;
