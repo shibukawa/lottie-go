@@ -110,13 +110,6 @@ func (m *Model) SetShowHitboxes(v bool) {
 	m.generation++
 }
 
-func (m *Model) ShowBody() bool { return !m.hideBody }
-
-func (m *Model) SetShowBody(v bool) {
-	m.hideBody = !v
-	m.generation++
-}
-
 func (m *Model) ShowSockets() bool { return !m.hideSockets }
 
 func (m *Model) SetShowSockets(v bool) {
@@ -124,10 +117,47 @@ func (m *Model) SetShowSockets(v bool) {
 	m.generation++
 }
 
+// CollisionTab is the annotation group the strip edits, clamped to what
+// the physics config leaves standing. The zero value is Hitboxes.
+func (m *Model) CollisionTab() colTab {
+	switch m.colTab {
+	case colHitboxes:
+		if m.ResolvEnabled() {
+			return colHitboxes
+		}
+	case colBody:
+		if m.CPEnabled() {
+			return colBody
+		}
+	case colSockets:
+		return colSockets
+	}
+	if m.ResolvEnabled() {
+		return colHitboxes
+	}
+	if m.CPEnabled() {
+		return colBody
+	}
+	return colSockets
+}
+
+func (m *Model) SetCollisionTab(t colTab) {
+	m.colTab = t
+	m.generation++
+}
+
+// BodyVisible reports whether the rigid-body silhouette overlays the
+// stage: only while the Body tab is the working context. The tab already
+// says what is being edited, so the silhouette needs no toggle of its
+// own and stays out of the way the rest of the time.
+func (m *Model) BodyVisible() bool {
+	return m.CPEnabled() && m.CollisionTab() == colBody
+}
+
 // OverlayVisible reports whether any overlay group shows, which is what
 // the stage checks before drawing or hit-testing at all.
 func (m *Model) OverlayVisible() bool {
-	return m.ShowHitboxes() || m.ShowBody() || m.ShowSockets()
+	return m.ShowHitboxes() || m.BodyVisible() || m.ShowSockets()
 }
 
 // stageFrameLimit is the last meaningful frame of the stage animation;

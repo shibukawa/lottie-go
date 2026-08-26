@@ -87,8 +87,8 @@ type Model struct {
 	// the zero value shows each overlay group. The caches hold parsed
 	// plugin documents; the overlay reads them every frame.
 	hideHitboxes  bool
-	hideBody      bool
 	hideSockets   bool
+	colTab        colTab
 	selBox        int
 	selCPShape    int
 	selSocket     int

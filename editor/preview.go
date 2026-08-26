@@ -130,8 +130,6 @@ type previewStage struct {
 
 	hitLbl    basicwidget.Text
 	hitCheck  basicwidget.Checkbox
-	bodyLbl   basicwidget.Text
-	bodyCheck basicwidget.Checkbox
 	sockLbl   basicwidget.Text
 	sockCheck basicwidget.Checkbox
 
@@ -154,29 +152,24 @@ func (s *previewStage) Build(context *guigui.Context, adder *guigui.ChildAdder) 
 	if m == nil {
 		return nil
 	}
+	// The body silhouette follows the Body tab instead of a toggle; only
+	// hitboxes and sockets, which stay useful across contexts, keep one.
 	if m.ResolvEnabled() {
 		adder.AddWidget(&s.hitLbl)
 		adder.AddWidget(&s.hitCheck)
-	}
-	if m.CPEnabled() {
-		adder.AddWidget(&s.bodyLbl)
-		adder.AddWidget(&s.bodyCheck)
 	}
 	adder.AddWidget(&s.sockLbl)
 	adder.AddWidget(&s.sockCheck)
 
 	label(&s.hitLbl, "hit")
-	label(&s.bodyLbl, "body")
 	label(&s.sockLbl, "sock")
-	for _, l := range []*basicwidget.Text{&s.hitLbl, &s.bodyLbl, &s.sockLbl} {
+	for _, l := range []*basicwidget.Text{&s.hitLbl, &s.sockLbl} {
 		l.SetScale(0.8)
 		l.SetHorizontalAlign(basicwidget.HorizontalAlignEnd)
 		context.SetPassthrough(l, true)
 	}
 	s.hitCheck.SetValue(m.ShowHitboxes())
 	s.hitCheck.OnValueChanged(func(context *guigui.Context, v bool) { m.SetShowHitboxes(v) })
-	s.bodyCheck.SetValue(m.ShowBody())
-	s.bodyCheck.OnValueChanged(func(context *guigui.Context, v bool) { m.SetShowBody(v) })
 	s.sockCheck.SetValue(m.ShowSockets())
 	s.sockCheck.OnValueChanged(func(context *guigui.Context, v bool) { m.SetShowSockets(v) })
 	return nil
@@ -200,9 +193,6 @@ func (s *previewStage) Layout(context *guigui.Context, widgetBounds *guigui.Widg
 		x -= u / 4
 	}
 	place(&s.sockLbl, &s.sockCheck, 3*u/2)
-	if m.CPEnabled() {
-		place(&s.bodyLbl, &s.bodyCheck, 3*u/2)
-	}
 	if m.ResolvEnabled() {
 		place(&s.hitLbl, &s.hitCheck, u)
 	}

@@ -26,7 +26,7 @@ ui:
     body: {kind: list, id: list.body, columns: [index, shape summary], action: row selects for inspector; +Circle / +Box / Del below}
     sockets: {kind: list, id: list.sockets, columns: [name, "layer … · front|behind"], action: row selects; layer dropdown + +Socket + Del below}
   stage_toggles:
-    note: overlay visibility sits in the stage's top-right corner — three independent toggles (hit / body / sock), gated by the physics config like their groups; each also mutes its group's stage hit-testing
+    note: hit and sock toggles sit in the stage's top-right corner (gated by the physics config); each also mutes its group's stage hit-testing. The body silhouette has no toggle — it shows exactly while the Body tab is active, since the tab already names the working context
   socket_overlay:
     state: cyan cross + angle tick per socket resolved on the stage clip (api:sockets), local dx/dy trim applied; dimmed when the layer is outside its active window; selected cross thicker
     action: drag a cross to write the socket's layer-local offset (inverse of the layer's rotate-and-scale, so the cross follows the cursor)

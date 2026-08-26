@@ -441,20 +441,40 @@ func TestAddSpanClampsToClip(t *testing.T) {
 	}
 }
 
-// Each overlay group toggles on its own.
+// Hitboxes and sockets toggle on their own; the body silhouette follows
+// the Body tab instead of a toggle.
 func TestOverlayToggles(t *testing.T) {
 	m := stageModel(t)
-	if !m.ShowHitboxes() || !m.ShowBody() || !m.ShowSockets() || !m.OverlayVisible() {
-		t.Fatal("everything should show by default")
+	if !m.ShowHitboxes() || !m.ShowSockets() || !m.OverlayVisible() {
+		t.Fatal("hitboxes and sockets should show by default")
 	}
+	if m.CollisionTab() != colHitboxes || m.BodyVisible() {
+		t.Fatal("the body must stay hidden off its tab")
+	}
+	m.SetCollisionTab(colBody)
+	if !m.BodyVisible() {
+		t.Fatal("the Body tab should show the silhouette")
+	}
+	// With the config excluding cp, the tab clamps away and the body
+	// stays hidden even though the stored tab still says Body.
+	m.SetPhysicsBackend("resolv")
+	if m.BodyVisible() || m.CollisionTab() == colBody {
+		t.Fatalf("clamp: tab=%v visible=%v", m.CollisionTab(), m.BodyVisible())
+	}
+	m.SetPhysicsBackend("both")
+
+	m.SetCollisionTab(colHitboxes)
 	m.SetShowHitboxes(false)
-	m.SetShowBody(false)
 	if !m.OverlayVisible() {
 		t.Fatal("sockets still show, so the overlay stays on")
 	}
 	m.SetShowSockets(false)
 	if m.OverlayVisible() {
 		t.Fatal("all off should disable the overlay")
+	}
+	m.SetCollisionTab(colBody)
+	if !m.OverlayVisible() {
+		t.Fatal("the Body tab alone keeps the overlay on")
 	}
 }
 

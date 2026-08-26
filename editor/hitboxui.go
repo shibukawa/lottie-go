@@ -76,7 +76,7 @@ func (t stageTransform) toAnim(x, y int) (float64, float64) {
 // smallest marks and must not drown.
 func drawCollisionOverlay(dst *ebiten.Image, m *Model, tr stageTransform, u float32) {
 	stroke := max(1, u/12)
-	if m.CPEnabled() && m.ShowBody() {
+	if m.BodyVisible() {
 		for i, s := range m.CPBodyShapes() {
 			drawCPShape(dst, tr, s, stroke, i == m.SelectedCPShapeIndex(), u)
 		}
@@ -249,7 +249,7 @@ func hitTestBoxes(m *Model, ax, ay float64) (int, bool) {
 // hitTestCPShapes returns the topmost body shape under an animation-space
 // point.
 func hitTestCPShapes(m *Model, ax, ay float64) (int, bool) {
-	if !m.CPEnabled() || !m.ShowBody() {
+	if !m.BodyVisible() {
 		return 0, false
 	}
 	shapes := m.CPBodyShapes()
@@ -358,8 +358,6 @@ type collisionPanel struct {
 	addSock    basicwidget.Button
 	delSock    basicwidget.Button
 
-	tab colTab
-
 	tabItems  []basicwidget.SegmentedControlItem[colTab]
 	bodyItems []basicwidget.ListItem[int]
 	sockItems []basicwidget.ListItem[int]
@@ -396,9 +394,7 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 		return nil
 	}
 	avail := availableTabs(m)
-	if !slices.Contains(avail, c.tab) {
-		c.tab = avail[0]
-	}
+	tab := m.CollisionTab()
 
 	adder.AddWidget(&c.tabs)
 	c.tabItems = slices.Delete(c.tabItems, 0, len(c.tabItems))
@@ -407,15 +403,17 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 		c.tabItems = append(c.tabItems, basicwidget.SegmentedControlItem[colTab]{Text: text, Value: t})
 	}
 	c.tabs.SetItems(c.tabItems)
-	c.tabs.SelectItemByValue(c.tab)
+	c.tabs.SelectItemByValue(tab)
 	c.tabs.OnItemSelected(func(context *guigui.Context, index int) {
-		if item, ok := c.tabs.ItemByIndex(index); ok {
-			c.tab = item.Value
+		// The model holds the tab: switching to Body is also what shows
+		// the silhouette on the stage.
+		if item, ok := c.tabs.ItemByIndex(index); ok && item.Value != m.CollisionTab() {
+			m.SetCollisionTab(item.Value)
 		}
 	})
 
 	onStage := m.StageAnimID() != ""
-	switch c.tab {
+	switch tab {
 	case colHitboxes:
 		adder.AddWidget(&c.chart)
 		for _, w := range []guigui.Widget{&c.addRect, &c.addCircle, &c.addWin, &c.delBox} {
@@ -528,14 +526,17 @@ func (c *collisionPanel) WriteStateKey(context *guigui.Context, w *guigui.StateK
 		w.WriteInt(m.Generation())
 		w.WriteString(m.StageAnimID())
 	}
-	w.WriteInt(int(c.tab))
 }
 
 func (c *collisionPanel) layout(context *guigui.Context) guigui.LinearLayout {
 	u := basicwidget.UnitSize(context)
 
+	tab := colSockets
+	if m := c.model(context); m != nil {
+		tab = m.CollisionTab()
+	}
 	c.btnRowItems = slices.Delete(c.btnRowItems, 0, len(c.btnRowItems))
-	switch c.tab {
+	switch tab {
 	case colHitboxes:
 		c.btnRowItems = append(c.btnRowItems,
 			guigui.LinearLayoutItem{Widget: &c.addRect, Size: guigui.FixedSize(2 * u)},
@@ -566,7 +567,7 @@ func (c *collisionPanel) layout(context *guigui.Context) guigui.LinearLayout {
 	c.items = append(c.items,
 		guigui.LinearLayoutItem{Widget: &c.tabs, Size: guigui.FixedSize(u)},
 	)
-	switch c.tab {
+	switch tab {
 	case colHitboxes:
 		c.items = append(c.items, guigui.LinearLayoutItem{Widget: &c.chart})
 	case colBody:
