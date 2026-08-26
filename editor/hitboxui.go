@@ -356,10 +356,9 @@ type collisionPanel struct {
 	addCPBox  basicwidget.Button
 	delCP     basicwidget.Button
 
-	sockList   basicwidget.List[int]
-	layerCombo basicwidget.Select[string]
-	addSock    basicwidget.Button
-	delSock    basicwidget.Button
+	sockList    basicwidget.List[int]
+	addSockBtns guigui.WidgetSlice[*basicwidget.Button]
+	delSock     basicwidget.Button
 
 	tabItems  []basicwidget.SegmentedControlItem[colTab]
 	bodyItems []basicwidget.ListItem[int]
@@ -466,17 +465,27 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 		context.SetEnabled(&c.delCP, m.SelectedCPShape() != nil)
 	case colSockets:
 		adder.AddWidget(&c.sockList)
-		adder.AddWidget(&c.layerCombo)
-		adder.AddWidget(&c.addSock)
 		adder.AddWidget(&c.delSock)
 		c.buildSocketList(context, m)
-		setOptions(&c.layerCombo, m.StageLayerNames()...)
-		c.addSock.SetText("+Socket")
-		c.addSock.OnDown(func(context *guigui.Context) { m.AddSocket(selectedValue(&c.layerCombo)) })
+		// One add button per stage layer, like the shape buttons on the
+		// other tabs: binding is one click, and a layer already bound
+		// reads as spent.
+		set := m.loadSockets()
+		names := m.StageLayerNames()
+		c.addSockBtns.SetLen(len(names))
+		for i, name := range names {
+			btn := c.addSockBtns.At(i)
+			adder.AddWidget(btn)
+			btn.SetText("+" + name)
+			btn.OnDown(func(context *guigui.Context) { m.AddSocket(name) })
+			bound := false
+			if set != nil {
+				_, bound = set.Find(name)
+			}
+			context.SetEnabled(btn, onStage && !bound)
+		}
 		c.delSock.SetText("Delete")
 		c.delSock.OnDown(func(context *guigui.Context) { m.DeleteSocket() })
-		context.SetEnabled(&c.layerCombo, onStage)
-		context.SetEnabled(&c.addSock, onStage && selectedValue(&c.layerCombo) != "")
 		context.SetEnabled(&c.delSock, m.SelectedSocket() != nil)
 	}
 	return nil
@@ -568,9 +577,12 @@ func (c *collisionPanel) layout(context *guigui.Context) guigui.LinearLayout {
 			guigui.LinearLayoutItem{Size: guigui.FlexibleSize(1)},
 		)
 	case colSockets:
+		for i := range c.addSockBtns.Len() {
+			c.btnRowItems = append(c.btnRowItems,
+				guigui.LinearLayoutItem{Widget: c.addSockBtns.At(i), Size: guigui.FlexibleSize(1)})
+		}
 		c.btnRowItems = append(c.btnRowItems,
-			guigui.LinearLayoutItem{Widget: &c.layerCombo, Size: guigui.FlexibleSize(1)},
-			guigui.LinearLayoutItem{Widget: &c.addSock, Size: guigui.FixedSize(3 * u)},
+			guigui.LinearLayoutItem{Size: guigui.FlexibleSize(2)},
 			guigui.LinearLayoutItem{Widget: &c.delSock, Size: guigui.FixedSize(5 * u / 2)},
 		)
 	}

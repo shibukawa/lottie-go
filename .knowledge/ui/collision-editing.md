@@ -26,7 +26,7 @@ ui:
   panel_tabs:
     hitboxes: {kind: buttons, labels: "+Rect / +Circle / +Win / Del", state: chart above; Del gated on selection}
     body: {kind: list, id: list.body, columns: [index, shape summary], action: row selects for inspector; +Circle / +Box / Del below}
-    sockets: {kind: list, id: list.sockets, columns: [name, "layer … · front|behind"], action: row selects; layer dropdown + +Socket + Del below}
+    sockets: {kind: list, id: list.sockets, columns: [name, "layer … · front|behind"], action: row selects; one "+<layer>" button per stage layer below (disabled once bound), like the shape buttons on the other tabs, plus Delete}
   stage_visibility:
     note: no toggles — the active tab decides. Each overlay group (and its stage hit-testing) shows exactly while its tab is the working context; the Segment tab is the clean, undecorated preview
   socket_overlay:
