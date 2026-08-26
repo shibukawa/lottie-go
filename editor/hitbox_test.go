@@ -299,6 +299,108 @@ func TestRenameSocketKeepsBinding(t *testing.T) {
 	}
 }
 
+// The physics switch travels with the bundle in the manifest's extra
+// member and gates which tooling shows.
+func TestPhysicsBackendConfig(t *testing.T) {
+	m := stageModel(t)
+
+	if m.PhysicsBackend() != "both" || !m.ResolvEnabled() || !m.CPEnabled() {
+		t.Fatalf("default: %q", m.PhysicsBackend())
+	}
+	m.SetPhysicsBackend("cp")
+	if m.ResolvEnabled() || !m.CPEnabled() {
+		t.Fatal("cp: resolv tooling should be off")
+	}
+	m.SetPhysicsBackend("none")
+	if m.ResolvEnabled() || m.CPEnabled() {
+		t.Fatal("none: everything should be off")
+	}
+
+	var buf bytes.Buffer
+	if err := m.Bundle().Encode(&buf); err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	rb, err := lottie.DecodeBundle(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatalf("DecodeBundle: %v", err)
+	}
+	m2 := NewModel()
+	m2.bundle = rb
+	if m2.PhysicsBackend() != "none" {
+		t.Fatalf("config did not survive the save: %q", m2.PhysicsBackend())
+	}
+	// Garbage in the member reads as the default, not a crash.
+	m.SetPhysicsBackend("quantum")
+	if m.PhysicsBackend() != "both" {
+		t.Fatalf("unknown value: %q", m.PhysicsBackend())
+	}
+}
+
+func TestShowConfigPane(t *testing.T) {
+	m := stageModel(t)
+	m.ShowConfigPane()
+	if m.InspectTarget() != inspectConfig {
+		t.Fatalf("target: %v", m.InspectTarget())
+	}
+}
+
+func TestTransport(t *testing.T) {
+	m := stageModel(t)
+	if !m.PreviewPlaying() {
+		t.Fatal("a shown clip should be playing")
+	}
+	m.PausePreview()
+	if m.PreviewPlaying() {
+		t.Fatal("PausePreview did not pause")
+	}
+	m.PreviewSeek(10)
+	m.StepPreviewFrame(1)
+	if got := m.PreviewPlayer().Frame(); got != 11 {
+		t.Fatalf("step: frame %v, want 11", got)
+	}
+	m.StepPreviewFrame(-1)
+	if got := m.PreviewPlayer().Frame(); got != 10 {
+		t.Fatalf("step back: frame %v, want 10", got)
+	}
+	m.TogglePreviewPlaying()
+	if !m.PreviewPlaying() {
+		t.Fatal("toggle should resume")
+	}
+}
+
+// Chart drags address spans by index and defer re-sorting to release.
+func TestChartSpanOps(t *testing.T) {
+	m := stageModel(t)
+	m.AddHitbox(lottieresolv.KindRect) // span [0, 10)
+	m.PreviewSeek(20)
+	m.AddHitboxSpan() // span [20, 30)
+	b := m.SelectedHitbox()
+
+	// Shift the first span past the second; order is restored on release.
+	m.ShiftSpan(0, 0, 25)
+	if b.Spans[0].From != 25 || b.Spans[0].To != 35 {
+		t.Fatalf("shift: %+v", b.Spans[0])
+	}
+	m.NormalizeSpans(0)
+	if b.Spans[0].From != 20 || b.Spans[1].From != 25 {
+		t.Fatalf("normalize: %+v", b.Spans)
+	}
+
+	// Clamps: a span cannot slide below zero nor shrink past one frame.
+	m.ShiftSpan(0, 0, -100)
+	if b.Spans[0].From != 0 || b.Spans[0].To != 10 {
+		t.Fatalf("clamp at zero: %+v", b.Spans[0])
+	}
+	m.SetSpanEdge(0, 0, true, 0)
+	if b.Spans[0].To != 1 {
+		t.Fatalf("right edge min width: %+v", b.Spans[0])
+	}
+	m.SetSpanEdge(0, 0, false, 100)
+	if b.Spans[0].From != 0 {
+		t.Fatalf("left edge min width: %+v", b.Spans[0])
+	}
+}
+
 // Dropping a clip drops its hitbox track too: that cleanup moved from the
 // core to this editor when the data became a plugin payload.
 func TestRemoveClipDropsTrack(t *testing.T) {

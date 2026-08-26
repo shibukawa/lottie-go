@@ -4,7 +4,7 @@ type: requirement
 title: Bundle Editor Config
 ---
 
-Status: proposed. A per-bundle configuration pane: a Config button beside
+Status: implemented — Config toolbar button opens the pane (inspectConfig target); physics select (both/cp/resolv/none, empty reads both) gates the collision strip groups, the chart rows, the stage overlay, and stage hit-testing; stored as {physics} in manifest Extra x-lottie-go-editor and survives save/reopen; unknown stored values read as both. A per-bundle configuration pane: a Config button beside
 Save As opens config editing in the selection pane
 (requirement:selection-driven-ui — config is just another selectable).
 

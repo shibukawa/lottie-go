@@ -76,11 +76,13 @@ func (t stageTransform) toAnim(x, y int) (float64, float64) {
 // smallest marks and must not drown.
 func drawCollisionOverlay(dst *ebiten.Image, m *Model, tr stageTransform, u float32) {
 	stroke := max(1, u/12)
-	for i, s := range m.CPBodyShapes() {
-		drawCPShape(dst, tr, s, stroke, i == m.SelectedCPShapeIndex(), u)
+	if m.CPEnabled() {
+		for i, s := range m.CPBodyShapes() {
+			drawCPShape(dst, tr, s, stroke, i == m.SelectedCPShapeIndex(), u)
+		}
 	}
 	frame := m.stageFrame()
-	if track := m.StageTrack(); track != nil {
+	if track := m.StageTrack(); track != nil && m.ResolvEnabled() {
 		for _, ab := range track.At(frame) {
 			drawActiveBox(dst, tr, ab, stroke, ab.Index == m.SelectedHitboxIndex(), u)
 		}
@@ -220,7 +222,7 @@ func handleAt(m *Model, tr stageTransform) (float32, float32, bool) {
 // point. Later boxes draw later, so they win.
 func hitTestBoxes(m *Model, ax, ay float64) (int, bool) {
 	track := m.StageTrack()
-	if track == nil {
+	if track == nil || !m.ResolvEnabled() {
 		return 0, false
 	}
 	live := track.At(m.stageFrame())
@@ -242,6 +244,9 @@ func hitTestBoxes(m *Model, ax, ay float64) (int, bool) {
 // hitTestCPShapes returns the topmost body shape under an animation-space
 // point.
 func hitTestCPShapes(m *Model, ax, ay float64) (int, bool) {
+	if !m.CPEnabled() {
+		return 0, false
+	}
 	shapes := m.CPBodyShapes()
 	for i := len(shapes) - 1; i >= 0; i-- {
 		s := shapes[i]
@@ -335,12 +340,16 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 	}
 	// Parameters of the selected item (name, tags, span, material, z) are
 	// edited in the inspector; this strip only adds, selects, and deletes.
-	for _, w := range []guigui.Widget{
-		&c.showLabel, &c.showCheck, &c.boxCombo, &c.addRect, &c.addCircle,
-		&c.addWin, &c.delBox,
-		&c.bodyLabel, &c.addCPCirc, &c.addCPBox, &c.delCP,
-		&c.sockLabel, &c.layerCombo, &c.addSock, &c.sockCombo, &c.delSock,
-	} {
+	// The config's physics switch decides which groups exist at all.
+	widgets := []guigui.Widget{&c.showLabel, &c.showCheck}
+	if m.ResolvEnabled() {
+		widgets = append(widgets, &c.boxCombo, &c.addRect, &c.addCircle, &c.addWin, &c.delBox)
+	}
+	if m.CPEnabled() {
+		widgets = append(widgets, &c.bodyLabel, &c.addCPCirc, &c.addCPBox, &c.delCP)
+	}
+	widgets = append(widgets, &c.sockLabel, &c.layerCombo, &c.addSock, &c.sockCombo, &c.delSock)
+	for _, w := range widgets {
 		adder.AddWidget(w)
 	}
 
@@ -454,26 +463,38 @@ func (c *collisionPanel) WriteStateKey(context *guigui.Context, w *guigui.StateK
 func (c *collisionPanel) layout(context *guigui.Context) guigui.LinearLayout {
 	u := basicwidget.UnitSize(context)
 
+	resolvOn, cpOn := true, true
+	if m := c.model(context); m != nil {
+		resolvOn, cpOn = m.ResolvEnabled(), m.CPEnabled()
+	}
 	c.rowAItems = slices.Delete(c.rowAItems, 0, len(c.rowAItems))
 	c.rowAItems = append(c.rowAItems,
 		guigui.LinearLayoutItem{Widget: &c.showLabel, Size: guigui.FixedSize(5 * u / 2)},
 		guigui.LinearLayoutItem{Widget: &c.showCheck, Size: guigui.FixedSize(u)},
-		guigui.LinearLayoutItem{Widget: &c.boxCombo, Size: guigui.FlexibleSize(3)},
-		guigui.LinearLayoutItem{Widget: &c.addRect, Size: guigui.FixedSize(2 * u)},
-		guigui.LinearLayoutItem{Widget: &c.addCircle, Size: guigui.FixedSize(5 * u / 2)},
-		guigui.LinearLayoutItem{Widget: &c.addWin, Size: guigui.FixedSize(2 * u)},
-		guigui.LinearLayoutItem{Widget: &c.delBox, Size: guigui.FixedSize(3 * u / 2)},
 	)
+	if resolvOn {
+		c.rowAItems = append(c.rowAItems,
+			guigui.LinearLayoutItem{Widget: &c.boxCombo, Size: guigui.FlexibleSize(3)},
+			guigui.LinearLayoutItem{Widget: &c.addRect, Size: guigui.FixedSize(2 * u)},
+			guigui.LinearLayoutItem{Widget: &c.addCircle, Size: guigui.FixedSize(5 * u / 2)},
+			guigui.LinearLayoutItem{Widget: &c.addWin, Size: guigui.FixedSize(2 * u)},
+			guigui.LinearLayoutItem{Widget: &c.delBox, Size: guigui.FixedSize(3 * u / 2)},
+		)
+	}
 	c.rowA = guigui.LinearLayout{
 		Direction: guigui.LayoutDirectionHorizontal, Items: c.rowAItems, Gap: u / 4,
 	}
 
 	c.rowBItems = slices.Delete(c.rowBItems, 0, len(c.rowBItems))
+	if cpOn {
+		c.rowBItems = append(c.rowBItems,
+			guigui.LinearLayoutItem{Widget: &c.bodyLabel, Size: guigui.FixedSize(3 * u)},
+			guigui.LinearLayoutItem{Widget: &c.addCPCirc, Size: guigui.FixedSize(5 * u / 2)},
+			guigui.LinearLayoutItem{Widget: &c.addCPBox, Size: guigui.FixedSize(2 * u)},
+			guigui.LinearLayoutItem{Widget: &c.delCP, Size: guigui.FixedSize(3 * u / 2)},
+		)
+	}
 	c.rowBItems = append(c.rowBItems,
-		guigui.LinearLayoutItem{Widget: &c.bodyLabel, Size: guigui.FixedSize(3 * u)},
-		guigui.LinearLayoutItem{Widget: &c.addCPCirc, Size: guigui.FixedSize(5 * u / 2)},
-		guigui.LinearLayoutItem{Widget: &c.addCPBox, Size: guigui.FixedSize(2 * u)},
-		guigui.LinearLayoutItem{Widget: &c.delCP, Size: guigui.FixedSize(3 * u / 2)},
 		guigui.LinearLayoutItem{Widget: &c.sockLabel, Size: guigui.FixedSize(5 * u / 2)},
 		guigui.LinearLayoutItem{Widget: &c.layerCombo, Size: guigui.FlexibleSize(3)},
 		guigui.LinearLayoutItem{Widget: &c.addSock, Size: guigui.FixedSize(3 * u)},

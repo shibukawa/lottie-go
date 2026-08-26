@@ -36,8 +36,12 @@ ui:
           - note: socket rename and the z toggle live in the inspector socket pane
   socket_overlay:
     state: cyan cross + angle tick per socket resolved on the stage clip (api:sockets); dimmed when the layer is outside its active window; selected cross thicker
-  timeline:
-    state: selected box's spans drawn as tag-colored bars inside the track
+  chart:
+    kind: canvas
+    id: chart.spans
+    state: one row per hitbox/window, spans as tag-colored bars (windows hollow), shared playhead, frame ruler; selected row highlighted; hidden rows when physics config disables resolv
+    action: bar drag moves a span, edge drag retimes, header/empty-row drag scrubs, any touch pauses; transport buttons (play/pause, ±1 frame) in the gutter
+    state: row label click selects the box; parameters edit in the inspector
 selection: hitbox and body-shape selection mutually exclusive; one thing drags at a time
 edit_context: hitbox edits target the stage clip (clip preview or the machine's current state's clip); span edits key on the playhead
 staleness: hitbox edits do not mark the machine preview stale (docGen untouched)

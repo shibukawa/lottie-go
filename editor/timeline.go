@@ -78,8 +78,14 @@ func (t *timelineView) readoutText(m *Model) string {
 		p.Frame(), (p.Frame()-start)/fps, (end-start)/fps)
 }
 
-// docRange is the whole animation, which the track represents.
+// docRange is the whole animation, which the track represents. The chart
+// shares the same extent so its bars line up with this ruler.
 func (t *timelineView) docRange(m *Model) (float64, float64, bool) {
+	return stageDocRange(m)
+}
+
+// stageDocRange is the frame extent of the animation on stage.
+func stageDocRange(m *Model) (float64, float64, bool) {
 	anim := m.PreviewAnimation()
 	p := m.PreviewPlayer()
 	if anim == nil || p == nil {
@@ -131,18 +137,6 @@ func (t *timelineView) Draw(context *guigui.Context, widgetBounds *guigui.Widget
 	start, end := p.Range()
 	vector.DrawFilledRect(dst, x(start), float32(tr.Min.Y),
 		x(end)-x(start), float32(tr.Dy()), pal.band, false)
-
-	// The selected hitbox's active spans, so "when does it come out" reads
-	// on the same ruler the playhead moves along.
-	if m.ShowCollision() {
-		if b := m.SelectedHitbox(); b != nil {
-			clr := withAlpha(tagColor(b.Tags), 0xb0)
-			for _, sp := range b.Spans {
-				vector.DrawFilledRect(dst, x(sp.From), float32(tr.Min.Y),
-					x(sp.To)-x(sp.From), float32(tr.Dy())/2, clr, false)
-			}
-		}
-	}
 
 	tickW := float32(max(1, basicwidget.UnitSize(context)/16))
 	for _, mk := range m.PreviewMarkers() {

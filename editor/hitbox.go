@@ -326,6 +326,63 @@ func sortSpans(b *lottieresolv.Box) {
 	sort.SliceStable(b.Spans, func(i, j int) bool { return b.Spans[i].From < b.Spans[j].From })
 }
 
+// boxSpan resolves a chart position to the span it edits.
+func (m *Model) boxSpan(box, span int) (*lottieresolv.Box, *lottieresolv.Span) {
+	t := m.StageTrack()
+	if t == nil || box < 0 || box >= len(t.Boxes) {
+		return nil, nil
+	}
+	b := &t.Boxes[box]
+	if span < 0 || span >= len(b.Spans) {
+		return nil, nil
+	}
+	return b, &b.Spans[span]
+}
+
+// ShiftSpan slides one span whole, the chart's bar drag. Frames may go
+// fractional during a drag; the chart snaps before calling. Spans are
+// deliberately not re-sorted here — the chart addresses the dragged span
+// by index across the whole drag — so NormalizeSpans runs on release.
+func (m *Model) ShiftSpan(box, span int, delta float64) {
+	_, sp := m.boxSpan(box, span)
+	if sp == nil || delta == 0 {
+		return
+	}
+	sp.From += delta
+	sp.To += delta
+	if sp.From < 0 {
+		sp.To -= sp.From
+		sp.From = 0
+	}
+	m.touchTrack()
+}
+
+// SetSpanEdge moves one end of a span, the chart's bar-edge drag. The
+// span keeps at least one frame so it cannot vanish under the cursor.
+// Like ShiftSpan, ordering is restored by NormalizeSpans on release.
+func (m *Model) SetSpanEdge(box, span int, right bool, frame float64) {
+	_, sp := m.boxSpan(box, span)
+	if sp == nil {
+		return
+	}
+	if right {
+		sp.To = max(frame, sp.From+1)
+	} else {
+		sp.From = max(0, min(frame, sp.To-1))
+	}
+	m.touchTrack()
+}
+
+// NormalizeSpans restores frame order after a chart drag ends.
+func (m *Model) NormalizeSpans(box int) {
+	t := m.StageTrack()
+	if t == nil || box < 0 || box >= len(t.Boxes) {
+		return
+	}
+	sortSpans(&t.Boxes[box])
+	m.touchTrack()
+}
+
 // DragHitbox moves the current span by a delta in animation coordinates.
 func (m *Model) DragHitbox(dx, dy float64) {
 	sp := m.SelectedSpan()

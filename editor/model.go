@@ -29,6 +29,7 @@ const (
 	inspectHitbox
 	inspectCPShape
 	inspectSocket
+	inspectConfig
 )
 
 // editorExtraKey names the member this editor stashes in a State's extra
@@ -308,6 +309,120 @@ func (m *Model) MachineIDs() []string { return m.bundle.StateMachineIDs() }
 func (m *Model) InspectTarget() inspectTarget { return m.inspect }
 
 func (m *Model) setInspect(t inspectTarget) { m.inspect = t }
+
+// ShowConfigPane opens the bundle configuration in the inspector; the
+// config is just another selectable thing.
+func (m *Model) ShowConfigPane() {
+	m.setInspect(inspectConfig)
+	m.generation++
+}
+
+// ---- bundle editor config ----
+
+// editorConfig is what this editor stores at bundle level, in the
+// manifest's x-lottie-go-editor extra member: the same channel as state
+// node positions, traveling with the bundle and ignored elsewhere.
+type editorConfig struct {
+	// Physics picks which collision tooling the editor shows: "cp",
+	// "resolv", "both" (the empty default), or "none". It gates editor
+	// UI, not runtime behavior — a game chooses engines by importing
+	// plugins.
+	Physics string `json:"physics,omitempty"`
+}
+
+func (m *Model) editorConfigValue() editorConfig {
+	var cfg editorConfig
+	if man := m.bundle.Manifest(); man.Extra != nil {
+		if raw, ok := man.Extra[editorExtraKey]; ok {
+			_ = json.Unmarshal(raw, &cfg)
+		}
+	}
+	return cfg
+}
+
+func (m *Model) setEditorConfig(cfg editorConfig) {
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		return
+	}
+	man := m.bundle.Manifest()
+	if man.Extra == nil {
+		man.Extra = lottie.ExtraFields{}
+	}
+	man.Extra[editorExtraKey] = raw
+}
+
+// PhysicsBackend is the configured collision tooling: cp, resolv, both,
+// or none. The empty value reads as both, so old bundles show everything.
+func (m *Model) PhysicsBackend() string {
+	switch v := m.editorConfigValue().Physics; v {
+	case "cp", "resolv", "none":
+		return v
+	}
+	return "both"
+}
+
+func (m *Model) SetPhysicsBackend(v string) {
+	cfg := m.editorConfigValue()
+	cfg.Physics = v
+	m.setEditorConfig(cfg)
+	m.setStatus("physics tooling: %s", v)
+	m.generation++
+}
+
+// ResolvEnabled reports whether hitbox-track tooling should show.
+func (m *Model) ResolvEnabled() bool {
+	v := m.PhysicsBackend()
+	return v == "resolv" || v == "both"
+}
+
+// CPEnabled reports whether rigid-body tooling should show.
+func (m *Model) CPEnabled() bool {
+	v := m.PhysicsBackend()
+	return v == "cp" || v == "both"
+}
+
+// ---- transport ----
+
+// PreviewPlaying reports whether the stage is advancing.
+func (m *Model) PreviewPlaying() bool {
+	p := m.PreviewPlayer()
+	return p != nil && p.IsPlaying()
+}
+
+// PausePreview halts playback where it is. Chart edits call this first:
+// placing a span under a moving playhead is near impossible.
+func (m *Model) PausePreview() {
+	if p := m.PreviewPlayer(); p != nil && p.IsPlaying() {
+		p.Pause()
+		m.generation++
+	}
+}
+
+// TogglePreviewPlaying is the chart's play/pause button.
+func (m *Model) TogglePreviewPlaying() {
+	p := m.PreviewPlayer()
+	if p == nil {
+		return
+	}
+	if p.IsPlaying() {
+		p.Pause()
+	} else {
+		p.Play()
+	}
+	m.generation++
+}
+
+// StepPreviewFrame pauses and nudges the playhead by whole frames.
+func (m *Model) StepPreviewFrame(delta float64) {
+	p := m.PreviewPlayer()
+	if p == nil {
+		return
+	}
+	p.Pause()
+	p.SetFrame(p.Frame() + delta)
+	m.generation++
+}
 
 func (m *Model) SelectMachine(id string) {
 	sm, err := m.bundle.StateMachine(id)

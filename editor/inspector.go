@@ -152,6 +152,14 @@ type inspectorContent struct {
 	cpForm         basicwidget.Form
 	cpFormItems    []basicwidget.FormItem
 
+	// Config pane.
+	cfgTitle     basicwidget.Text
+	cfgPhysLabel basicwidget.Text
+	cfgPhysSel   basicwidget.Select[string]
+	cfgNote      basicwidget.Text
+	cfgForm      basicwidget.Form
+	cfgFormItems []basicwidget.FormItem
+
 	// Socket pane.
 	sockTitle      basicwidget.Text
 	sockNameLabel  basicwidget.Text
@@ -216,6 +224,11 @@ func (c *inspectorContent) Build(context *guigui.Context, adder *guigui.ChildAdd
 		adder.AddWidget(&c.sockForm)
 		adder.AddWidget(&c.sockZBtn)
 		c.buildSocketPane(context, m)
+	case inspectConfig:
+		adder.AddWidget(&c.cfgTitle)
+		adder.AddWidget(&c.cfgForm)
+		adder.AddWidget(&c.cfgNote)
+		c.buildConfigPane(context, m)
 	default:
 		for _, w := range []guigui.Widget{
 			&c.stateTitle, &c.addState, &c.delState, &c.setInitial, &c.form,
@@ -804,6 +817,32 @@ func (c *inspectorContent) buildGuards(context *guigui.Context, m *Model) {
 	c.guardForm.SetItems(c.guardFormItems)
 }
 
+// buildConfigPane edits the bundle-level editor configuration, stored in
+// the manifest's extra member so it travels with the file.
+func (c *inspectorContent) buildConfigPane(context *guigui.Context, m *Model) {
+	setBold(&c.cfgTitle, "Config")
+	label(&c.cfgPhysLabel, "physics")
+
+	setOptions(&c.cfgPhysSel, "both", "cp", "resolv", "none")
+	c.cfgPhysSel.SelectItemByValue(m.PhysicsBackend())
+	c.cfgPhysSel.OnItemSelected(func(context *guigui.Context, index int) {
+		it, ok := c.cfgPhysSel.ItemByIndex(index)
+		if ok && it.Value != m.PhysicsBackend() {
+			m.SetPhysicsBackend(it.Value)
+		}
+	})
+
+	c.cfgNote.SetValue("Which collision tooling this editor shows: hitbox tracks need resolv, the rigid body needs cp. Games choose engines by importing plugins; this switch only declutters authoring.")
+	c.cfgNote.SetMultiline(true)
+	c.cfgNote.SetScale(0.85)
+
+	c.cfgFormItems = slices.Delete(c.cfgFormItems, 0, len(c.cfgFormItems))
+	c.cfgFormItems = append(c.cfgFormItems,
+		basicwidget.FormItem{PrimaryWidget: &c.cfgPhysLabel, SecondaryWidget: &c.cfgPhysSel},
+	)
+	c.cfgForm.SetItems(c.cfgFormItems)
+}
+
 // selectedGuardOf resolves the guard the guard form edits, or nil.
 func (c *inspectorContent) selectedGuardOf(m *Model) *lottie.Guard {
 	tr := m.SelectedTransition()
@@ -873,6 +912,12 @@ func (c *inspectorContent) layout(context *guigui.Context) guigui.LinearLayout {
 			guigui.LinearLayoutItem{Widget: &c.sockTitle, Size: guigui.FixedSize(u)},
 			guigui.LinearLayoutItem{Widget: &c.sockForm},
 			guigui.LinearLayoutItem{Widget: &c.sockZBtn, Size: guigui.FixedSize(u)},
+		)
+	case inspectConfig:
+		c.items = append(c.items,
+			guigui.LinearLayoutItem{Widget: &c.cfgTitle, Size: guigui.FixedSize(u)},
+			guigui.LinearLayoutItem{Widget: &c.cfgForm},
+			guigui.LinearLayoutItem{Widget: &c.cfgNote, Size: guigui.FixedSize(3 * u)},
 		)
 	default:
 		c.items = c.stateItems(context, u)

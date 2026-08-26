@@ -28,6 +28,7 @@ type Root struct {
 	openBtn   basicwidget.Button
 	saveBtn   basicwidget.Button
 	saveAsBtn basicwidget.Button
+	configBtn basicwidget.Button
 
 	clips        clipsPane
 	graph        graphView
@@ -62,6 +63,7 @@ func (r *Root) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 	adder.AddWidget(&r.openBtn)
 	adder.AddWidget(&r.saveBtn)
 	adder.AddWidget(&r.saveAsBtn)
+	adder.AddWidget(&r.configBtn)
 	adder.AddWidget(&r.clips)
 	adder.AddWidget(&r.graphFrame)
 	adder.AddWidget(&r.previewFrame)
@@ -92,6 +94,8 @@ func (r *Root) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 	})
 	r.saveAsBtn.SetText("Save As…")
 	r.saveAsBtn.OnDown(func(context *guigui.Context) { m.BrowseSaveAs() })
+	r.configBtn.SetText("Config")
+	r.configBtn.OnDown(func(context *guigui.Context) { m.ShowConfigPane() })
 
 	// A second dialog while one is already up would be ignored anyway; grey
 	// the buttons so that is visible.
@@ -134,6 +138,7 @@ func (r *Root) Layout(context *guigui.Context, widgetBounds *guigui.WidgetBounds
 		guigui.LinearLayoutItem{Widget: &r.openBtn, Size: guigui.FixedSize(4 * u)},
 		guigui.LinearLayoutItem{Widget: &r.saveBtn, Size: guigui.FixedSize(3 * u)},
 		guigui.LinearLayoutItem{Widget: &r.saveAsBtn, Size: guigui.FixedSize(4 * u)},
+		guigui.LinearLayoutItem{Widget: &r.configBtn, Size: guigui.FixedSize(4 * u)},
 	)
 	r.toolbar = guigui.LinearLayout{
 		Direction: guigui.LayoutDirectionHorizontal, Items: r.toolbarItems, Gap: u / 4,

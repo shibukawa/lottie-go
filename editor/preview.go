@@ -20,6 +20,7 @@ type previewPane struct {
 
 	stage         previewStage
 	timeline      timelineView
+	chart         chartView
 	collision     collisionPanel
 	stateLabel    basicwidget.Text
 	hint          basicwidget.Text
@@ -44,6 +45,7 @@ func (p *previewPane) Build(context *guigui.Context, adder *guigui.ChildAdder) e
 	}
 	adder.AddWidget(&p.stage)
 	adder.AddWidget(&p.timeline)
+	adder.AddWidget(&p.chart)
 	adder.AddWidget(&p.collision)
 	adder.AddWidget(&p.stateLabel)
 	adder.AddWidget(&p.hint)
@@ -104,6 +106,7 @@ func (p *previewPane) Layout(context *guigui.Context, widgetBounds *guigui.Widge
 	p.items = append(p.items,
 		guigui.LinearLayoutItem{Widget: &p.stage, Size: guigui.FlexibleSize(1)},
 		guigui.LinearLayoutItem{Widget: &p.timeline},
+		guigui.LinearLayoutItem{Widget: &p.chart},
 		guigui.LinearLayoutItem{Widget: &p.collision},
 		guigui.LinearLayoutItem{Widget: &p.stateLabel, Size: guigui.FixedSize(u)},
 		guigui.LinearLayoutItem{Widget: &p.hint, Size: guigui.FixedSize(u)},
