@@ -440,7 +440,7 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 		c.addCircle.OnDown(func(context *guigui.Context) { m.AddHitbox(lottieresolv.KindCircle) })
 		// A window is a geometry-less timed flag (cancelable, invincible);
 		// it shares the tag and span editing but never draws on the stage.
-		c.addWin.SetText("+Win")
+		c.addWin.SetText("+Window")
 		c.addWin.OnDown(func(context *guigui.Context) { m.AddHitbox(lottieresolv.KindWindow) })
 		c.delBox.SetText("Delete")
 		c.delBox.OnDown(func(context *guigui.Context) { m.DeleteHitbox() })
@@ -556,7 +556,7 @@ func (c *collisionPanel) layout(context *guigui.Context) guigui.LinearLayout {
 		c.btnRowItems = append(c.btnRowItems,
 			guigui.LinearLayoutItem{Widget: &c.addRect, Size: guigui.FixedSize(2 * u)},
 			guigui.LinearLayoutItem{Widget: &c.addCircle, Size: guigui.FixedSize(5 * u / 2)},
-			guigui.LinearLayoutItem{Widget: &c.addWin, Size: guigui.FixedSize(2 * u)},
+			guigui.LinearLayoutItem{Widget: &c.addWin, Size: guigui.FixedSize(3 * u)},
 			guigui.LinearLayoutItem{Widget: &c.delBox, Size: guigui.FixedSize(5 * u / 2)},
 			guigui.LinearLayoutItem{Size: guigui.FlexibleSize(1)},
 		)
