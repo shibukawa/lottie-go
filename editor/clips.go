@@ -178,7 +178,7 @@ func (c *clipsPane) buildClips(context *guigui.Context, m *Model) {
 	c.importBtn.SetText("Import…")
 	c.importBtn.OnDown(func(context *guigui.Context) { m.BrowseImport() })
 	context.SetEnabled(&c.importBtn, !m.DialogOpen())
-	c.removeBtn.SetText("Remove")
+	c.removeBtn.SetText("Delete")
 	c.removeBtn.OnDown(func(context *guigui.Context) {
 		if c.selectedClip.Anim != "" {
 			m.RemoveClip(c.selectedClip.Anim)
@@ -459,7 +459,7 @@ func (c *clipsPane) buildEditors(context *guigui.Context, m *Model) {
 	c.addBool.OnDown(func(context *guigui.Context) { m.AddInput(lottie.InputBoolean) })
 	c.addNumber.SetText("+Num")
 	c.addNumber.OnDown(func(context *guigui.Context) { m.AddInput(lottie.InputNumeric) })
-	c.removeInput.SetText("Remove")
+	c.removeInput.SetText("Delete")
 	c.removeInput.OnDown(func(context *guigui.Context) {
 		m.DeleteInput(idx)
 		c.selectedRow = restartRowIndex

@@ -18,6 +18,7 @@ inspector:
 lists:
   footer_buttons: add and delete only (import counts as add)
   delete_enabled: only while an item in that list is selected
+  delete_label: "Delete" wherever there is room; "Del" only in the narrow machines column — never "Remove"
 interface_tabs:
   now: +Event / +Bool / +Num always visible under the tabs
   target: +Event only on the Events tab; +Bool and +Num only on the Values tab

@@ -442,7 +442,7 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 		// it shares the tag and span editing but never draws on the stage.
 		c.addWin.SetText("+Win")
 		c.addWin.OnDown(func(context *guigui.Context) { m.AddHitbox(lottieresolv.KindWindow) })
-		c.delBox.SetText("Del")
+		c.delBox.SetText("Delete")
 		c.delBox.OnDown(func(context *guigui.Context) { m.DeleteHitbox() })
 		for _, w := range []guigui.Widget{&c.addRect, &c.addCircle, &c.addWin} {
 			context.SetEnabled(w, onStage)
@@ -458,7 +458,7 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 		c.addCPCirc.OnDown(func(context *guigui.Context) { m.AddCPShape(lottiecp.ShapeCircle) })
 		c.addCPBox.SetText("+Box")
 		c.addCPBox.OnDown(func(context *guigui.Context) { m.AddCPShape(lottiecp.ShapeBox) })
-		c.delCP.SetText("Del")
+		c.delCP.SetText("Delete")
 		c.delCP.OnDown(func(context *guigui.Context) { m.DeleteCPShape() })
 		for _, w := range []guigui.Widget{&c.addCPCirc, &c.addCPBox} {
 			context.SetEnabled(w, onStage)
@@ -473,7 +473,7 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 		setOptions(&c.layerCombo, m.StageLayerNames()...)
 		c.addSock.SetText("+Socket")
 		c.addSock.OnDown(func(context *guigui.Context) { m.AddSocket(selectedValue(&c.layerCombo)) })
-		c.delSock.SetText("Del")
+		c.delSock.SetText("Delete")
 		c.delSock.OnDown(func(context *guigui.Context) { m.DeleteSocket() })
 		context.SetEnabled(&c.layerCombo, onStage)
 		context.SetEnabled(&c.addSock, onStage && selectedValue(&c.layerCombo) != "")
@@ -557,21 +557,21 @@ func (c *collisionPanel) layout(context *guigui.Context) guigui.LinearLayout {
 			guigui.LinearLayoutItem{Widget: &c.addRect, Size: guigui.FixedSize(2 * u)},
 			guigui.LinearLayoutItem{Widget: &c.addCircle, Size: guigui.FixedSize(5 * u / 2)},
 			guigui.LinearLayoutItem{Widget: &c.addWin, Size: guigui.FixedSize(2 * u)},
-			guigui.LinearLayoutItem{Widget: &c.delBox, Size: guigui.FixedSize(3 * u / 2)},
+			guigui.LinearLayoutItem{Widget: &c.delBox, Size: guigui.FixedSize(5 * u / 2)},
 			guigui.LinearLayoutItem{Size: guigui.FlexibleSize(1)},
 		)
 	case colBody:
 		c.btnRowItems = append(c.btnRowItems,
 			guigui.LinearLayoutItem{Widget: &c.addCPCirc, Size: guigui.FixedSize(5 * u / 2)},
 			guigui.LinearLayoutItem{Widget: &c.addCPBox, Size: guigui.FixedSize(2 * u)},
-			guigui.LinearLayoutItem{Widget: &c.delCP, Size: guigui.FixedSize(3 * u / 2)},
+			guigui.LinearLayoutItem{Widget: &c.delCP, Size: guigui.FixedSize(5 * u / 2)},
 			guigui.LinearLayoutItem{Size: guigui.FlexibleSize(1)},
 		)
 	case colSockets:
 		c.btnRowItems = append(c.btnRowItems,
 			guigui.LinearLayoutItem{Widget: &c.layerCombo, Size: guigui.FlexibleSize(1)},
 			guigui.LinearLayoutItem{Widget: &c.addSock, Size: guigui.FixedSize(3 * u)},
-			guigui.LinearLayoutItem{Widget: &c.delSock, Size: guigui.FixedSize(3 * u / 2)},
+			guigui.LinearLayoutItem{Widget: &c.delSock, Size: guigui.FixedSize(5 * u / 2)},
 		)
 	}
 	c.btnRow = guigui.LinearLayout{
