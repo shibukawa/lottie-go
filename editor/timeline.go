@@ -132,6 +132,18 @@ func (t *timelineView) Draw(context *guigui.Context, widgetBounds *guigui.Widget
 	vector.DrawFilledRect(dst, x(start), float32(tr.Min.Y),
 		x(end)-x(start), float32(tr.Dy()), pal.band, false)
 
+	// The selected hitbox's active spans, so "when does it come out" reads
+	// on the same ruler the playhead moves along.
+	if m.ShowCollision() {
+		if b := m.SelectedHitbox(); b != nil {
+			clr := withAlpha(tagColor(b.Tags), 0xb0)
+			for _, sp := range b.Spans {
+				vector.DrawFilledRect(dst, x(sp.From), float32(tr.Min.Y),
+					x(sp.To)-x(sp.From), float32(tr.Dy())/2, clr, false)
+			}
+		}
+	}
+
 	tickW := float32(max(1, basicwidget.UnitSize(context)/16))
 	for _, mk := range m.PreviewMarkers() {
 		vector.StrokeLine(dst, x(mk.Start), float32(tr.Min.Y)-tickW*2,

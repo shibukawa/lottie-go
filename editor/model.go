@@ -61,6 +61,12 @@ type Model struct {
 	// that depend on it.
 	selectedInput int
 
+	// Collision editing (see hitbox.go). hideCollision is inverted so the
+	// zero value shows the overlay.
+	hideCollision bool
+	selBox        int
+	selCPShape    int
+
 	// generation counts every change the UI must redraw for, including
 	// selection; widgets hash it in WriteStateKey instead of the whole
 	// document. docGen counts document edits only, so merely selecting
@@ -82,6 +88,8 @@ func NewModel() *Model {
 		bundle:        lottie.NewBundle(),
 		selectedTrans: -1,
 		selectedInput: -1,
+		selBox:        -1,
+		selCPShape:    -1,
 		dialog:        make(chan dialogResult, 1),
 	}
 	m.status = "New bundle. Import a clip to begin."
@@ -159,6 +167,7 @@ func (m *Model) Open(path string) {
 	m.path = path
 	m.selectedState, m.selectedTrans = "", -1
 	m.machineID, m.machine = "", nil
+	m.resetCollisionSelection()
 	m.generation++
 	if ids := b.StateMachineIDs(); len(ids) > 0 {
 		m.SelectMachine(ids[0])
@@ -897,6 +906,8 @@ func (m *Model) ShowClip(c clipRef) {
 	// them over rather than carrying the last clip's tally forward.
 	m.resetMarkerHits()
 	m.previewClip, m.clipPlayer = c, p
+	// The hitbox selection indexed the previous stage's track.
+	m.selBox = -1
 	m.setStatus("previewing %s", c.Label())
 	m.generation++
 }
@@ -908,6 +919,7 @@ func (m *Model) ShowMachine() {
 	}
 	m.previewClip, m.clipPlayer = clipRef{}, nil
 	m.resetMarkerHits()
+	m.selBox = -1
 	m.generation++
 }
 

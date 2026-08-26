@@ -7,6 +7,7 @@ import (
 	"github.com/guigui-gui/guigui"
 	"github.com/guigui-gui/guigui/basicwidget"
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
 	lottie "github.com/shibukawa/lottie-go"
 )
@@ -19,6 +20,7 @@ type previewPane struct {
 
 	stage         previewStage
 	timeline      timelineView
+	collision     collisionPanel
 	stateLabel    basicwidget.Text
 	hint          basicwidget.Text
 	backToMachine basicwidget.Button
@@ -42,6 +44,7 @@ func (p *previewPane) Build(context *guigui.Context, adder *guigui.ChildAdder) e
 	}
 	adder.AddWidget(&p.stage)
 	adder.AddWidget(&p.timeline)
+	adder.AddWidget(&p.collision)
 	adder.AddWidget(&p.stateLabel)
 	adder.AddWidget(&p.hint)
 	// Only offered while a clip has taken the stage.
@@ -101,6 +104,7 @@ func (p *previewPane) Layout(context *guigui.Context, widgetBounds *guigui.Widge
 	p.items = append(p.items,
 		guigui.LinearLayoutItem{Widget: &p.stage, Size: guigui.FlexibleSize(1)},
 		guigui.LinearLayoutItem{Widget: &p.timeline},
+		guigui.LinearLayoutItem{Widget: &p.collision},
 		guigui.LinearLayoutItem{Widget: &p.stateLabel, Size: guigui.FixedSize(u)},
 		guigui.LinearLayoutItem{Widget: &p.hint, Size: guigui.FixedSize(u)},
 	)
@@ -116,9 +120,43 @@ func (p *previewPane) Layout(context *guigui.Context, widgetBounds *guigui.Widge
 	}).LayoutWidgets(context, widgetBounds.Bounds(), layouter)
 }
 
-// previewStage renders whatever the preview is showing, scaled to fit.
+// previewStage renders whatever the preview is showing, scaled to fit. The
+// collision overlay is drawn and dragged here: what you grab is the shape
+// at the pixel you see.
 type previewStage struct {
 	guigui.DefaultWidget
+
+	dragMode   stageDrag
+	dragCP     bool // dragging a body shape rather than a hitbox
+	lastCursor image.Point
+}
+
+type stageDrag int
+
+const (
+	dragNone stageDrag = iota
+	dragMove
+	dragResize
+)
+
+// transform maps animation coordinates to this widget's pixels, mirroring
+// Draw's fit-and-center math so overlays and hit tests agree with the
+// rendering.
+func (s *previewStage) transform(m *Model, b image.Rectangle) (stageTransform, bool) {
+	anim := m.PreviewAnimation()
+	if anim == nil {
+		return stageTransform{}, false
+	}
+	aw, ah := anim.Size()
+	if aw <= 0 || ah <= 0 {
+		return stageTransform{}, false
+	}
+	scale := min(float64(b.Dx())/float64(aw), float64(b.Dy())/float64(ah))
+	return stageTransform{
+		scale: scale,
+		ox:    float64(b.Min.X) + (float64(b.Dx())-float64(aw)*scale)/2,
+		oy:    float64(b.Min.Y) + (float64(b.Dy())-float64(ah)*scale)/2,
+	}, true
 }
 
 func (s *previewStage) model(context *guigui.Context) *Model {
@@ -156,14 +194,117 @@ func (s *previewStage) Draw(context *guigui.Context, widgetBounds *guigui.Widget
 		return
 	}
 	b := widgetBounds.Bounds()
-	scale := min(float64(b.Dx())/float64(aw), float64(b.Dy())/float64(ah))
+	tr, ok := s.transform(m, b)
+	if !ok {
+		return
+	}
 	var op lottie.DrawOptions
-	op.GeoM.Scale(scale, scale)
-	op.GeoM.Translate(
-		float64(b.Min.X)+(float64(b.Dx())-float64(aw)*scale)/2,
-		float64(b.Min.Y)+(float64(b.Dy())-float64(ah)*scale)/2,
-	)
+	op.GeoM.Scale(tr.scale, tr.scale)
+	op.GeoM.Translate(tr.ox, tr.oy)
 	m.PreviewDraw(dst, &op)
+	if m.ShowCollision() {
+		drawCollisionOverlay(dst, m, tr, float32(basicwidget.UnitSize(context)))
+	}
+}
+
+// HandlePointingInput selects and drags collision shapes on the stage:
+// inside a shape moves it, the white grip resizes, empty stage deselects.
+func (s *previewStage) HandlePointingInput(context *guigui.Context, widgetBounds *guigui.WidgetBounds) guigui.HandleInputResult {
+	m := s.model(context)
+	if m == nil || !m.ShowCollision() {
+		return guigui.HandleInputResult{}
+	}
+	tr, ok := s.transform(m, widgetBounds.Bounds())
+	if !ok {
+		return guigui.HandleInputResult{}
+	}
+	if s.dragMode != dragNone {
+		if !ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+			s.dragMode = dragNone
+			return guigui.HandleInputByWidget(s)
+		}
+		cx, cy := ebiten.CursorPosition()
+		cur := image.Pt(cx, cy)
+		d := cur.Sub(s.lastCursor)
+		if d.X == 0 && d.Y == 0 {
+			return guigui.HandleInputByWidget(s)
+		}
+		s.lastCursor = cur
+		dx, dy := float64(d.X)/tr.scale, float64(d.Y)/tr.scale
+		switch {
+		case s.dragMode == dragResize && s.dragCP:
+			m.DragCPShapeHandle(dx, dy)
+		case s.dragMode == dragResize:
+			m.DragHitboxHandle(dx, dy)
+		case s.dragCP:
+			m.DragCPShape(dx, dy)
+		default:
+			m.DragHitbox(dx, dy)
+		}
+		return guigui.HandleInputByWidget(s)
+	}
+	if !widgetBounds.IsHitAtCursor() || !inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+		return guigui.HandleInputResult{}
+	}
+	cx, cy := ebiten.CursorPosition()
+	s.lastCursor = image.Pt(cx, cy)
+	// The grip belongs to the current selection, so it is tested before the
+	// shapes: a tiny handle would be unreachable under a big sibling.
+	if hx, hy, ok := handleAt(m, tr); ok {
+		half := handleSize(float32(basicwidget.UnitSize(context)))/2 + 2
+		if abs32(float32(cx)-hx) <= half && abs32(float32(cy)-hy) <= half {
+			s.dragMode, s.dragCP = dragResize, m.SelectedCPShape() != nil
+			return guigui.HandleInputByWidget(s)
+		}
+	}
+	ax, ay := tr.toAnim(cx, cy)
+	if i, ok := hitTestBoxes(m, ax, ay); ok {
+		m.SelectHitbox(i)
+		s.dragMode, s.dragCP = dragMove, false
+		return guigui.HandleInputByWidget(s)
+	}
+	if i, ok := hitTestCPShapes(m, ax, ay); ok {
+		m.SelectCPShape(i)
+		s.dragMode, s.dragCP = dragMove, true
+		return guigui.HandleInputByWidget(s)
+	}
+	if m.SelectedHitboxIndex() >= 0 || m.SelectedCPShapeIndex() >= 0 {
+		m.SelectHitbox(-1)
+		m.SelectCPShape(-1)
+	}
+	return guigui.HandleInputResult{}
+}
+
+func (s *previewStage) CursorShape(context *guigui.Context, widgetBounds *guigui.WidgetBounds) (ebiten.CursorShapeType, bool) {
+	switch s.dragMode {
+	case dragMove:
+		return ebiten.CursorShapeMove, true
+	case dragResize:
+		return ebiten.CursorShapeNWSEResize, true
+	}
+	m := s.model(context)
+	if m == nil || !m.ShowCollision() || !widgetBounds.IsHitAtCursor() {
+		return 0, false
+	}
+	tr, ok := s.transform(m, widgetBounds.Bounds())
+	if !ok {
+		return 0, false
+	}
+	cx, cy := ebiten.CursorPosition()
+	if hx, hy, ok := handleAt(m, tr); ok {
+		half := handleSize(float32(basicwidget.UnitSize(context)))/2 + 2
+		if abs32(float32(cx)-hx) <= half && abs32(float32(cy)-hy) <= half {
+			return ebiten.CursorShapeNWSEResize, true
+		}
+	}
+	ax, ay := tr.toAnim(cx, cy)
+	if _, ok := hitTestBoxes(m, ax, ay); ok {
+		return ebiten.CursorShapeMove, true
+	}
+	if _, ok := hitTestCPShapes(m, ax, ay); ok {
+		return ebiten.CursorShapeMove, true
+	}
+	return 0, false
 }
 
 func (s *previewStage) Measure(context *guigui.Context, constraints guigui.Constraints) image.Point {

@@ -227,6 +227,57 @@ The gallery samples come from the public-domain (CC0) `data/` set of
 [LottieFiles/test-files](https://github.com/LottieFiles/test-files); see
 [examples/gallery/assets/README.md](examples/gallery/assets/README.md).
 
+## Collision extensions
+
+dotLottie says nothing about physics, so this package defines two
+tool-specific payloads stored inside the bundle, named after the engines
+they feed. The core stays dependency-free: the data types and queries live
+here, the engine wiring lives in two small adapter modules under
+`physics/`.
+
+**Rigid body silhouettes** (`extensions/physics/cp/`) are fixed shapes —
+circles, boxes, convex polygons — describing a character's physical
+outline, with friction, elasticity, and sensor flags. One definition per
+bundle serves every clip. The
+`github.com/shibukawa/lottie-go/physics/cp` module turns one into a
+[jakecoffman/cp](https://github.com/jakecoffman/cp) body:
+
+```go
+def, _ := b.CPBody("body")
+body, _ := lottiecp.AddToSpace(space, def)   // *cp.Body, ready to position
+```
+
+**Frame-stepped hitboxes** (`extensions/physics/resolv/`) are the
+fighting-game kind: named boxes carrying free-form tags — `hit`, `hurt`,
+`push` — each active over frame spans `[from, to)` with constant geometry
+per span. They are authored per animation and queried by frame and tag:
+
+```go
+track, _ := b.ResolvTrack("attack")
+for _, box := range track.At(player.Frame(), "hit") { ... }
+```
+
+The `github.com/shibukawa/lottie-go/physics/resolv` module mirrors a track
+into a [SolarLune/resolv](https://github.com/SolarLune/resolv) space,
+inserting and removing shapes as spans start and end:
+
+```go
+tracker := lottieresolv.NewTracker(space, track)
+
+func (g *Game) Update() error {
+    player.Update()
+    tracker.SetOffset(g.character.X, g.character.Y)
+    tracker.Sync(player.Frame())
+    // collide via resolv; shapes answer for lottieresolv.Tag("hurt")
+}
+```
+
+The bundled editor draws both over the stage and edits them there:
+dragging moves and resizes, the span row times when a box appears and
+disappears, and the tag line colors boxes by meaning (hit red, hurt green,
+push amber). Foreign files under `extensions/` pass through a rewrite
+untouched, like every other unmodeled member.
+
 ## Supported features
 
 **Layers**: shape, null, solid, precomposition (offscreen with clipping and

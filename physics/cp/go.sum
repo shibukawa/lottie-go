@@ -1,0 +1,16 @@
+github.com/ebitengine/gomobile v0.0.0-20260811165420-c5a1b14deab0 h1:Z/MUJqW6sWINqPtym7afjK0yhbJLl7M6KAMpouZJzus=
+github.com/ebitengine/hideconsole v1.0.0 h1:5J4U0kXF+pv/DhiXt5/lTz0eO5ogJ1iXb8Yj1yReDqE=
+github.com/ebitengine/purego v0.11.0-alpha.9 h1:nH3UEIa45o38JcEgQlPgBFuGU0BkdU68u3v/IXrgo9k=
+github.com/go-text/typesetting v0.3.5-0.20260710134149-0bd3abe5ff89 h1:LDq6K4x6OfzVqXuZrlRbFk7J79QCU8cWCsZiOYimSWc=
+github.com/go-text/typesetting-utils v0.0.0-20260419141703-4ffe8874dabc h1:8FGo2It5K75XkavhTiCKExUfVaVDS1feBnLCru5qeoY=
+github.com/hajimehoshi/bitmapfont/v4 v4.1.1 h1:5FNENqs0QbURnFG8HeDJuPl/FIjU4tNesm4suKJfIwY=
+github.com/hajimehoshi/ebiten/v2 v2.10.0-alpha.13.0.20260817125030-944601d3f17b h1:RDYD8Ii3rfzjVNhSTwD9ChKW90AfdJP63Dg+rD+KZC0=
+github.com/jakecoffman/cp/v2 v2.4.0 h1:Mf5SIl1/mV4igtTWnSF4LqJ5LyYNdOiqyF/qKCkDiYU=
+github.com/jakecoffman/cp/v2 v2.4.0/go.mod h1:6lPSBgxx6+//RIlSaMH3XaXtcCwPY1ZCJox1ThK5bZw=
+github.com/pierrec/lz4/v4 v4.1.22 h1:cKFw6uJDK+/gfw5BcDL0JL5aBsAFdsIT18eRtLj7VIU=
+github.com/shibukawa/lottie-go v0.5.2 h1:FcAxg+h2bjx3SzhdGtYRAivoKKVtSNzn7DMIegWwuwA=
+github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef h1:Ch6Q+AZUxDBCVqdkI8FSpFyZDtCVBc2VmejdNrm5rRQ=
+golang.org/x/image v0.45.0 h1:FMb1nTbH5H9vF55SriQHgFw5GnNL9Jg6L25BwXKzhB0=
+golang.org/x/sync v0.22.0 h1:SZjpbeLmrCk4xhRSZFNZW5gFUeCeFgjekvI/+gfScek=
+golang.org/x/sys v0.47.0 h1:o7XGOvZQCADBQQ4Y7VNq2dRWQR7JmOUW8Kxx4ZsNgWs=
+golang.org/x/text v0.41.0 h1:vz/seA0lnX87Othu2f/0L24RcgrXD9/YFTSuGjj3rH8=

@@ -92,7 +92,18 @@ they are what a game passes to `Fire`.
   actually playing as a lighter band, every marker as a labelled tick, and
   the playhead. A state that names a segment shows as a band covering only
   part of the document, which is how you tell the segment was cut where you
-  meant. Drag to scrub.
+  meant. Drag to scrub. The selected hitbox's active spans draw on the same
+  ruler, so when it comes out and disappears reads against the playhead.
+- **Collision** — the strip under the timeline, editing the two physics
+  extensions (see the library README). The hitbox row works on the clip on
+  stage: `+Rect` / `+Circle` add a frame-stepped box, the name and tag
+  fields describe it, and tags color it by meaning — `hit` red, `hurt`
+  green, `push` amber, untagged gray. The span row times the current box:
+  from/to fields edit the interval under the playhead, `+Span` starts a new
+  pose at the playhead copying the previous one. The body row places the
+  bundle-wide rigid silhouette (violet). All shapes are dragged on the
+  stage itself: inside moves, the white grip resizes, empty stage
+  deselects. The checkbox hides the whole overlay.
 
 ## Notes
 

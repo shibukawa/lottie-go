@@ -92,8 +92,16 @@ type Bundle struct {
 	fonts    map[string][]byte // base name -> bytes
 	files    map[string][]byte // every archive member, by cleaned path
 
-	anims map[string]*Animation
-	sms   map[string]*StateMachine
+	cpJSON     map[string][]byte // id -> cp body JSON (extensions/physics/cp/)
+	resolvJSON map[string][]byte // anim id -> resolv track JSON (extensions/physics/resolv/)
+	// extFiles carries extensions/ members this package does not model, so
+	// another tool's payload survives an edit here (see policy:robustness).
+	extFiles map[string][]byte
+
+	anims   map[string]*Animation
+	sms     map[string]*StateMachine
+	cps     map[string]*CPBody
+	resolvs map[string]*ResolvTrack
 }
 
 // NewBundle returns an empty version 2 bundle.
@@ -105,16 +113,27 @@ func NewBundle() *Bundle {
 
 func newBundle() *Bundle {
 	return &Bundle{
-		animJSON: map[string][]byte{},
-		smJSON:   map[string][]byte{},
-		themes:   map[string][]byte{},
-		images:   map[string][]byte{},
-		fonts:    map[string][]byte{},
-		files:    map[string][]byte{},
-		anims:    map[string]*Animation{},
-		sms:      map[string]*StateMachine{},
+		animJSON:   map[string][]byte{},
+		smJSON:     map[string][]byte{},
+		themes:     map[string][]byte{},
+		images:     map[string][]byte{},
+		fonts:      map[string][]byte{},
+		files:      map[string][]byte{},
+		cpJSON:     map[string][]byte{},
+		resolvJSON: map[string][]byte{},
+		extFiles:   map[string][]byte{},
+		anims:      map[string]*Animation{},
+		sms:        map[string]*StateMachine{},
+		cps:        map[string]*CPBody{},
+		resolvs:    map[string]*ResolvTrack{},
 	}
 }
+
+// The physics extension directories; see physics.go for the payloads.
+const (
+	cpDir     = "extensions/physics/cp/"
+	resolvDir = "extensions/physics/resolv/"
+)
 
 // DecodeBundle reads a dotLottie archive of either version.
 func DecodeBundle(r io.ReaderAt, size int64) (*Bundle, error) {
@@ -146,6 +165,14 @@ func DecodeBundle(r io.ReaderAt, size int64) (*Bundle, error) {
 			b.themes[stripJSONExt(base)] = data
 		case "f/":
 			b.fonts[base] = data
+		case cpDir:
+			b.cpJSON[stripJSONExt(base)] = data
+		case resolvDir:
+			b.resolvJSON[stripJSONExt(base)] = data
+		default:
+			if strings.HasPrefix(name, "extensions/") {
+				b.extFiles[name] = data
+			}
 		}
 	}
 	if len(b.animJSON) == 0 {
@@ -367,10 +394,13 @@ func (b *Bundle) SetAnimation(id string, lottieJSON []byte) error {
 	return nil
 }
 
-// RemoveAnimation drops an animation and any manifest entry for it.
+// RemoveAnimation drops an animation and any manifest entry for it. The
+// animation's resolv track goes with it: hitbox frames without their clip
+// are meaningless.
 func (b *Bundle) RemoveAnimation(id string) {
 	delete(b.animJSON, id)
 	delete(b.anims, id)
+	b.RemoveResolvTrack(id)
 	b.syncManifest()
 }
 
@@ -394,6 +424,94 @@ func (b *Bundle) RemoveStateMachine(id string) {
 	delete(b.smJSON, id)
 	delete(b.sms, id)
 	b.syncManifest()
+}
+
+// ---- physics extensions (see physics.go) ----
+
+// CPBodyIDs returns the cp body ids, sorted.
+func (b *Bundle) CPBodyIDs() []string { return sortedKeys(b.cpJSON) }
+
+// CPBody parses and returns the cp body with the given id. Repeated calls
+// return the same value.
+func (b *Bundle) CPBody(id string) (*CPBody, error) {
+	if body, ok := b.cps[id]; ok {
+		return body, nil
+	}
+	data, ok := b.cpJSON[id]
+	if !ok {
+		return nil, fmt.Errorf("lottie: no cp body %q in bundle", id)
+	}
+	body, err := ParseCPBody(data)
+	if err != nil {
+		return nil, fmt.Errorf("lottie: cp body %q: %w", id, err)
+	}
+	b.cps[id] = body
+	return body, nil
+}
+
+// SetCPBody adds or replaces a cp body, stored under extensions/physics/cp/.
+func (b *Bundle) SetCPBody(id string, body *CPBody) error {
+	if id == "" {
+		return fmt.Errorf("lottie: cp body id must not be empty")
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("lottie: cp body %q: %w", id, err)
+	}
+	b.cpJSON[id] = data
+	b.cps[id] = body
+	return nil
+}
+
+// RemoveCPBody drops a cp body.
+func (b *Bundle) RemoveCPBody(id string) {
+	delete(b.cpJSON, id)
+	delete(b.cps, id)
+}
+
+// ResolvTrackIDs returns the ids of animations carrying a resolv track,
+// sorted.
+func (b *Bundle) ResolvTrackIDs() []string { return sortedKeys(b.resolvJSON) }
+
+// ResolvTrack parses and returns the hitbox track of the given animation.
+// Repeated calls return the same value.
+func (b *Bundle) ResolvTrack(animID string) (*ResolvTrack, error) {
+	if t, ok := b.resolvs[animID]; ok {
+		return t, nil
+	}
+	data, ok := b.resolvJSON[animID]
+	if !ok {
+		return nil, fmt.Errorf("lottie: no resolv track for animation %q in bundle", animID)
+	}
+	t, err := ParseResolvTrack(data)
+	if err != nil {
+		return nil, fmt.Errorf("lottie: resolv track %q: %w", animID, err)
+	}
+	b.resolvs[animID] = t
+	return t, nil
+}
+
+// SetResolvTrack adds or replaces an animation's hitbox track, stored under
+// extensions/physics/resolv/. The animation need not exist yet — a track
+// can be authored ahead of its clip — but RemoveAnimation drops the track
+// with the clip.
+func (b *Bundle) SetResolvTrack(animID string, t *ResolvTrack) error {
+	if animID == "" {
+		return fmt.Errorf("lottie: resolv track animation id must not be empty")
+	}
+	data, err := json.Marshal(t)
+	if err != nil {
+		return fmt.Errorf("lottie: resolv track %q: %w", animID, err)
+	}
+	b.resolvJSON[animID] = data
+	b.resolvs[animID] = t
+	return nil
+}
+
+// RemoveResolvTrack drops an animation's hitbox track.
+func (b *Bundle) RemoveResolvTrack(animID string) {
+	delete(b.resolvJSON, animID)
+	delete(b.resolvs, animID)
 }
 
 // SetImage adds or replaces a shared image, stored under i/ on encode.
@@ -467,11 +585,19 @@ func (b *Bundle) Encode(w io.Writer) error {
 		{"s/", ".json", b.smJSON},
 		{"t/", ".json", b.themes},
 		{"f/", "", b.fonts},
+		{cpDir, ".json", b.cpJSON},
+		{resolvDir, ".json", b.resolvJSON},
 	} {
 		for _, name := range sortedKeys(group.files) {
 			if err := writeZipFile(zw, group.dir+name+group.ext, group.files[name]); err != nil {
 				return err
 			}
+		}
+	}
+	// Extension payloads from other tools pass through verbatim.
+	for _, name := range sortedKeys(b.extFiles) {
+		if err := writeZipFile(zw, name, b.extFiles[name]); err != nil {
+			return err
 		}
 	}
 	if err := zw.Close(); err != nil {
