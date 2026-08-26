@@ -31,6 +31,10 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/vector"
 
 	lottie "github.com/shibukawa/lottie-go"
+
+	// The library only registers PNG; registering WebP here lets the
+	// player open samples with WebP image assets (examples/motioncomic).
+	_ "golang.org/x/image/webp"
 )
 
 const (
