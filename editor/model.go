@@ -162,7 +162,7 @@ func (m *Model) Open(path string) {
 	if ids := b.StateMachineIDs(); len(ids) > 0 {
 		m.SelectMachine(ids[0])
 	}
-	m.setStatus("loaded %s (%d clips, %d machines)", filepath.Base(path),
+	m.setStatus("loaded %s (%d clips, %d machines)", path,
 		len(b.AnimationIDs()), len(b.StateMachineIDs()))
 }
 
@@ -190,7 +190,7 @@ func (m *Model) Save(path string) {
 		return
 	}
 	m.path = path
-	m.setStatus("saved %s (%d bytes)", filepath.Base(path), buf.Len())
+	m.setStatus("saved %s (%d bytes)", path, buf.Len())
 	m.generation++
 }
 

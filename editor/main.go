@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"path/filepath"
 	"slices"
 
 	"github.com/guigui-gui/guigui"
@@ -72,11 +73,14 @@ func (r *Root) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 	adder.AddWidget(&r.status)
 
 	m := r.model
-	path := m.Path()
-	if path == "" {
-		path = "(unsaved bundle)"
+	// The dialogs own picking files, so the toolbar only has to say which
+	// document is open. A full absolute path spent most of the bar's width
+	// on something nothing here acts on.
+	name := "(unsaved bundle)"
+	if p := m.Path(); p != "" {
+		name = filepath.Base(p)
 	}
-	r.pathLabel.SetValue(path)
+	r.pathLabel.SetValue(name)
 	r.pathLabel.SetVerticalAlign(basicwidget.VerticalAlignMiddle)
 
 	r.openBtn.SetText("Open…")
