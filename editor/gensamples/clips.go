@@ -35,9 +35,11 @@ func shadow(frames float64, scaleKeys obj) obj {
 // body is the character itself: a rounded rect with a lighter inner block so
 // rotation is visible.
 func body(frames float64, tr obj, c rgb) obj {
+	// First in the list draws in front: the inner block must lead or the
+	// body hides it.
 	return shapeLayer("body", 1, frames, tr, []any{
-		group("outer", rect(96, 96, 22), fill(c.r, c.g, c.b, 1)),
 		group("inner", rect(44, 20, 10), fill(1, 1, 1, 0.85)),
+		group("outer", rect(96, 96, 22), fill(c.r, c.g, c.b, 1)),
 	})
 }
 
