@@ -186,3 +186,115 @@ func TestDeleteLastMachineClearsThePreview(t *testing.T) {
 		t.Errorf("AnimationIDs() = %v; deleting a machine took the clips", got)
 	}
 }
+
+// The manifest's initial machine is what a player asking for none loads, so
+// setting it here is what makes NewStateMachinePlayer("") meaningful.
+func TestSetInitialMachineSurvivesSaving(t *testing.T) {
+	dir := t.TempDir()
+	m := NewModel()
+	m.ImportClip(writeClip(t, dir, "a-anim", 30, ""))
+	m.NewMachine()
+	m.AddState()
+	first := m.MachineID()
+	m.NewMachine()
+	m.AddState()
+	second := m.MachineID()
+
+	if m.InitialMachine() != "" {
+		t.Fatalf("InitialMachine() = %q; nothing is named yet", m.InitialMachine())
+	}
+	m.SetInitialMachine(second)
+	if m.InitialMachine() != second {
+		t.Fatalf("InitialMachine() = %q; want %q", m.InitialMachine(), second)
+	}
+
+	out := filepath.Join(dir, "i.lottie")
+	m.Save(out)
+	reopened := NewModel()
+	reopened.Open(out)
+	if reopened.InitialMachine() != second {
+		t.Errorf("after reopen InitialMachine() = %q; want %q", reopened.InitialMachine(), second)
+	}
+	// And the runtime honours it.
+	p, err := reopened.Bundle().NewStateMachinePlayer("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.MachineID() != second {
+		t.Errorf("a player asking for no machine loaded %q; want %q", p.MachineID(), second)
+	}
+	_ = first
+}
+
+// Clearing it puts "the first listed" back.
+func TestUnsetInitialMachine(t *testing.T) {
+	dir := t.TempDir()
+	m := NewModel()
+	m.ImportClip(writeClip(t, dir, "a-anim", 30, ""))
+	m.NewMachine()
+	m.AddState()
+	first := m.MachineID()
+	m.NewMachine()
+	m.AddState()
+	m.SetInitialMachine(m.MachineID())
+
+	m.SetInitialMachine("")
+	if m.InitialMachine() != "" {
+		t.Fatalf("InitialMachine() = %q; want cleared", m.InitialMachine())
+	}
+	p, err := m.Bundle().NewStateMachinePlayer("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.MachineID() != first {
+		t.Errorf("loaded %q; with nothing named the first listed wins (%q)", p.MachineID(), first)
+	}
+}
+
+// Renaming the default machine must take the pointer with it, or the
+// manifest ends up naming something that no longer exists.
+func TestRenameMachineFollowsTheInitialPointer(t *testing.T) {
+	dir := t.TempDir()
+	m := NewModel()
+	m.ImportClip(writeClip(t, dir, "a-anim", 30, ""))
+	m.NewMachine()
+	m.AddState()
+	old := m.MachineID()
+	m.SetInitialMachine(old)
+
+	m.RenameMachine(old, "hero")
+	if got := m.InitialMachine(); got != "hero" {
+		t.Errorf("InitialMachine() = %q; want it to follow the rename", got)
+	}
+}
+
+// Deleting the default must not leave the manifest naming a machine that is
+// gone. The bundle drops a stale pointer when it reconciles.
+func TestDeleteInitialMachineClearsThePointer(t *testing.T) {
+	dir := t.TempDir()
+	m := NewModel()
+	m.ImportClip(writeClip(t, dir, "a-anim", 30, ""))
+	m.NewMachine()
+	m.AddState()
+	first := m.MachineID()
+	m.NewMachine()
+	m.AddState()
+	second := m.MachineID()
+	m.SetInitialMachine(second)
+
+	m.DeleteMachine(second)
+	out := filepath.Join(dir, "d.lottie")
+	m.Save(out)
+	reopened := NewModel()
+	reopened.Open(out)
+	if got := reopened.InitialMachine(); got == second {
+		t.Errorf("InitialMachine() = %q, which was deleted", got)
+	}
+	p, err := reopened.Bundle().NewStateMachinePlayer("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.MachineID() != first {
+		t.Errorf("loaded %q; want the surviving %q", p.MachineID(), first)
+	}
+}

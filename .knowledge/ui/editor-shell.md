@@ -36,7 +36,8 @@ ui:
                 id: list.machines
                 columns: [id]
                 state: a bundle may hold several; they share clips, not states
-                action: select opens it in canvas.graph; new, rename, delete
+                state: a play marker names the manifest's default machine
+                action: select opens it in canvas.graph; new, rename, delete, set or clear initial
               - kind: tabs
                 id: tabs.interface
                 columns: [Events, Values, Markers]

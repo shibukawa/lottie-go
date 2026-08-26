@@ -61,7 +61,9 @@ they are what a game passes to `Fire`.
 - **Machines** — beside the clips. A bundle may hold several state machines,
   each its own file under `s/`, sharing the bundle's clips but not each
   other's states. Create, rename and delete them here; selecting one opens
-  it in the graph. Nothing in the format switches between machines at
+  it in the graph. `▶` marks the one the manifest names as default — what
+  `NewStateMachinePlayer("")` loads — and *Set initial* names it; naming the
+  one already marked clears the choice, putting "the first listed" back. Nothing in the format switches between machines at
   runtime, so they are alternative entry points a game picks between: it
   makes a `StateMachinePlayer` per machine and drives whichever it wants.
 - **Interface** — the machine's external surface, split by direction:

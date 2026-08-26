@@ -37,11 +37,12 @@ type clipsPane struct {
 	importBtn  basicwidget.Button
 	removeBtn  basicwidget.Button
 
-	machinesTitle basicwidget.Text
-	machineList   basicwidget.List[string]
-	machineName   basicwidget.TextInput
-	newMachineBtn basicwidget.Button
-	delMachineBtn basicwidget.Button
+	machinesTitle  basicwidget.Text
+	machineList    basicwidget.List[string]
+	machineName    basicwidget.TextInput
+	newMachineBtn  basicwidget.Button
+	delMachineBtn  basicwidget.Button
+	initMachineBtn basicwidget.Button
 
 	ioTitle basicwidget.Text
 	tabs    basicwidget.SegmentedControl[ioTab]
@@ -107,7 +108,7 @@ func (c *clipsPane) Build(context *guigui.Context, adder *guigui.ChildAdder) err
 	for _, w := range []guigui.Widget{
 		&c.clipsTitle, &c.clipList, &c.importBtn, &c.removeBtn,
 		&c.machinesTitle, &c.machineList, &c.machineName,
-		&c.newMachineBtn, &c.delMachineBtn,
+		&c.newMachineBtn, &c.delMachineBtn, &c.initMachineBtn,
 		&c.ioTitle, &c.tabs,
 	} {
 		adder.AddWidget(w)
@@ -191,10 +192,17 @@ func (c *clipsPane) buildMachines(context *guigui.Context, m *Model) {
 	setBold(&c.machinesTitle, "Machines")
 
 	ids := m.MachineIDs()
+	initial := m.InitialMachine()
 	c.machineItems = slices.Delete(c.machineItems, 0, len(c.machineItems))
 	for _, id := range ids {
+		// Marked the way the graph marks its initial state, and meaning the
+		// same thing: what loads when nothing is asked for.
+		text := id
+		if id == initial {
+			text = "▶ " + id
+		}
 		c.machineItems = append(c.machineItems, basicwidget.ListItem[string]{
-			Text: id, Value: id,
+			Text: text, Value: id,
 		})
 	}
 	c.machineList.SetItems(c.machineItems)
@@ -222,6 +230,17 @@ func (c *clipsPane) buildMachines(context *guigui.Context, m *Model) {
 	c.delMachineBtn.SetText("Del")
 	c.delMachineBtn.OnDown(func(context *guigui.Context) { m.DeleteMachine(current) })
 	context.SetEnabled(&c.delMachineBtn, current != "")
+
+	// Toggles: naming the machine that is already default clears the
+	// choice, which puts "the first listed" back.
+	if current != "" && current == initial {
+		c.initMachineBtn.SetText("Unset initial")
+		c.initMachineBtn.OnDown(func(context *guigui.Context) { m.SetInitialMachine("") })
+	} else {
+		c.initMachineBtn.SetText("Set initial")
+		c.initMachineBtn.OnDown(func(context *guigui.Context) { m.SetInitialMachine(current) })
+	}
+	context.SetEnabled(&c.initMachineBtn, current != "")
 }
 
 func (c *clipsPane) buildTabs(context *guigui.Context) {
@@ -551,6 +570,7 @@ func (c *clipsPane) Layout(context *guigui.Context, widgetBounds *guigui.WidgetB
 		guigui.LinearLayoutItem{Widget: &c.machineList, Size: guigui.FlexibleSize(1)},
 		guigui.LinearLayoutItem{Widget: &c.machineName, Size: guigui.FixedSize(u)},
 		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.machineBtnRow},
+		guigui.LinearLayoutItem{Widget: &c.initMachineBtn, Size: guigui.FixedSize(u)},
 	)
 	c.machineCol = guigui.LinearLayout{
 		Direction: guigui.LayoutDirectionVertical,

@@ -288,6 +288,36 @@ func (m *Model) NewMachine() {
 	m.generation++
 }
 
+// InitialMachine is the machine the manifest names for a player that asks
+// for none. It is what NewStateMachinePlayer("") loads.
+func (m *Model) InitialMachine() string {
+	if in := m.bundle.Manifest().Initial; in != nil {
+		return in.StateMachine
+	}
+	return ""
+}
+
+// SetInitialMachine records which machine a player loads by default, or
+// clears the choice when id is empty so the first listed wins again.
+func (m *Model) SetInitialMachine(id string) {
+	man := m.bundle.Manifest()
+	if man.Initial == nil {
+		if id == "" {
+			return
+		}
+		// Keep any initial animation the bundle already named.
+		man.Initial = &lottie.ManifestInitial{}
+	}
+	man.Initial.StateMachine = id
+	if id == "" {
+		m.setStatus("cleared the default machine")
+	} else {
+		m.setStatus("machine %q is now the default", id)
+	}
+	m.docGen++
+	m.generation++
+}
+
 // RenameMachine changes a machine's id, which is also the name of its file
 // under s/.
 func (m *Model) RenameMachine(old, name string) {
@@ -306,12 +336,22 @@ func (m *Model) RenameMachine(old, name string) {
 		m.generation++
 		return
 	}
+	// Note this before removing: dropping the machine reconciles the
+	// manifest, which clears a pointer at an id that no longer exists.
+	wasInitial := m.InitialMachine() == old
 	if err := m.bundle.SetStateMachine(name, sm); err != nil {
 		m.setStatus("cannot rename %q: %v", old, err)
 		m.generation++
 		return
 	}
 	m.bundle.RemoveStateMachine(old)
+	if wasInitial {
+		man := m.bundle.Manifest()
+		if man.Initial == nil {
+			man.Initial = &lottie.ManifestInitial{}
+		}
+		man.Initial.StateMachine = name
+	}
 	if m.machineID == old {
 		m.machineID = name
 	}
