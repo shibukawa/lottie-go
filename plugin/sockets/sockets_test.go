@@ -89,6 +89,23 @@ func TestMirrored(t *testing.T) {
 	}
 }
 
+// The local offset rides the layer's rotation and scale.
+func TestLocalOffset(t *testing.T) {
+	a := anim(t)
+	s := &Set{Sockets: []Socket{
+		// hand_r sits at 90 degrees, unit scale: local +x points down
+		// the screen (y-down coordinates), so dx=5 lands at (x, y+5).
+		{Name: "grip", Layer: "hand_r", DX: 5},
+	}}
+	p, ok := s.At(a, 30, "grip")
+	if !ok {
+		t.Fatal("grip not resolved")
+	}
+	if !near(p.X, 40) || !near(p.Y, 55) {
+		t.Fatalf("offset placement: got (%v, %v), want (40, 55)", p.X, p.Y)
+	}
+}
+
 func TestDisplacement(t *testing.T) {
 	a := anim(t)
 	dx, dy, ok := Displacement(a, "root", 0, 30)

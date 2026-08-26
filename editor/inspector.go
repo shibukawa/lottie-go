@@ -165,7 +165,11 @@ type inspectorContent struct {
 	sockNameLabel  basicwidget.Text
 	sockLayerLabel basicwidget.Text
 	sockLayerValue basicwidget.Text
+	sockDXLabel    basicwidget.Text
+	sockDYLabel    basicwidget.Text
 	sockNameInput  basicwidget.TextInput
+	sockDXInput    basicwidget.TextInput
+	sockDYInput    basicwidget.TextInput
 	sockZBtn       basicwidget.Button
 	sockForm       basicwidget.Form
 	sockFormItems  []basicwidget.FormItem
@@ -463,20 +467,43 @@ func (c *inspectorContent) buildSocketPane(context *guigui.Context, m *Model) {
 
 	label(&c.sockNameLabel, "name")
 	label(&c.sockLayerLabel, "layer")
+	label(&c.sockDXLabel, "offset x")
+	label(&c.sockDYLabel, "offset y")
 	c.sockLayerValue.SetVerticalAlign(basicwidget.VerticalAlignMiddle)
 
 	if s != nil {
 		c.sockNameInput.SetValue(s.Name)
 		c.sockLayerValue.SetValue(s.LayerName())
+		c.sockDXInput.SetValue(strconv.FormatFloat(s.DX, 'g', -1, 64))
+		c.sockDYInput.SetValue(strconv.FormatFloat(s.DY, 'g', -1, 64))
 	} else {
 		c.sockNameInput.SetValue("")
 		c.sockLayerValue.SetValue("")
+		c.sockDXInput.SetValue("")
+		c.sockDYInput.SetValue("")
 	}
 	c.sockNameInput.OnValueChanged(func(context *guigui.Context, text string, committed bool) {
 		if committed {
 			m.RenameSocket(text)
 		}
 	})
+	// The offset is layer-local; dragging the cross on the stage writes
+	// the same members.
+	offset := func(dst func(*lottiesockets.Socket) *float64) func(*guigui.Context, string, bool) {
+		return func(context *guigui.Context, text string, committed bool) {
+			if !committed {
+				return
+			}
+			if v, err := strconv.ParseFloat(strings.TrimSpace(text), 64); err == nil {
+				if s := m.SelectedSocket(); s != nil {
+					*dst(s) = v
+					m.touchSockets()
+				}
+			}
+		}
+	}
+	c.sockDXInput.OnValueChanged(offset(func(s *lottiesockets.Socket) *float64 { return &s.DX }))
+	c.sockDYInput.OnValueChanged(offset(func(s *lottiesockets.Socket) *float64 { return &s.DY }))
 
 	zText := "z: front"
 	if s != nil && s.Z == lottiesockets.ZBehind {
@@ -485,7 +512,7 @@ func (c *inspectorContent) buildSocketPane(context *guigui.Context, m *Model) {
 	c.sockZBtn.SetText(zText)
 	c.sockZBtn.OnDown(func(context *guigui.Context) { m.ToggleSocketZ() })
 
-	for _, w := range []guigui.Widget{&c.sockNameInput, &c.sockZBtn} {
+	for _, w := range []guigui.Widget{&c.sockNameInput, &c.sockZBtn, &c.sockDXInput, &c.sockDYInput} {
 		context.SetEnabled(w, s != nil)
 	}
 
@@ -493,6 +520,8 @@ func (c *inspectorContent) buildSocketPane(context *guigui.Context, m *Model) {
 	c.sockFormItems = append(c.sockFormItems,
 		basicwidget.FormItem{PrimaryWidget: &c.sockNameLabel, SecondaryWidget: &c.sockNameInput},
 		basicwidget.FormItem{PrimaryWidget: &c.sockLayerLabel, SecondaryWidget: &c.sockLayerValue},
+		basicwidget.FormItem{PrimaryWidget: &c.sockDXLabel, SecondaryWidget: &c.sockDXInput},
+		basicwidget.FormItem{PrimaryWidget: &c.sockDYLabel, SecondaryWidget: &c.sockDYInput},
 	)
 	c.sockForm.SetItems(c.sockFormItems)
 }

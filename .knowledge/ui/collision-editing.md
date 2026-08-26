@@ -16,26 +16,20 @@ ui:
     action: click selects topmost; drag moves; handle drag resizes; hidden when toggle off
     state: same transform as the stage drawing, so overlays land on rendered pixels
   panel:
-    kind: rows
-    id: rows.collision
-    children:
-      - note: overlay visibility moved to the stage's own top-right corner — three independent toggles (hit / body / sock), gated by the physics config like their groups
-      - {kind: select, id: sel.box, state: "N: name per box in the stage clip's track"}
-      - {kind: button, label: +Rect / +Circle, action: add hitbox with span at playhead, mid-stage}
-      - {kind: button, label: +Win, action: add geometry-less window box; shares tag/span editing, never drawn on stage}
-      - {kind: button, label: Del, state: enabled only with a hitbox selected}
-      - note: name, tags, span from/to, +Span/Del span moved to the inspector panes (requirement:selection-driven-ui)
-      - {kind: button, label: body +Circle / +Box / Del, state: bundle-level cp body, count shown}
-      - kind: row
-        id: rows.sockets
-        children:
-          - {kind: select, id: sel.layer, state: stage clip layer names (anim.LayerNames)}
-          - {kind: button, label: +Socket, action: bind layer as socket, socket name = layer name}
-          - {kind: select, id: sel.socket, state: "N: name (front|behind)"}
-          - {kind: button, label: Del, state: enabled only with a socket selected}
-          - note: socket rename and the z toggle live in the inspector socket pane
+    kind: tabs
+    id: tabs.collision
+    columns: [Hitboxes, Body, Sockets]
+    state: tabs the physics config leaves standing; Hitboxes holds the chart + add buttons (the redundant box dropdown is gone — chart rows select), Body and Sockets hold lists whose rows select for the inspector
+    state: socket rows read "name / layer … · front|behind"; socket crosses drag on the stage, writing the layer-local dx/dy trim (also numeric in the socket pane)
+  panel_tabs:
+    hitboxes: {kind: buttons, labels: "+Rect / +Circle / +Win / Del", state: chart above; Del gated on selection}
+    body: {kind: list, id: list.body, columns: [index, shape summary], action: row selects for inspector; +Circle / +Box / Del below}
+    sockets: {kind: list, id: list.sockets, columns: [name, "layer … · front|behind"], action: row selects; layer dropdown + +Socket + Del below}
+  stage_toggles:
+    note: overlay visibility sits in the stage's top-right corner — three independent toggles (hit / body / sock), gated by the physics config like their groups; each also mutes its group's stage hit-testing
   socket_overlay:
-    state: cyan cross + angle tick per socket resolved on the stage clip (api:sockets); dimmed when the layer is outside its active window; selected cross thicker
+    state: cyan cross + angle tick per socket resolved on the stage clip (api:sockets), local dx/dy trim applied; dimmed when the layer is outside its active window; selected cross thicker
+    action: drag a cross to write the socket's layer-local offset (inverse of the layer's rotate-and-scale, so the cross follows the cursor)
   chart:
     kind: canvas
     id: chart.spans

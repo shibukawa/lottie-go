@@ -18,6 +18,7 @@ package lottiesockets
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 
 	lottie "github.com/shibukawa/lottie-go"
 )
@@ -40,6 +41,12 @@ type Socket struct {
 	Layer string `json:"layer,omitempty"`
 	// Z hints where the attached item draws; empty reads as front.
 	Z Z `json:"z,omitempty"`
+	// DX and DY nudge the socket in the layer's local space — a grip
+	// adjustment that rotates and scales with the hand. The layer stays
+	// the position's source of truth; this is the editor-side trim for
+	// when re-authoring the animation is not worth it.
+	DX float64 `json:"dx,omitempty"`
+	DY float64 `json:"dy,omitempty"`
 
 	Extra lottie.ExtraFields `json:"-"`
 }
@@ -168,7 +175,7 @@ func (s *Set) At(a *lottie.Animation, frame float64, name string) (Placed, bool)
 	if !ok {
 		return Placed{}, false
 	}
-	return Placed{Socket: *sock, LayerPlacement: pl}, true
+	return place(*sock, pl), true
 }
 
 // All resolves every socket whose layer the animation has, in table order.
@@ -182,9 +189,21 @@ func (s *Set) All(a *lottie.Animation, frame float64) []Placed {
 		if !ok {
 			continue
 		}
-		out = append(out, Placed{Socket: *sock, LayerPlacement: pl})
+		out = append(out, place(*sock, pl))
 	}
 	return out
+}
+
+// place applies the socket's local offset through the layer transform:
+// the nudge rides the layer's rotation and scale like anything attached.
+func place(sock Socket, pl lottie.LayerPlacement) Placed {
+	if sock.DX != 0 || sock.DY != 0 {
+		sin, cos := math.Sincos(pl.Angle)
+		lx, ly := pl.ScaleX*sock.DX, pl.ScaleY*sock.DY
+		pl.X += cos*lx - sin*ly
+		pl.Y += sin*lx + cos*ly
+	}
+	return Placed{Socket: sock, LayerPlacement: pl}
 }
 
 // Displacement reports how far the named layer moved between two frames of

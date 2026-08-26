@@ -590,6 +590,28 @@ func (m *Model) DragCPShapeHandle(dx, dy float64) {
 	m.touchCPBody()
 }
 
+// DragSocket nudges the selected socket by a delta in animation
+// coordinates, stored as the socket's layer-local offset so the trim
+// rides the layer's rotation and scale. The bound layer remains the
+// position's source of truth.
+func (m *Model) DragSocket(dx, dy float64) {
+	s := m.SelectedSocket()
+	anim := m.PreviewAnimation()
+	if s == nil || anim == nil {
+		return
+	}
+	pl, ok := anim.LayerPlacement(s.LayerName(), m.stageFrame())
+	if !ok || pl.ScaleX == 0 || pl.ScaleY == 0 {
+		return
+	}
+	// Inverse of the placement's rotate-and-scale, so the on-screen drag
+	// lands exactly under the cursor.
+	sin, cos := math.Sincos(pl.Angle)
+	s.DX += (cos*dx + sin*dy) / pl.ScaleX
+	s.DY += (-sin*dx + cos*dy) / pl.ScaleY
+	m.touchSockets()
+}
+
 // HitboxLabel names one box for the picker; the index keeps duplicate
 // names selectable, and a window is marked because it never shows on the
 // stage.

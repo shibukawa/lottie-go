@@ -88,12 +88,17 @@ func drawCollisionOverlay(dst *ebiten.Image, m *Model, tr stageTransform, u floa
 		}
 	}
 	if anim := m.PreviewAnimation(); anim != nil && m.ShowSockets() {
-		for i, sock := range m.Sockets() {
-			pl, ok := anim.LayerPlacement(sock.LayerName(), frame)
-			if !ok {
-				continue
+		set := m.loadSockets()
+		if set != nil {
+			// Resolved by name so the layer-local offset applies; names
+			// are unique (AddSocket refuses duplicates).
+			for i := range set.Sockets {
+				pl, ok := set.At(anim, frame, set.Sockets[i].Name)
+				if !ok {
+					continue
+				}
+				drawSocket(dst, tr, pl.LayerPlacement, stroke, i == m.SelectedSocketIndex(), u)
 			}
-			drawSocket(dst, tr, pl, stroke, i == m.SelectedSocketIndex(), u)
 		}
 	}
 }
@@ -270,6 +275,31 @@ func hitTestCPShapes(m *Model, ax, ay float64) (int, bool) {
 	return 0, false
 }
 
+// hitTestSockets returns the socket whose cross sits within radius of an
+// animation-space point.
+func hitTestSockets(m *Model, ax, ay, radius float64) (int, bool) {
+	if !m.ShowSockets() {
+		return 0, false
+	}
+	anim := m.PreviewAnimation()
+	set := m.loadSockets()
+	if anim == nil || set == nil {
+		return 0, false
+	}
+	frame := m.stageFrame()
+	for i := len(set.Sockets) - 1; i >= 0; i-- {
+		pl, ok := set.At(anim, frame, set.Sockets[i].Name)
+		if !ok {
+			continue
+		}
+		dx, dy := ax-pl.X, ay-pl.Y
+		if dx*dx+dy*dy <= radius*radius {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
 func pointInConvex(vs []lottiecp.Point, x, y float64) bool {
 	n := len(vs)
 	if n < 3 {
@@ -293,34 +323,50 @@ func pointInConvex(vs []lottiecp.Point, x, y float64) bool {
 
 // ---- panel ----
 
-// collisionPanel is the strip under the timeline: hitbox row (per-clip,
-// frame-stepped) and body row (bundle-wide, fixed).
+// colTab picks which annotation group the strip under the chart edits.
+// The physics config decides which tabs exist at all.
+type colTab int
+
+const (
+	colHitboxes colTab = iota
+	colBody
+	colSockets
+)
+
+// collisionPanel is the tabbed strip under the timeline: the hitbox tab
+// carries the span chart and add buttons, the body and socket tabs carry
+// their lists. Parameters of the selected item are edited in the
+// inspector; selection here is by chart row or list row.
 type collisionPanel struct {
 	guigui.DefaultWidget
 
-	hbLabel   basicwidget.Text
-	boxCombo  basicwidget.Select[int]
+	tabs  basicwidget.SegmentedControl[colTab]
+	chart chartView
+
 	addRect   basicwidget.Button
 	addCircle basicwidget.Button
 	addWin    basicwidget.Button
 	delBox    basicwidget.Button
 
-	bodyLabel basicwidget.Text
+	bodyList  basicwidget.List[int]
 	addCPCirc basicwidget.Button
 	addCPBox  basicwidget.Button
 	delCP     basicwidget.Button
 
-	sockLabel  basicwidget.Text
+	sockList   basicwidget.List[int]
 	layerCombo basicwidget.Select[string]
 	addSock    basicwidget.Button
-	sockCombo  basicwidget.Select[int]
 	delSock    basicwidget.Button
 
-	rowA      guigui.LinearLayout
-	rowAItems []guigui.LinearLayoutItem
-	rowB      guigui.LinearLayout
-	rowBItems []guigui.LinearLayoutItem
-	items     []guigui.LinearLayoutItem
+	tab colTab
+
+	tabItems  []basicwidget.SegmentedControlItem[colTab]
+	bodyItems []basicwidget.ListItem[int]
+	sockItems []basicwidget.ListItem[int]
+
+	btnRow      guigui.LinearLayout
+	btnRowItems []guigui.LinearLayoutItem
+	items       []guigui.LinearLayoutItem
 }
 
 func (c *collisionPanel) model(context *guigui.Context) *Model {
@@ -332,178 +378,205 @@ func (c *collisionPanel) model(context *guigui.Context) *Model {
 	return m
 }
 
+// availableTabs is the tab set the physics config leaves standing.
+func availableTabs(m *Model) []colTab {
+	var out []colTab
+	if m.ResolvEnabled() {
+		out = append(out, colHitboxes)
+	}
+	if m.CPEnabled() {
+		out = append(out, colBody)
+	}
+	return append(out, colSockets)
+}
+
 func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 	m := c.model(context)
 	if m == nil {
 		return nil
 	}
-	// Parameters of the selected item (name, tags, span, material, z) are
-	// edited in the inspector, and the visibility toggles sit on the stage
-	// itself; this strip only adds, selects, and deletes. The config's
-	// physics switch decides which groups exist at all.
-	var widgets []guigui.Widget
-	if m.ResolvEnabled() {
-		widgets = append(widgets, &c.hbLabel, &c.boxCombo, &c.addRect, &c.addCircle, &c.addWin, &c.delBox)
-	}
-	if m.CPEnabled() {
-		widgets = append(widgets, &c.bodyLabel, &c.addCPCirc, &c.addCPBox, &c.delCP)
-	}
-	widgets = append(widgets, &c.sockLabel, &c.layerCombo, &c.addSock, &c.sockCombo, &c.delSock)
-	for _, w := range widgets {
-		adder.AddWidget(w)
+	avail := availableTabs(m)
+	if !slices.Contains(avail, c.tab) {
+		c.tab = avail[0]
 	}
 
-	onStage := m.StageAnimID() != ""
-
-	label(&c.hbLabel, "hitboxes")
-	var boxItems []basicwidget.SelectItem[int]
-	if t := m.StageTrack(); t != nil {
-		for i, b := range t.Boxes {
-			boxItems = append(boxItems, basicwidget.SelectItem[int]{Text: HitboxLabel(i, b), Value: i})
-		}
+	adder.AddWidget(&c.tabs)
+	c.tabItems = slices.Delete(c.tabItems, 0, len(c.tabItems))
+	for _, t := range avail {
+		text := map[colTab]string{colHitboxes: "Hitboxes", colBody: "Body", colSockets: "Sockets"}[t]
+		c.tabItems = append(c.tabItems, basicwidget.SegmentedControlItem[colTab]{Text: text, Value: t})
 	}
-	c.boxCombo.SetItems(boxItems)
-	if i := m.SelectedHitboxIndex(); i >= 0 && i < len(boxItems) {
-		c.boxCombo.SelectItemByValue(i)
-	} else {
-		c.boxCombo.SelectItemByIndex(-1)
-	}
-	c.boxCombo.OnItemSelected(func(context *guigui.Context, index int) {
-		it, ok := c.boxCombo.ItemByIndex(index)
-		if ok && it.Value != m.SelectedHitboxIndex() {
-			m.SelectHitbox(it.Value)
+	c.tabs.SetItems(c.tabItems)
+	c.tabs.SelectItemByValue(c.tab)
+	c.tabs.OnItemSelected(func(context *guigui.Context, index int) {
+		if item, ok := c.tabs.ItemByIndex(index); ok {
+			c.tab = item.Value
 		}
 	})
 
-	c.addRect.SetText("+Rect")
-	c.addRect.OnDown(func(context *guigui.Context) { m.AddHitbox(lottieresolv.KindRect) })
-	c.addCircle.SetText("+Circle")
-	c.addCircle.OnDown(func(context *guigui.Context) { m.AddHitbox(lottieresolv.KindCircle) })
-	// A window is a geometry-less timed flag (cancelable, invincible);
-	// it shares the tag and span editing but never draws on the stage.
-	c.addWin.SetText("+Win")
-	c.addWin.OnDown(func(context *guigui.Context) { m.AddHitbox(lottieresolv.KindWindow) })
-	c.delBox.SetText("Del")
-	c.delBox.OnDown(func(context *guigui.Context) { m.DeleteHitbox() })
-
-	label(&c.bodyLabel, fmt.Sprintf("body (%d)", len(m.CPBodyShapes())))
-	c.addCPCirc.SetText("+Circle")
-	c.addCPCirc.OnDown(func(context *guigui.Context) { m.AddCPShape(lottiecp.ShapeCircle) })
-	c.addCPBox.SetText("+Box")
-	c.addCPBox.OnDown(func(context *guigui.Context) { m.AddCPShape(lottiecp.ShapeBox) })
-	c.delCP.SetText("Del")
-	c.delCP.OnDown(func(context *guigui.Context) { m.DeleteCPShape() })
-
-	c.buildSockets(context, m, onStage)
-
-	for _, w := range []guigui.Widget{&c.boxCombo, &c.addRect, &c.addCircle, &c.addWin} {
-		context.SetEnabled(w, onStage)
+	onStage := m.StageAnimID() != ""
+	switch c.tab {
+	case colHitboxes:
+		adder.AddWidget(&c.chart)
+		for _, w := range []guigui.Widget{&c.addRect, &c.addCircle, &c.addWin, &c.delBox} {
+			adder.AddWidget(w)
+		}
+		c.addRect.SetText("+Rect")
+		c.addRect.OnDown(func(context *guigui.Context) { m.AddHitbox(lottieresolv.KindRect) })
+		c.addCircle.SetText("+Circle")
+		c.addCircle.OnDown(func(context *guigui.Context) { m.AddHitbox(lottieresolv.KindCircle) })
+		// A window is a geometry-less timed flag (cancelable, invincible);
+		// it shares the tag and span editing but never draws on the stage.
+		c.addWin.SetText("+Win")
+		c.addWin.OnDown(func(context *guigui.Context) { m.AddHitbox(lottieresolv.KindWindow) })
+		c.delBox.SetText("Del")
+		c.delBox.OnDown(func(context *guigui.Context) { m.DeleteHitbox() })
+		for _, w := range []guigui.Widget{&c.addRect, &c.addCircle, &c.addWin} {
+			context.SetEnabled(w, onStage)
+		}
+		context.SetEnabled(&c.delBox, m.SelectedHitbox() != nil)
+	case colBody:
+		adder.AddWidget(&c.bodyList)
+		for _, w := range []guigui.Widget{&c.addCPCirc, &c.addCPBox, &c.delCP} {
+			adder.AddWidget(w)
+		}
+		c.buildBodyList(context, m)
+		c.addCPCirc.SetText("+Circle")
+		c.addCPCirc.OnDown(func(context *guigui.Context) { m.AddCPShape(lottiecp.ShapeCircle) })
+		c.addCPBox.SetText("+Box")
+		c.addCPBox.OnDown(func(context *guigui.Context) { m.AddCPShape(lottiecp.ShapeBox) })
+		c.delCP.SetText("Del")
+		c.delCP.OnDown(func(context *guigui.Context) { m.DeleteCPShape() })
+		for _, w := range []guigui.Widget{&c.addCPCirc, &c.addCPBox} {
+			context.SetEnabled(w, onStage)
+		}
+		context.SetEnabled(&c.delCP, m.SelectedCPShape() != nil)
+	case colSockets:
+		adder.AddWidget(&c.sockList)
+		adder.AddWidget(&c.layerCombo)
+		adder.AddWidget(&c.addSock)
+		adder.AddWidget(&c.delSock)
+		c.buildSocketList(context, m)
+		setOptions(&c.layerCombo, m.StageLayerNames()...)
+		c.addSock.SetText("+Socket")
+		c.addSock.OnDown(func(context *guigui.Context) { m.AddSocket(selectedValue(&c.layerCombo)) })
+		c.delSock.SetText("Del")
+		c.delSock.OnDown(func(context *guigui.Context) { m.DeleteSocket() })
+		context.SetEnabled(&c.layerCombo, onStage)
+		context.SetEnabled(&c.addSock, onStage && selectedValue(&c.layerCombo) != "")
+		context.SetEnabled(&c.delSock, m.SelectedSocket() != nil)
 	}
-	context.SetEnabled(&c.delBox, m.SelectedHitbox() != nil)
-	for _, w := range []guigui.Widget{&c.addCPCirc, &c.addCPBox} {
-		context.SetEnabled(w, onStage)
-	}
-	context.SetEnabled(&c.delCP, m.SelectedCPShape() != nil)
 	return nil
 }
 
-// buildSockets wires the socket row: bind a stage layer as a socket, pick
-// one, drop it. Rename and the z side are the inspector's business.
-func (c *collisionPanel) buildSockets(context *guigui.Context, m *Model, onStage bool) {
-	label(&c.sockLabel, "sockets")
+// buildBodyList lists the body's shapes; they have no names, so the rows
+// describe them.
+func (c *collisionPanel) buildBodyList(context *guigui.Context, m *Model) {
+	shapes := m.CPBodyShapes()
+	c.bodyItems = slices.Delete(c.bodyItems, 0, len(c.bodyItems))
+	for i, s := range shapes {
+		var desc string
+		switch s.Type {
+		case lottiecp.ShapeCircle:
+			desc = fmt.Sprintf("circle r=%.0f at (%.0f, %.0f)", s.Radius, s.Center.X, s.Center.Y)
+		case lottiecp.ShapeBox:
+			desc = fmt.Sprintf("box %.0f×%.0f at (%.0f, %.0f)", s.Width, s.Height, s.Center.X, s.Center.Y)
+		default:
+			desc = fmt.Sprintf("%s (%d points)", s.Type, len(s.Vertices))
+		}
+		c.bodyItems = append(c.bodyItems, basicwidget.ListItem[int]{
+			Text: fmt.Sprintf("%d: %s", i+1, desc), Value: i,
+		})
+	}
+	c.bodyList.SetItems(c.bodyItems)
+	if i := m.SelectedCPShapeIndex(); i >= 0 && i < len(shapes) {
+		c.bodyList.SelectItemByValue(i)
+	}
+	c.bodyList.OnItemSelected(func(context *guigui.Context, index int) {
+		if index >= 0 && index < len(shapes) && index != m.SelectedCPShapeIndex() {
+			m.SelectCPShape(index)
+		}
+	})
+}
 
-	setOptions(&c.layerCombo, m.StageLayerNames()...)
-	c.addSock.SetText("+Socket")
-	c.addSock.OnDown(func(context *guigui.Context) { m.AddSocket(selectedValue(&c.layerCombo)) })
-
+// buildSocketList lists the socket table with each binding spelled out.
+func (c *collisionPanel) buildSocketList(context *guigui.Context, m *Model) {
 	socks := m.Sockets()
-	sockItems := make([]basicwidget.SelectItem[int], 0, len(socks))
+	c.sockItems = slices.Delete(c.sockItems, 0, len(c.sockItems))
 	for i, s := range socks {
 		z := "front"
 		if s.Z == lottiesockets.ZBehind {
 			z = "behind"
 		}
-		sockItems = append(sockItems, basicwidget.SelectItem[int]{
-			Text: fmt.Sprintf("%d: %s (%s)", i+1, s.Name, z), Value: i,
+		c.sockItems = append(c.sockItems, basicwidget.ListItem[int]{
+			Text: s.Name, KeyText: fmt.Sprintf("layer %s · %s", s.LayerName(), z), Value: i,
 		})
 	}
-	c.sockCombo.SetItems(sockItems)
-	selSock := m.SelectedSocketIndex()
-	if selSock >= 0 && selSock < len(sockItems) {
-		c.sockCombo.SelectItemByValue(selSock)
-	} else {
-		c.sockCombo.SelectItemByIndex(-1)
+	c.sockList.SetItems(c.sockItems)
+	if i := m.SelectedSocketIndex(); i >= 0 && i < len(socks) {
+		c.sockList.SelectItemByValue(i)
 	}
-	c.sockCombo.OnItemSelected(func(context *guigui.Context, index int) {
-		it, ok := c.sockCombo.ItemByIndex(index)
-		if ok && it.Value != m.SelectedSocketIndex() {
-			m.SelectSocket(it.Value)
+	c.sockList.OnItemSelected(func(context *guigui.Context, index int) {
+		if index >= 0 && index < len(socks) && index != m.SelectedSocketIndex() {
+			m.SelectSocket(index)
 		}
 	})
-
-	c.delSock.SetText("Del")
-	c.delSock.OnDown(func(context *guigui.Context) { m.DeleteSocket() })
-
-	context.SetEnabled(&c.layerCombo, onStage)
-	context.SetEnabled(&c.addSock, onStage && selectedValue(&c.layerCombo) != "")
-	context.SetEnabled(&c.delSock, selSock >= 0 && selSock < len(socks))
 }
 
 func (c *collisionPanel) WriteStateKey(context *guigui.Context, w *guigui.StateKeyWriter) {
 	if m := c.model(context); m != nil {
 		w.WriteInt(m.Generation())
+		w.WriteString(m.StageAnimID())
 	}
+	w.WriteInt(int(c.tab))
 }
 
 func (c *collisionPanel) layout(context *guigui.Context) guigui.LinearLayout {
 	u := basicwidget.UnitSize(context)
 
-	resolvOn, cpOn := true, true
-	if m := c.model(context); m != nil {
-		resolvOn, cpOn = m.ResolvEnabled(), m.CPEnabled()
-	}
-	c.rowAItems = slices.Delete(c.rowAItems, 0, len(c.rowAItems))
-	if resolvOn {
-		c.rowAItems = append(c.rowAItems,
-			guigui.LinearLayoutItem{Widget: &c.hbLabel, Size: guigui.FixedSize(5 * u / 2)},
-			guigui.LinearLayoutItem{Widget: &c.boxCombo, Size: guigui.FlexibleSize(3)},
+	c.btnRowItems = slices.Delete(c.btnRowItems, 0, len(c.btnRowItems))
+	switch c.tab {
+	case colHitboxes:
+		c.btnRowItems = append(c.btnRowItems,
 			guigui.LinearLayoutItem{Widget: &c.addRect, Size: guigui.FixedSize(2 * u)},
 			guigui.LinearLayoutItem{Widget: &c.addCircle, Size: guigui.FixedSize(5 * u / 2)},
 			guigui.LinearLayoutItem{Widget: &c.addWin, Size: guigui.FixedSize(2 * u)},
 			guigui.LinearLayoutItem{Widget: &c.delBox, Size: guigui.FixedSize(3 * u / 2)},
+			guigui.LinearLayoutItem{Size: guigui.FlexibleSize(1)},
 		)
-	}
-	c.rowA = guigui.LinearLayout{
-		Direction: guigui.LayoutDirectionHorizontal, Items: c.rowAItems, Gap: u / 4,
-	}
-
-	c.rowBItems = slices.Delete(c.rowBItems, 0, len(c.rowBItems))
-	if cpOn {
-		c.rowBItems = append(c.rowBItems,
-			guigui.LinearLayoutItem{Widget: &c.bodyLabel, Size: guigui.FixedSize(3 * u)},
+	case colBody:
+		c.btnRowItems = append(c.btnRowItems,
 			guigui.LinearLayoutItem{Widget: &c.addCPCirc, Size: guigui.FixedSize(5 * u / 2)},
 			guigui.LinearLayoutItem{Widget: &c.addCPBox, Size: guigui.FixedSize(2 * u)},
 			guigui.LinearLayoutItem{Widget: &c.delCP, Size: guigui.FixedSize(3 * u / 2)},
+			guigui.LinearLayoutItem{Size: guigui.FlexibleSize(1)},
+		)
+	case colSockets:
+		c.btnRowItems = append(c.btnRowItems,
+			guigui.LinearLayoutItem{Widget: &c.layerCombo, Size: guigui.FlexibleSize(1)},
+			guigui.LinearLayoutItem{Widget: &c.addSock, Size: guigui.FixedSize(3 * u)},
+			guigui.LinearLayoutItem{Widget: &c.delSock, Size: guigui.FixedSize(3 * u / 2)},
 		)
 	}
-	c.rowBItems = append(c.rowBItems,
-		guigui.LinearLayoutItem{Widget: &c.sockLabel, Size: guigui.FixedSize(5 * u / 2)},
-		guigui.LinearLayoutItem{Widget: &c.layerCombo, Size: guigui.FlexibleSize(3)},
-		guigui.LinearLayoutItem{Widget: &c.addSock, Size: guigui.FixedSize(3 * u)},
-		guigui.LinearLayoutItem{Widget: &c.sockCombo, Size: guigui.FlexibleSize(3)},
-		guigui.LinearLayoutItem{Widget: &c.delSock, Size: guigui.FixedSize(3 * u / 2)},
-	)
-	c.rowB = guigui.LinearLayout{
-		Direction: guigui.LayoutDirectionHorizontal, Items: c.rowBItems, Gap: u / 4,
+	c.btnRow = guigui.LinearLayout{
+		Direction: guigui.LayoutDirectionHorizontal, Items: c.btnRowItems, Gap: u / 4,
 	}
 
 	c.items = slices.Delete(c.items, 0, len(c.items))
-	if len(c.rowAItems) > 0 {
-		c.items = append(c.items,
-			guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.rowA})
+	c.items = append(c.items,
+		guigui.LinearLayoutItem{Widget: &c.tabs, Size: guigui.FixedSize(u)},
+	)
+	switch c.tab {
+	case colHitboxes:
+		c.items = append(c.items, guigui.LinearLayoutItem{Widget: &c.chart})
+	case colBody:
+		c.items = append(c.items, guigui.LinearLayoutItem{Widget: &c.bodyList, Size: guigui.FixedSize(3 * u)})
+	case colSockets:
+		c.items = append(c.items, guigui.LinearLayoutItem{Widget: &c.sockList, Size: guigui.FixedSize(3 * u)})
 	}
 	c.items = append(c.items,
-		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.rowB})
+		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.btnRow},
+	)
 	return guigui.LinearLayout{
 		Direction: guigui.LayoutDirectionVertical, Items: c.items, Gap: u / 4,
 	}

@@ -20,7 +20,6 @@ type previewPane struct {
 
 	stage         previewStage
 	timeline      timelineView
-	chart         chartView
 	collision     collisionPanel
 	stateLabel    basicwidget.Text
 	hint          basicwidget.Text
@@ -45,7 +44,6 @@ func (p *previewPane) Build(context *guigui.Context, adder *guigui.ChildAdder) e
 	}
 	adder.AddWidget(&p.stage)
 	adder.AddWidget(&p.timeline)
-	adder.AddWidget(&p.chart)
 	adder.AddWidget(&p.collision)
 	adder.AddWidget(&p.stateLabel)
 	adder.AddWidget(&p.hint)
@@ -106,7 +104,6 @@ func (p *previewPane) Layout(context *guigui.Context, widgetBounds *guigui.Widge
 	p.items = append(p.items,
 		guigui.LinearLayoutItem{Widget: &p.stage, Size: guigui.FlexibleSize(1)},
 		guigui.LinearLayoutItem{Widget: &p.timeline},
-		guigui.LinearLayoutItem{Widget: &p.chart},
 		guigui.LinearLayoutItem{Widget: &p.collision},
 		guigui.LinearLayoutItem{Widget: &p.stateLabel, Size: guigui.FixedSize(u)},
 		guigui.LinearLayoutItem{Widget: &p.hint, Size: guigui.FixedSize(u)},
@@ -139,9 +136,18 @@ type previewStage struct {
 	sockCheck basicwidget.Checkbox
 
 	dragMode   stageDrag
-	dragCP     bool // dragging a body shape rather than a hitbox
+	dragKind   stageDragKind
 	lastCursor image.Point
 }
+
+// stageDragKind says what the stage drag is editing.
+type stageDragKind int
+
+const (
+	dragHitbox stageDragKind = iota
+	dragBody
+	dragSocket
+)
 
 func (s *previewStage) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 	m := s.model(context)
@@ -309,12 +315,14 @@ func (s *previewStage) HandlePointingInput(context *guigui.Context, widgetBounds
 		s.lastCursor = cur
 		dx, dy := float64(d.X)/tr.scale, float64(d.Y)/tr.scale
 		switch {
-		case s.dragMode == dragResize && s.dragCP:
+		case s.dragMode == dragResize && s.dragKind == dragBody:
 			m.DragCPShapeHandle(dx, dy)
 		case s.dragMode == dragResize:
 			m.DragHitboxHandle(dx, dy)
-		case s.dragCP:
+		case s.dragKind == dragBody:
 			m.DragCPShape(dx, dy)
+		case s.dragKind == dragSocket:
+			m.DragSocket(dx, dy)
 		default:
 			m.DragHitbox(dx, dy)
 		}
@@ -330,19 +338,30 @@ func (s *previewStage) HandlePointingInput(context *guigui.Context, widgetBounds
 	if hx, hy, ok := handleAt(m, tr); ok {
 		half := handleSize(float32(basicwidget.UnitSize(context)))/2 + 2
 		if abs32(float32(cx)-hx) <= half && abs32(float32(cy)-hy) <= half {
-			s.dragMode, s.dragCP = dragResize, m.SelectedCPShape() != nil
+			s.dragMode = dragResize
+			s.dragKind = dragHitbox
+			if m.SelectedCPShape() != nil {
+				s.dragKind = dragBody
+			}
 			return guigui.HandleInputByWidget(s)
 		}
 	}
 	ax, ay := tr.toAnim(cx, cy)
+	// Sockets draw topmost, so they hit-test first; their crosses are
+	// small enough that a generous radius costs nothing.
+	if i, ok := hitTestSockets(m, ax, ay, float64(basicwidget.UnitSize(context))/2/tr.scale); ok {
+		m.SelectSocket(i)
+		s.dragMode, s.dragKind = dragMove, dragSocket
+		return guigui.HandleInputByWidget(s)
+	}
 	if i, ok := hitTestBoxes(m, ax, ay); ok {
 		m.SelectHitbox(i)
-		s.dragMode, s.dragCP = dragMove, false
+		s.dragMode, s.dragKind = dragMove, dragHitbox
 		return guigui.HandleInputByWidget(s)
 	}
 	if i, ok := hitTestCPShapes(m, ax, ay); ok {
 		m.SelectCPShape(i)
-		s.dragMode, s.dragCP = dragMove, true
+		s.dragMode, s.dragKind = dragMove, dragBody
 		return guigui.HandleInputByWidget(s)
 	}
 	if m.SelectedHitboxIndex() >= 0 || m.SelectedCPShapeIndex() >= 0 {
@@ -375,6 +394,9 @@ func (s *previewStage) CursorShape(context *guigui.Context, widgetBounds *guigui
 		}
 	}
 	ax, ay := tr.toAnim(cx, cy)
+	if _, ok := hitTestSockets(m, ax, ay, float64(basicwidget.UnitSize(context))/2/tr.scale); ok {
+		return ebiten.CursorShapeMove, true
+	}
 	if _, ok := hitTestBoxes(m, ax, ay); ok {
 		return ebiten.CursorShapeMove, true
 	}

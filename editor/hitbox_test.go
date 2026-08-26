@@ -288,6 +288,22 @@ func TestInspectTargetFollowsSelection(t *testing.T) {
 	}
 }
 
+// Dragging a socket on the stage writes a layer-local offset; the bound
+// layer stays the position's source of truth.
+func TestDragSocketWritesLocalOffset(t *testing.T) {
+	m := stageModel(t)
+	m.AddSocket(m.StageLayerNames()[0]) // "anchor": position (50,50), no rotation
+	m.DragSocket(5, 3)
+	s := m.SelectedSocket()
+	if s.DX != 5 || s.DY != 3 {
+		t.Fatalf("offset: %+v", s)
+	}
+	p, ok := m.loadSockets().At(m.PreviewAnimation(), 0, s.Name)
+	if !ok || p.X != 55 || p.Y != 53 {
+		t.Fatalf("placement with offset: %+v ok=%v", p, ok)
+	}
+}
+
 func TestRenameSocketKeepsBinding(t *testing.T) {
 	m := stageModel(t)
 	layer := m.StageLayerNames()[0]
