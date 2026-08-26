@@ -23,13 +23,21 @@ import (
 // animation, named by the animation's id.
 const Dir = "extensions/physics/resolv/"
 
-// Kind names a hitbox's shape.
+// Kind names a hitbox's shape. KindWindow has no shape at all: it is a
+// pure timed flag — a cancel window, invincibility, super armor — sharing
+// the box's tags and spans but never entering geometric queries or a
+// resolv space; games read it through WindowsAt and Open.
 type Kind string
 
 const (
 	KindRect   Kind = "rect"
 	KindCircle Kind = "circle"
+	KindWindow Kind = "window"
 )
+
+// geometric reports whether the kind occupies space. Unknown kinds are
+// future data and count as non-geometric, so they never turn into shapes.
+func (k Kind) geometric() bool { return k == KindRect || k == KindCircle }
 
 // Track holds the hitboxes of one animation. It is keyed by the
 // animation's id in the bundle, because the boxes only mean anything
@@ -165,16 +173,36 @@ type ActiveBox struct {
 	R     float64
 }
 
-// At returns the boxes live at the frame. Passing tags keeps only boxes
-// carrying at least one of them, which is how a game asks for just its
-// hurtboxes; with none, every live box returns.
+// At returns the geometric boxes (rects and circles) live at the frame.
+// Passing tags keeps only boxes carrying at least one of them, which is
+// how a game asks for just its hurtboxes; with none, every live box
+// returns. Windows never appear here — they have no geometry to collide.
 func (t *Track) At(frame float64, tags ...string) []ActiveBox {
+	return t.at(frame, true, tags)
+}
+
+// WindowsAt returns the windows (geometry-less timed flags) live at the
+// frame, filtered by tags the same way At filters.
+func (t *Track) WindowsAt(frame float64, tags ...string) []ActiveBox {
+	return t.at(frame, false, tags)
+}
+
+// Open reports whether any window carrying the tag is live at the frame —
+// the one-line cancel/invincibility check.
+func (t *Track) Open(frame float64, tag string) bool {
+	return len(t.WindowsAt(frame, tag)) > 0
+}
+
+func (t *Track) at(frame float64, geometric bool, tags []string) []ActiveBox {
 	if t == nil {
 		return nil
 	}
 	var out []ActiveBox
 	for i := range t.Boxes {
 		b := &t.Boxes[i]
+		if b.Kind.geometric() != geometric || (!geometric && b.Kind != KindWindow) {
+			continue
+		}
 		if len(tags) > 0 && !slices.ContainsFunc(tags, b.HasTag) {
 			continue
 		}
@@ -189,6 +217,20 @@ func (t *Track) At(frame float64, tags ...string) []ActiveBox {
 		})
 	}
 	return out
+}
+
+// Mirrored reflects the box across the vertical line x = axis — the
+// facing flip for a left-facing character. A rect mirrors from its far
+// edge so it stays a top-left-anchored rect; a circle mirrors its center;
+// a window is untouched.
+func (ab ActiveBox) Mirrored(axis float64) ActiveBox {
+	switch ab.Kind {
+	case KindRect:
+		ab.X = 2*axis - ab.X - ab.W
+	case KindCircle:
+		ab.X = 2*axis - ab.X
+	}
+	return ab
 }
 
 // ParseTrack decodes one track document.

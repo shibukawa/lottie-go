@@ -13,6 +13,7 @@ bundle_io:
   - "lottiecp.Store(b, id, *Body) error"
   - "lottiecp.Remove(b, id)"
 engine:
+  - "lottiecp.MirrorX(*Body, axis) *Body  // deep-copied facing flip (rule:facing-mirror)"
   - "lottiecp.Build(*Body) (*cp.Body, []*cp.Shape)  // not yet in a space"
   - "lottiecp.AddToSpace(space, *Body) (*cp.Body, []*cp.Shape)  // ready for SetPosition"
 build_semantics:

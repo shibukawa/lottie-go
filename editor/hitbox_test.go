@@ -7,6 +7,7 @@ import (
 	lottie "github.com/shibukawa/lottie-go"
 	lottiecp "github.com/shibukawa/lottie-go/plugin/physics/cp"
 	lottieresolv "github.com/shibukawa/lottie-go/plugin/physics/resolv"
+	lottiesockets "github.com/shibukawa/lottie-go/plugin/sockets"
 )
 
 // stageModel is a model with one clip on stage, which hitbox edits key on.
@@ -169,6 +170,76 @@ func TestCollisionRoundTripThroughSave(t *testing.T) {
 	}
 	if len(body.Shapes) != 1 || body.Shapes[0].Type != lottiecp.ShapeCircle {
 		t.Fatalf("body did not survive: %+v", body.Shapes)
+	}
+}
+
+func TestWindowAuthoring(t *testing.T) {
+	m := stageModel(t)
+	m.AddHitbox(lottieresolv.KindWindow)
+	m.RenameHitbox("cancel")
+	m.SetHitboxTagsCSV("cancelable")
+
+	track := m.StageTrack()
+	// A window is a pure flag: no geometry, absent from the stage query,
+	// present in the window query.
+	if got := track.At(0); len(got) != 0 {
+		t.Fatalf("window leaked into At: %+v", got)
+	}
+	if !track.Open(0, "cancelable") {
+		t.Fatal("window not open at its span")
+	}
+	// Span editing works exactly like a box.
+	m.SetSpanRange(5, 9)
+	if track.Open(4, "cancelable") || !track.Open(8, "cancelable") {
+		t.Fatal("span edit did not move the window")
+	}
+	if got := HitboxLabel(0, track.Boxes[0]); got != "1: cancel (win)" {
+		t.Fatalf("label: %q", got)
+	}
+}
+
+func TestSocketAuthoring(t *testing.T) {
+	m := stageModel(t)
+
+	layers := m.StageLayerNames()
+	if len(layers) == 0 {
+		t.Fatal("stage clip should expose layer names")
+	}
+	m.AddSocket(layers[0])
+	if got := m.Sockets(); len(got) != 1 || got[0].Name != layers[0] {
+		t.Fatalf("Sockets: %+v", got)
+	}
+	// Duplicate names are refused.
+	m.AddSocket(layers[0])
+	if got := m.Sockets(); len(got) != 1 {
+		t.Fatalf("duplicate slipped in: %+v", got)
+	}
+
+	m.ToggleSocketZ()
+	if m.Sockets()[0].Z != lottiesockets.ZBehind {
+		t.Fatalf("z toggle: %+v", m.Sockets()[0])
+	}
+
+	// The table rides the bundle through a save.
+	var buf bytes.Buffer
+	if err := m.Bundle().Encode(&buf); err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	rb, err := lottie.DecodeBundle(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatalf("DecodeBundle: %v", err)
+	}
+	set, err := lottiesockets.Load(rb)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(set.Sockets) != 1 || set.Sockets[0].Z != lottiesockets.ZBehind {
+		t.Fatalf("sockets did not survive: %+v", set.Sockets)
+	}
+
+	m.DeleteSocket()
+	if got := m.Sockets(); len(got) != 0 {
+		t.Fatalf("delete: %+v", got)
 	}
 }
 

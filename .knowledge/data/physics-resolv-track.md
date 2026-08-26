@@ -11,7 +11,7 @@ storage: extensions/physics/resolv/<animID>.json
 track: {boxes: [Box]}
 box:
   name: editor label; index disambiguates duplicates
-  kind: rect | circle
+  kind: rect | circle | window (geometry-less timed flag, requirement:state-windows)
   tags: free-form strings (hit, hurt, push, ...); game-facing meaning; several allowed
   spans: [Span]; editor keeps frame order; queries take first covering span
 span:

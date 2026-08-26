@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -13,8 +14,10 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/vector"
 
+	lottie "github.com/shibukawa/lottie-go"
 	lottiecp "github.com/shibukawa/lottie-go/plugin/physics/cp"
 	lottieresolv "github.com/shibukawa/lottie-go/plugin/physics/resolv"
+	lottiesockets "github.com/shibukawa/lottie-go/plugin/sockets"
 )
 
 // Collision overlay and its panel. The overlay paints the stage's live
@@ -42,6 +45,10 @@ func tagColor(tags []string) color.NRGBA {
 // cpShapeColor marks the rigid body silhouette apart from any hitbox tag.
 var cpShapeColor = color.NRGBA{0x8e, 0x4e, 0xc6, 0xff}
 
+// socketColor marks attachment sockets; they are points, not judgement
+// volumes, so they sit outside the tag palette.
+var socketColor = color.NRGBA{0x14, 0xb0, 0xc8, 0xff}
+
 func withAlpha(c color.NRGBA, a uint8) color.NRGBA {
 	c.A = a
 	return c
@@ -65,21 +72,50 @@ func (t stageTransform) toAnim(x, y int) (float64, float64) {
 
 // ---- overlay drawing ----
 
-// drawCollisionOverlay paints the cp body first and the live hitboxes over
-// it: frame-stepped judgement is what this stage is for, so it wins ties.
+// drawCollisionOverlay paints the cp body first, the live hitboxes over
+// it (frame-stepped judgement is what this stage is for, so it wins
+// ties), and the attachment sockets on top of everything: they are the
+// smallest marks and must not drown.
 func drawCollisionOverlay(dst *ebiten.Image, m *Model, tr stageTransform, u float32) {
 	stroke := max(1, u/12)
 	for i, s := range m.CPBodyShapes() {
 		drawCPShape(dst, tr, s, stroke, i == m.SelectedCPShapeIndex(), u)
 	}
-	track := m.StageTrack()
-	if track == nil {
-		return
-	}
 	frame := m.stageFrame()
-	for _, ab := range track.At(frame) {
-		drawActiveBox(dst, tr, ab, stroke, ab.Index == m.SelectedHitboxIndex(), u)
+	if track := m.StageTrack(); track != nil {
+		for _, ab := range track.At(frame) {
+			drawActiveBox(dst, tr, ab, stroke, ab.Index == m.SelectedHitboxIndex(), u)
+		}
 	}
+	if anim := m.PreviewAnimation(); anim != nil {
+		for i, sock := range m.Sockets() {
+			pl, ok := anim.LayerPlacement(sock.LayerName(), frame)
+			if !ok {
+				continue
+			}
+			drawSocket(dst, tr, pl, stroke, i == m.SelectedSocketIndex(), u)
+		}
+	}
+}
+
+// drawSocket marks an attachment point: a cross at the position and a tick
+// along its x-axis so the bound layer's rotation is visible.
+func drawSocket(dst *ebiten.Image, tr stageTransform, pl lottie.LayerPlacement, stroke float32, selected bool, u float32) {
+	if selected {
+		stroke *= 2
+	}
+	clr := socketColor
+	if !pl.Visible {
+		clr = withAlpha(clr, 0x60)
+	}
+	x, y := tr.toScreen(pl.X, pl.Y)
+	s := max(4, u/3)
+	vector.StrokeLine(dst, x-s, y, x+s, y, stroke, clr, true)
+	vector.StrokeLine(dst, x, y-s, x, y+s, stroke, clr, true)
+	tick := float64(s) * 1.6
+	vector.StrokeLine(dst, x, y,
+		x+float32(tick*math.Cos(pl.Angle)), y+float32(tick*math.Sin(pl.Angle)),
+		stroke, clr, true)
 }
 
 func drawActiveBox(dst *ebiten.Image, tr stageTransform, ab lottieresolv.ActiveBox, stroke float32, selected bool, u float32) {
@@ -159,7 +195,7 @@ func handleSize(u float32) float32 { return max(6, u/3) }
 // handleAt returns the selected shape's resize grip position, if any shape
 // is selected.
 func handleAt(m *Model, tr stageTransform) (float32, float32, bool) {
-	if b := m.SelectedHitbox(); b != nil {
+	if b := m.SelectedHitbox(); b != nil && b.Kind != lottieresolv.KindWindow {
 		if sp := m.SelectedSpan(); sp != nil {
 			if b.Kind == lottieresolv.KindCircle {
 				cx, cy := tr.toScreen(sp.X, sp.Y)
@@ -264,6 +300,7 @@ type collisionPanel struct {
 	boxCombo  basicwidget.Combobox
 	addRect   basicwidget.Button
 	addCircle basicwidget.Button
+	addWin    basicwidget.Button
 	delBox    basicwidget.Button
 	nameInput basicwidget.TextInput
 	tagsInput basicwidget.TextInput
@@ -278,10 +315,19 @@ type collisionPanel struct {
 	addCPBox  basicwidget.Button
 	delCP     basicwidget.Button
 
+	sockLabel  basicwidget.Text
+	layerCombo basicwidget.Combobox
+	addSock    basicwidget.Button
+	sockCombo  basicwidget.Combobox
+	zBtn       basicwidget.Button
+	delSock    basicwidget.Button
+
 	rowA      guigui.LinearLayout
 	rowAItems []guigui.LinearLayoutItem
 	rowB      guigui.LinearLayout
 	rowBItems []guigui.LinearLayoutItem
+	rowC      guigui.LinearLayout
+	rowCItems []guigui.LinearLayoutItem
 	items     []guigui.LinearLayoutItem
 }
 
@@ -301,9 +347,10 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 	}
 	for _, w := range []guigui.Widget{
 		&c.showLabel, &c.showCheck, &c.boxCombo, &c.addRect, &c.addCircle,
-		&c.delBox, &c.nameInput, &c.tagsInput,
+		&c.addWin, &c.delBox, &c.nameInput, &c.tagsInput,
 		&c.spanLabel, &c.fromInput, &c.toInput, &c.addSpan, &c.delSpan,
 		&c.bodyLabel, &c.addCPCirc, &c.addCPBox, &c.delCP,
+		&c.sockLabel, &c.layerCombo, &c.addSock, &c.sockCombo, &c.zBtn, &c.delSock,
 	} {
 		adder.AddWidget(w)
 	}
@@ -343,6 +390,10 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 	c.addRect.OnDown(func(context *guigui.Context) { m.AddHitbox(lottieresolv.KindRect) })
 	c.addCircle.SetText("+Circle")
 	c.addCircle.OnDown(func(context *guigui.Context) { m.AddHitbox(lottieresolv.KindCircle) })
+	// A window is a geometry-less timed flag (cancelable, invincible);
+	// it shares the tag and span editing but never draws on the stage.
+	c.addWin.SetText("+Win")
+	c.addWin.OnDown(func(context *guigui.Context) { m.AddHitbox(lottieresolv.KindWindow) })
 	c.delBox.SetText("Del")
 	c.delBox.OnDown(func(context *guigui.Context) { m.DeleteHitbox() })
 
@@ -403,7 +454,9 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 	c.delCP.SetText("Del")
 	c.delCP.OnDown(func(context *guigui.Context) { m.DeleteCPShape() })
 
-	for _, w := range []guigui.Widget{&c.boxCombo, &c.addRect, &c.addCircle} {
+	c.buildSockets(context, m, onStage)
+
+	for _, w := range []guigui.Widget{&c.boxCombo, &c.addRect, &c.addCircle, &c.addWin} {
 		context.SetEnabled(w, onStage)
 	}
 	for _, w := range []guigui.Widget{&c.delBox, &c.nameInput, &c.tagsInput, &c.addSpan} {
@@ -417,6 +470,58 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 	}
 	context.SetEnabled(&c.delCP, m.SelectedCPShape() != nil)
 	return nil
+}
+
+// buildSockets wires the socket row: bind a stage layer as a socket, pick
+// one, flip its z side, drop it.
+func (c *collisionPanel) buildSockets(context *guigui.Context, m *Model, onStage bool) {
+	label(&c.sockLabel, "sockets")
+
+	c.layerCombo.SetItems(m.StageLayerNames())
+	c.addSock.SetText("+Socket")
+	c.addSock.OnDown(func(context *guigui.Context) { m.AddSocket(c.layerCombo.Value()) })
+
+	socks := m.Sockets()
+	labels := make([]string, 0, len(socks))
+	for i, s := range socks {
+		z := "front"
+		if s.Z == lottiesockets.ZBehind {
+			z = "behind"
+		}
+		labels = append(labels, fmt.Sprintf("%d: %s (%s)", i+1, s.Name, z))
+	}
+	c.sockCombo.SetItems(labels)
+	selSock := m.SelectedSocketIndex()
+	if selSock >= 0 && selSock < len(labels) {
+		c.sockCombo.SetValue(labels[selSock])
+	} else {
+		c.sockCombo.SetValue("")
+	}
+	c.sockCombo.OnValueChanged(func(context *guigui.Context, value string, committed bool) {
+		if !committed {
+			return
+		}
+		if n, _, ok := strings.Cut(value, ":"); ok {
+			if i, err := strconv.Atoi(n); err == nil {
+				m.SelectSocket(i - 1)
+			}
+		}
+	})
+
+	zText := "z: front"
+	if selSock >= 0 && selSock < len(socks) && socks[selSock].Z == lottiesockets.ZBehind {
+		zText = "z: behind"
+	}
+	c.zBtn.SetText(zText)
+	c.zBtn.OnDown(func(context *guigui.Context) { m.ToggleSocketZ() })
+	c.delSock.SetText("Del")
+	c.delSock.OnDown(func(context *guigui.Context) { m.DeleteSocket() })
+
+	context.SetEnabled(&c.layerCombo, onStage)
+	context.SetEnabled(&c.addSock, onStage && c.layerCombo.Value() != "")
+	hasSel := selSock >= 0 && selSock < len(socks)
+	context.SetEnabled(&c.zBtn, hasSel)
+	context.SetEnabled(&c.delSock, hasSel)
 }
 
 func (c *collisionPanel) WriteStateKey(context *guigui.Context, w *guigui.StateKeyWriter) {
@@ -435,6 +540,7 @@ func (c *collisionPanel) layout(context *guigui.Context) guigui.LinearLayout {
 		guigui.LinearLayoutItem{Widget: &c.boxCombo, Size: guigui.FlexibleSize(3)},
 		guigui.LinearLayoutItem{Widget: &c.addRect, Size: guigui.FixedSize(2 * u)},
 		guigui.LinearLayoutItem{Widget: &c.addCircle, Size: guigui.FixedSize(5 * u / 2)},
+		guigui.LinearLayoutItem{Widget: &c.addWin, Size: guigui.FixedSize(2 * u)},
 		guigui.LinearLayoutItem{Widget: &c.delBox, Size: guigui.FixedSize(3 * u / 2)},
 		guigui.LinearLayoutItem{Widget: &c.nameInput, Size: guigui.FlexibleSize(3)},
 		guigui.LinearLayoutItem{Widget: &c.tagsInput, Size: guigui.FlexibleSize(4)},
@@ -459,10 +565,24 @@ func (c *collisionPanel) layout(context *guigui.Context) guigui.LinearLayout {
 		Direction: guigui.LayoutDirectionHorizontal, Items: c.rowBItems, Gap: u / 4,
 	}
 
+	c.rowCItems = slices.Delete(c.rowCItems, 0, len(c.rowCItems))
+	c.rowCItems = append(c.rowCItems,
+		guigui.LinearLayoutItem{Widget: &c.sockLabel, Size: guigui.FixedSize(5 * u / 2)},
+		guigui.LinearLayoutItem{Widget: &c.layerCombo, Size: guigui.FlexibleSize(3)},
+		guigui.LinearLayoutItem{Widget: &c.addSock, Size: guigui.FixedSize(3 * u)},
+		guigui.LinearLayoutItem{Widget: &c.sockCombo, Size: guigui.FlexibleSize(3)},
+		guigui.LinearLayoutItem{Widget: &c.zBtn, Size: guigui.FixedSize(3 * u)},
+		guigui.LinearLayoutItem{Widget: &c.delSock, Size: guigui.FixedSize(3 * u / 2)},
+	)
+	c.rowC = guigui.LinearLayout{
+		Direction: guigui.LayoutDirectionHorizontal, Items: c.rowCItems, Gap: u / 4,
+	}
+
 	c.items = slices.Delete(c.items, 0, len(c.items))
 	c.items = append(c.items,
 		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.rowA},
 		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.rowB},
+		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.rowC},
 	)
 	return guigui.LinearLayout{
 		Direction: guigui.LayoutDirectionVertical, Items: c.items, Gap: u / 4,

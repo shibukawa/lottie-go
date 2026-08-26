@@ -8,6 +8,7 @@ import (
 
 	lottiecp "github.com/shibukawa/lottie-go/plugin/physics/cp"
 	lottieresolv "github.com/shibukawa/lottie-go/plugin/physics/resolv"
+	lottiesockets "github.com/shibukawa/lottie-go/plugin/sockets"
 )
 
 // Collision editing: resolv hitbox tracks ride with the clip on stage, the
@@ -30,6 +31,7 @@ const editorCPBodyID = "body"
 func (m *Model) resetCollisionCache() {
 	m.trackCache = map[string]*lottieresolv.Track{}
 	m.cpBody, m.cpLoaded = nil, false
+	m.socketSet, m.socketsLoaded = nil, false
 }
 
 // StageAnimID is the id of the animation on stage: the previewed clip, or
@@ -124,10 +126,10 @@ func (m *Model) SelectedHitbox() *lottieresolv.Box {
 	return &t.Boxes[m.selBox]
 }
 
-// resetCollisionSelection drops both selections; the stage they indexed
+// resetCollisionSelection drops every selection; the stage they indexed
 // into is gone.
 func (m *Model) resetCollisionSelection() {
-	m.selBox, m.selCPShape = -1, -1
+	m.selBox, m.selCPShape, m.selSocket = -1, -1, -1
 }
 
 // ---- hitbox edits ----
@@ -155,6 +157,8 @@ func (m *Model) AddHitbox(kind lottieresolv.Kind) {
 	case lottieresolv.KindCircle:
 		span.X, span.Y = float64(w)/2, float64(h)/2
 		span.R = float64(min(w, h)) / 8
+	case lottieresolv.KindWindow:
+		// A pure timed flag; there is no geometry to place.
 	default:
 		span.W, span.H = float64(w)/4, float64(h)/4
 		span.X, span.Y = float64(w)/2-span.W/2, float64(h)/2-span.H/2
@@ -482,7 +486,123 @@ func (m *Model) DragCPShapeHandle(dx, dy float64) {
 }
 
 // HitboxLabel names one box for the picker; the index keeps duplicate
-// names selectable.
+// names selectable, and a window is marked because it never shows on the
+// stage.
 func HitboxLabel(i int, b lottieresolv.Box) string {
+	if b.Kind == lottieresolv.KindWindow {
+		return fmt.Sprintf("%d: %s (win)", i+1, b.Name)
+	}
 	return fmt.Sprintf("%d: %s", i+1, b.Name)
+}
+
+// ---- sockets ----
+
+// loadSockets returns the bundle's socket table, or nil when it has none
+// yet. The parse is cached; edits go through the same pointer.
+func (m *Model) loadSockets() *lottiesockets.Set {
+	if !m.socketsLoaded {
+		set, err := lottiesockets.Load(m.bundle)
+		if err != nil {
+			set = nil
+		}
+		m.socketSet, m.socketsLoaded = set, true
+	}
+	return m.socketSet
+}
+
+// Sockets lists the bundle's socket table; empty when there is none yet.
+func (m *Model) Sockets() []lottiesockets.Socket {
+	if set := m.loadSockets(); set != nil {
+		return set.Sockets
+	}
+	return nil
+}
+
+func (m *Model) editableSockets() *lottiesockets.Set {
+	if set := m.loadSockets(); set != nil {
+		return set
+	}
+	set := &lottiesockets.Set{}
+	if err := lottiesockets.Store(m.bundle, set); err != nil {
+		m.setStatus("cannot create socket table: %v", err)
+		return nil
+	}
+	m.socketSet, m.socketsLoaded = set, true
+	return set
+}
+
+func (m *Model) touchSockets() {
+	if set := m.loadSockets(); set != nil {
+		if err := lottiesockets.Store(m.bundle, set); err != nil {
+			m.setStatus("cannot serialize sockets: %v", err)
+		}
+	}
+	m.generation++
+}
+
+func (m *Model) SelectedSocketIndex() int { return m.selSocket }
+
+func (m *Model) SelectSocket(i int) {
+	m.selSocket = i
+	m.generation++
+}
+
+// AddSocket binds a socket to the named layer, using the layer name as the
+// socket name — the common case; hand-edit the table for a differing pair.
+func (m *Model) AddSocket(layer string) {
+	layer = strings.TrimSpace(layer)
+	if layer == "" {
+		return
+	}
+	set := m.editableSockets()
+	if set == nil {
+		return
+	}
+	if _, exists := set.Find(layer); exists {
+		m.setStatus("a socket named %q already exists", layer)
+		m.generation++
+		return
+	}
+	set.Sockets = append(set.Sockets, lottiesockets.Socket{Name: layer})
+	m.selSocket = len(set.Sockets) - 1
+	m.setStatus("added socket %q", layer)
+	m.touchSockets()
+}
+
+func (m *Model) DeleteSocket() {
+	set := m.loadSockets()
+	if set == nil || m.selSocket < 0 || m.selSocket >= len(set.Sockets) {
+		return
+	}
+	name := set.Sockets[m.selSocket].Name
+	set.Sockets = slices.Delete(set.Sockets, m.selSocket, m.selSocket+1)
+	m.selSocket = -1
+	m.setStatus("deleted socket %q", name)
+	m.touchSockets()
+}
+
+// ToggleSocketZ flips the selected socket between drawing an attached item
+// in front of and behind the character.
+func (m *Model) ToggleSocketZ() {
+	set := m.loadSockets()
+	if set == nil || m.selSocket < 0 || m.selSocket >= len(set.Sockets) {
+		return
+	}
+	s := &set.Sockets[m.selSocket]
+	if s.Z == lottiesockets.ZBehind {
+		s.Z = lottiesockets.ZFront
+	} else {
+		s.Z = lottiesockets.ZBehind
+	}
+	m.touchSockets()
+}
+
+// StageLayerNames lists the layers of the animation on stage, for binding
+// sockets.
+func (m *Model) StageLayerNames() []string {
+	anim := m.PreviewAnimation()
+	if anim == nil {
+		return nil
+	}
+	return anim.LayerNames()
 }

@@ -4,7 +4,7 @@ type: requirement
 title: Frame Events with Payload
 ---
 
-Status: proposed. One-shot triggers at exact frames carrying free-form payload, for sounds, effects, and game logic synced to animation.
+Status: implemented as api:frame-events (plugin/events + Player.OnFrameSpan); editor authoring UI not built yet. One-shot triggers at exact frames carrying free-form payload, for sounds, effects, and game logic synced to animation.
 
 ```yaml
 existing_coverage:

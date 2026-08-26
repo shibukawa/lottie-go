@@ -17,7 +17,7 @@ func clipJSON(frames int, markers string) []byte {
 		m = `,"markers":` + markers
 	}
 	return fmt.Appendf(nil, `{"v":"5.9.0","fr":60,"ip":0,"op":%d,"w":100,"h":100,
-		"layers":[{"ty":3,"ind":1,"ip":0,"op":%d,"st":0,
+		"layers":[{"ty":3,"nm":"anchor","ind":1,"ip":0,"op":%d,"st":0,
 		"ks":{"a":{"a":0,"k":[0,0]},"p":{"a":0,"k":[50,50]},
 		"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}}]`+m+`}`, frames, frames)
 }

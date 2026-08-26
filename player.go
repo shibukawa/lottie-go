@@ -40,6 +40,7 @@ type Player struct {
 	onComplete     func()
 	onLoopComplete func()
 	onMarker       func(Marker)
+	onFrameSpan    func(from, to float64)
 
 	// Idle snapshot cache; see drawSnapshot.
 	snapKey      snapshotKey
@@ -158,11 +159,27 @@ func (p *Player) OnLoopComplete(f func()) { p.onLoopComplete = f }
 // drive the player from inside it.
 func (p *Player) OnMarker(f func(Marker)) { p.onMarker = f }
 
+// OnFrameSpan reports every half-open span [from, to) the cursor sweeps
+// during Update, including the partial spans of a loop wrap. Reverse
+// playback passes spans the same way round as forward. It exists for
+// extension packages that fire their own cues off frame positions the way
+// markers fire (plugin/events); seeks and SetFrame jump without sweeping,
+// exactly as they do for markers.
+func (p *Player) OnFrameSpan(f func(from, to float64)) { p.onFrameSpan = f }
+
 // emitMarkers reports the markers whose start lies in the half-open span
 // [from, to) the cursor just moved through. Reverse playback passes the
 // span the same way round, so a marker fires whichever way it is crossed.
+// The span also feeds OnFrameSpan, keeping every cue mechanism on one
+// definition of "moved through".
 func (p *Player) emitMarkers(from, to float64) {
-	if p.onMarker == nil || to <= from {
+	if to <= from {
+		return
+	}
+	if p.onFrameSpan != nil {
+		p.onFrameSpan(from, to)
+	}
+	if p.onMarker == nil {
 		return
 	}
 	for _, m := range p.anim.markers {

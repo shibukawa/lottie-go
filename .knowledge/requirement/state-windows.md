@@ -4,7 +4,7 @@ type: requirement
 title: Timed State Windows
 ---
 
-Status: proposed. Geometry-less tagged frame spans: pure time flags a game reads by tag, same span semantics as data:physics-resolv-track ([from, to), step).
+Status: implemented inside data:physics-resolv-track as kind "window" (first candidate won: reuses editor spans, tags, timeline). Geometry-less tagged frame spans: pure time flags a game reads by tag, same span semantics as data:physics-resolv-track ([from, to), step).
 
 ```yaml
 uses: [cancelable, invincible, super-armor, throw-immune, counter-stance]

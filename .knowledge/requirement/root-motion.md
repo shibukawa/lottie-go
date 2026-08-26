@@ -4,7 +4,7 @@ type: requirement
 title: Root Motion
 ---
 
-Status: proposed. World displacement of the character driven by the animation itself — lunging attacks, dodge rolls — instead of game-side velocity.
+Status: implemented as lottiesockets.Displacement (api:sockets); cumulative-diff API as specified. World displacement of the character driven by the animation itself — lunging attacks, dodge rolls — instead of game-side velocity.
 
 ```yaml
 api_shape: cumulative displacement since clip start; game diffs between Updates

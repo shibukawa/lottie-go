@@ -108,6 +108,62 @@ func TestExtraFieldsSurvive(t *testing.T) {
 	}
 }
 
+func windowTrack() *Track {
+	tr := sampleTrack()
+	tr.Boxes = append(tr.Boxes, Box{
+		Name: "cancel", Kind: KindWindow, Tags: []string{"cancelable"},
+		Spans: []Span{{From: 20, To: 28}},
+	})
+	return tr
+}
+
+func TestWindows(t *testing.T) {
+	tr := windowTrack()
+
+	// Windows never leak into the geometric query.
+	for _, ab := range tr.At(25) {
+		if ab.Kind == KindWindow {
+			t.Fatalf("window in At: %+v", ab)
+		}
+	}
+	ws := tr.WindowsAt(25)
+	if len(ws) != 1 || ws[0].Name != "cancel" {
+		t.Fatalf("WindowsAt: %+v", ws)
+	}
+	if !tr.Open(25, "cancelable") {
+		t.Fatal("Open should report the live window")
+	}
+	if tr.Open(30, "cancelable") {
+		t.Fatal("window is closed at 30 (to is exclusive at 28)")
+	}
+	if tr.Open(25, "hit") {
+		t.Fatal("tag filter must apply to windows")
+	}
+
+	// The tracker leaves windows out of the space: at frame 25 only body
+	// and head are live geometry.
+	space := resolv.NewSpace(640, 480, 16, 16)
+	NewTracker(space, tr).Sync(25)
+	if got := len(space.Shapes()); got != 2 {
+		t.Fatalf("space shapes: got %d, want 2 (window excluded)", got)
+	}
+}
+
+func TestMirrored(t *testing.T) {
+	r := ActiveBox{Kind: KindRect, X: 10, Y: 5, W: 30, H: 20}.Mirrored(100)
+	if r.X != 160 || r.Y != 5 {
+		t.Fatalf("rect mirror: %+v", r)
+	}
+	c := ActiveBox{Kind: KindCircle, X: 40, Y: 8, R: 12}.Mirrored(100)
+	if c.X != 160 || c.R != 12 {
+		t.Fatalf("circle mirror: %+v", c)
+	}
+	w := ActiveBox{Kind: KindWindow, X: 0}.Mirrored(100)
+	if w.X != 0 {
+		t.Fatalf("window mirror must be a no-op: %+v", w)
+	}
+}
+
 func TestTagDedup(t *testing.T) {
 	if Tag("dedup-check") != Tag("dedup-check") {
 		t.Fatal("the same name must map to the same bit")

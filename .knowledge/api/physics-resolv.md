@@ -13,7 +13,9 @@ bundle_io:
   - "lottieresolv.Store(b, animID, *Track) error"
   - "lottieresolv.Remove(b, animID)"
 query:
-  - "track.At(frame, tags...) []ActiveBox  // live boxes; tags filter any-of; none = all"
+  - "track.At(frame, tags...) []ActiveBox  // live rects+circles; tags filter any-of; none = all"
+  - "track.WindowsAt(frame, tags...) / track.Open(frame, tag)  // requirement:state-windows flags"
+  - "ActiveBox.Mirrored(axis)  // rule:facing-mirror; windows untouched"
   - "box.SpanAt(frame) (int, bool)"
   - "ActiveBox.Index points back into track.Boxes"
 space_mirror:
@@ -24,6 +26,7 @@ space_mirror:
   - "tracker.Remove()            // leave play; next Sync re-inserts"
   - "lottieresolv.Tag(name) resolv.Tags  // dedup: same name, same bit (resolv has 64 total)"
 sync_semantics:
+  windows: kind "window" (and unknown kinds) never enter the space
   rebuild: only when a box steps to another span; offset moves slide shapes
   shape_data: BoxData{Tracker, Index, Name} for collision callbacks
 ```

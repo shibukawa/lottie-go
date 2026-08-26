@@ -82,6 +82,11 @@ func (t *Tracker) Sync(frame float64) {
 	for i := range t.track.Boxes {
 		b := &t.track.Boxes[i]
 		tb := &t.boxes[i]
+		if !b.Kind.geometric() {
+			// Windows and future kinds have nothing to put in a space;
+			// games read them straight off the track (Open, WindowsAt).
+			continue
+		}
 		span, live := b.SpanAt(frame)
 		if !live {
 			if tb.shape != nil {

@@ -282,6 +282,70 @@ stage: dragging moves and resizes, the span row times when a box appears
 and disappears, and the tag line colors boxes by meaning (hit red, hurt
 green, push amber).
 
+### Timed windows
+
+A box with kind `window` is a hitbox with no shape: a pure timed flag —
+a cancel window, invincibility, super armor — sharing tags and frame
+spans with its siblings but never entering geometric queries or a resolv
+space. The editor's `+Win` button makes one; games read it in a line:
+
+```go
+if track.Open(player.Frame(), "cancelable") { ... }
+```
+
+### Attachment sockets
+
+Gameplay attaches things to the animation — a weapon to a hand, a
+particle emitter to a muzzle — through named layer transforms. The core
+query works on any animation, no plugin needed:
+
+```go
+pl, ok := anim.LayerPlacement("hand_r", player.Frame())
+// pl.X, pl.Y, pl.Angle, pl.ScaleX/Y, pl.Visible — parents and precomps included
+```
+
+The animator drives a null layer in their own tool, so the attachment
+interpolates exactly like the artwork. The
+`github.com/shibukawa/lottie-go/plugin/sockets` package (a core
+subpackage — no extra dependencies) adds the bundle-stored socket table
+mapping stable game-facing names to layers, with a draw-order hint:
+
+```go
+set, _ := lottiesockets.Load(bundle)
+if p, ok := set.At(anim, player.Frame(), "weapon"); ok {
+    // p.X/p.Y/p.Angle place the sword; p.Z says front or behind
+}
+```
+
+Root motion is the same query applied to a root null:
+`lottiesockets.Displacement(anim, "root", lastFrame, frame)` reports how
+far the character moved as drawn, so lunges and rolls come from the
+animation instead of hand-tuned velocities.
+
+### Frame events
+
+For cues markers cannot carry — a payload, repeated same-name firings —
+`github.com/shibukawa/lottie-go/plugin/events` stores per-animation event
+tracks under `extensions/events/` and fires them through playback with
+marker-identical crossing semantics (loops and reverse included):
+
+```go
+track, _ := lottieevents.Load(bundle, "attack")
+lottieevents.Cue(player, track, func(e lottieevents.Event) {
+    // e.Name, e.Frame, e.Payload (raw JSON: {"sound":"step","vol":0.4})
+})
+```
+
+The underlying hook is `Player.OnFrameSpan`, which reports every frame
+span Update sweeps; anything marker-like can be built on it.
+
+### Facing
+
+Data is authored facing right; every query offers the flip for a
+left-facing character on one convention (position mirrors across a
+vertical axis, angle negates): `ActiveBox.Mirrored`,
+`LayerPlacement.Mirrored`, `Placed.Mirrored`, and `lottiecp.MirrorX`.
+
 ## Supported features
 
 **Layers**: shape, null, solid, precomposition (offscreen with clipping and

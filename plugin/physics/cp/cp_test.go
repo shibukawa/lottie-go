@@ -80,6 +80,25 @@ func TestStaticAndUnknownShapes(t *testing.T) {
 	}
 }
 
+func TestMirrorX(t *testing.T) {
+	src := sampleBody()
+	got := MirrorX(src, 100)
+	if got.Shapes[0].Center.X != 150 {
+		t.Fatalf("circle center: %+v", got.Shapes[0].Center)
+	}
+	if got.Shapes[2].Vertices[1].X != 190 || got.Shapes[2].Vertices[1].Y != 0 {
+		t.Fatalf("polygon vertex: %+v", got.Shapes[2].Vertices)
+	}
+	// Deep copy: the source is untouched.
+	if src.Shapes[0].Center.X != 50 || src.Shapes[2].Vertices[1].X != 10 {
+		t.Fatalf("source mutated: %+v", src.Shapes)
+	}
+	// The mirrored polygon still builds a valid shape.
+	if _, shapes := Build(got); len(shapes) != 3 {
+		t.Fatalf("mirrored body did not build: %d shapes", len(shapes))
+	}
+}
+
 func TestBundleRoundTrip(t *testing.T) {
 	b := lottie.NewBundle()
 	if err := Store(b, "player", sampleBody()); err != nil {

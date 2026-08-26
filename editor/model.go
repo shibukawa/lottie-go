@@ -15,6 +15,7 @@ import (
 	lottie "github.com/shibukawa/lottie-go"
 	lottiecp "github.com/shibukawa/lottie-go/plugin/physics/cp"
 	lottieresolv "github.com/shibukawa/lottie-go/plugin/physics/resolv"
+	lottiesockets "github.com/shibukawa/lottie-go/plugin/sockets"
 )
 
 // editorExtraKey names the member this editor stashes in a State's extra
@@ -69,9 +70,12 @@ type Model struct {
 	hideCollision bool
 	selBox        int
 	selCPShape    int
+	selSocket     int
 	trackCache    map[string]*lottieresolv.Track
 	cpBody        *lottiecp.Body
 	cpLoaded      bool
+	socketSet     *lottiesockets.Set
+	socketsLoaded bool
 
 	// generation counts every change the UI must redraw for, including
 	// selection; widgets hash it in WriteStateKey instead of the whole
@@ -96,6 +100,7 @@ func NewModel() *Model {
 		selectedInput: -1,
 		selBox:        -1,
 		selCPShape:    -1,
+		selSocket:     -1,
 		trackCache:    map[string]*lottieresolv.Track{},
 		dialog:        make(chan dialogResult, 1),
 	}

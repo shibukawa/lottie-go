@@ -4,7 +4,7 @@ type: requirement
 title: Attachment Sockets
 ---
 
-Status: proposed. Named per-frame transforms (position, rotation, scale) queryable from a running player, so gameplay attaches things to the animation.
+Status: implemented via api:layer-placement (core query) and api:sockets (bundle table); layer_binding chosen, editor_track fallback not needed so far. Open points resolved: first match wins on name collisions (root order, then precomps depth-first); precomp layers reachable with render-identical time remap. Named per-frame transforms (position, rotation, scale) queryable from a running player, so gameplay attaches things to the animation.
 
 ```yaml
 consumers:

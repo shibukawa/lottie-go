@@ -89,6 +89,27 @@ func vectors(ps []Point) []cp.Vector {
 	return out
 }
 
+// MirrorX returns a deep copy of the definition reflected across the
+// vertical line x = axis — the facing flip for a left-facing character.
+// Centers and vertices mirror; convexity survives because Build recomputes
+// the polygon hull anyway.
+func MirrorX(def *Body, axis float64) *Body {
+	out := *def
+	out.Shapes = make([]Shape, len(def.Shapes))
+	for i, s := range def.Shapes {
+		s.Center.X = 2*axis - s.Center.X
+		if len(s.Vertices) > 0 {
+			vs := make([]Point, len(s.Vertices))
+			for j, v := range s.Vertices {
+				vs[j] = Point{X: 2*axis - v.X, Y: v.Y}
+			}
+			s.Vertices = vs
+		}
+		out.Shapes[i] = s
+	}
+	return &out
+}
+
 func derivedMoment(mass float64, shapes []Shape) float64 {
 	n := 0
 	for _, s := range shapes {

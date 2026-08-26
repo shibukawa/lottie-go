@@ -4,7 +4,7 @@ type: rule
 title: Facing Mirror Convention
 ---
 
-Status: proposed. One shared convention for a left-facing character, offered by every gameplay-annotation query so games do not each reinvent flipping.
+Status: implemented: ActiveBox.Mirrored, LayerPlacement.Mirrored, Placed.Mirrored, lottiecp.MirrorX. One shared convention for a left-facing character, offered by every gameplay-annotation query so games do not each reinvent flipping.
 
 ```yaml
 mirror:
