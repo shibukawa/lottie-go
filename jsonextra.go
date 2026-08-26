@@ -38,6 +38,22 @@ func knownKeys(t reflect.Type) map[string]struct{} {
 	return keys
 }
 
+// MarshalWithExtra marshals v and merges extra back into the object, the
+// way this package's own types round-trip unknown members. It is exported
+// for plugin packages that store their own documents in a bundle — the
+// collision plugins under plugin/ — so their types can carry foreign
+// members the same way. Modeled fields win over stale extra members.
+func MarshalWithExtra(v any, extra ExtraFields) ([]byte, error) {
+	return encodeExtra(v, extra)
+}
+
+// UnmarshalExtra returns the members of data that v's fields do not cover;
+// the counterpart of MarshalWithExtra for decoding. v must be the struct
+// value data was just unmarshaled into.
+func UnmarshalExtra(data []byte, v any) (ExtraFields, error) {
+	return decodeExtra(data, v)
+}
+
 // decodeExtra returns the members of data that v's fields do not cover. v
 // must be a struct value.
 func decodeExtra(data []byte, v any) (ExtraFields, error) {

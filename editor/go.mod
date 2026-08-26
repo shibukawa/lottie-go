@@ -7,6 +7,16 @@ require (
 	github.com/hajimehoshi/ebiten/v2 v2.10.0-alpha.13.0.20260817125030-944601d3f17b
 	github.com/ncruces/zenity v0.10.15
 	github.com/shibukawa/lottie-go v0.5.2
+	// The collision plugins have no released version yet, so they resolve
+	// through the replace directives below; the placeholders become real
+	// minimums (and the replaces go away) at their first tag.
+	github.com/shibukawa/lottie-go/plugin/physics/cp v0.0.0-00010101000000-000000000000
+	github.com/shibukawa/lottie-go/plugin/physics/resolv v0.0.0-00010101000000-000000000000
+)
+
+replace (
+	github.com/shibukawa/lottie-go/plugin/physics/cp => ../plugin/physics/cp
+	github.com/shibukawa/lottie-go/plugin/physics/resolv => ../plugin/physics/resolv
 )
 
 require (

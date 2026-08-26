@@ -1,23 +1,17 @@
-// Package lottieresolv mirrors a lottie-go ResolvTrack — the frame-stepped
-// hitboxes an editor authored over a clip — into a SolarLune/resolv Space.
-// It lives in its own module so the core library keeps its no-dependency
-// promise.
-//
-// A Tracker owns one animated character's boxes. Each game frame, after
-// advancing the lottie player, call SetOffset with the character's world
-// position and Sync with the player's frame; the tracker inserts, moves,
-// and removes resolv shapes to match what the track says is live. Queries
-// then run through resolv as usual, or through Shapes for one character's
-// boxes by tag.
 package lottieresolv
 
 import (
 	"sync"
 
 	"github.com/solarlune/resolv"
-
-	lottie "github.com/shibukawa/lottie-go"
 )
+
+// A Tracker owns one animated character's boxes. Each game frame, after
+// advancing the lottie player, call SetOffset with the character's world
+// position and Sync with the player's frame; the tracker inserts, moves,
+// and removes resolv shapes to match what the track says is live. Queries
+// then run through resolv as usual, or through Shapes for one character's
+// boxes by tag.
 
 // tag bits are global to resolv (64 exist in total) and resolv.NewTag
 // allocates a fresh bit on every call, so the mapping from tag names must
@@ -54,7 +48,7 @@ type BoxData struct {
 // Tracker keeps one track's live boxes present in a space.
 type Tracker struct {
 	space *resolv.Space
-	track *lottie.ResolvTrack
+	track *Track
 
 	offX, offY float64
 	boxes      []trackedBox
@@ -67,7 +61,7 @@ type trackedBox struct {
 }
 
 // NewTracker prepares a tracker; nothing enters the space until Sync.
-func NewTracker(space *resolv.Space, track *lottie.ResolvTrack) *Tracker {
+func NewTracker(space *resolv.Space, track *Track) *Tracker {
 	return &Tracker{
 		space: space,
 		track: track,
@@ -110,7 +104,7 @@ func (t *Tracker) Sync(frame float64) {
 			t.space.Remove(tb.shape)
 		}
 		var shape resolv.IShape
-		if b.Kind == lottie.ResolvCircle {
+		if b.Kind == KindCircle {
 			shape = resolv.NewCircle(wx, wy, sp.R)
 		} else {
 			shape = resolv.NewRectangleFromTopLeft(wx, wy, sp.W, sp.H)

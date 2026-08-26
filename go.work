@@ -7,6 +7,6 @@ go 1.27.0
 use (
 	.
 	./editor
-	./physics/cp
-	./physics/resolv
+	./plugin/physics/cp
+	./plugin/physics/resolv
 )

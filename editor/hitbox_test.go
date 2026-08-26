@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	lottie "github.com/shibukawa/lottie-go"
+	lottiecp "github.com/shibukawa/lottie-go/plugin/physics/cp"
+	lottieresolv "github.com/shibukawa/lottie-go/plugin/physics/resolv"
 )
 
 // stageModel is a model with one clip on stage, which hitbox edits key on.
@@ -27,8 +29,8 @@ func TestHitboxAuthoring(t *testing.T) {
 	if m.StageTrack() != nil {
 		t.Fatal("fresh clip should have no track")
 	}
-	m.AddHitbox(lottie.ResolvRect)
-	m.AddHitbox(lottie.ResolvCircle)
+	m.AddHitbox(lottieresolv.KindRect)
+	m.AddHitbox(lottieresolv.KindCircle)
 	track := m.StageTrack()
 	if track == nil || len(track.Boxes) != 2 {
 		t.Fatalf("track after adds: %+v", track)
@@ -65,7 +67,7 @@ func TestHitboxAuthoring(t *testing.T) {
 
 func TestHitboxSpans(t *testing.T) {
 	m := stageModel(t)
-	m.AddHitbox(lottie.ResolvRect)
+	m.AddHitbox(lottieresolv.KindRect)
 	b := m.SelectedHitbox()
 
 	// A second span cannot start under the first one.
@@ -104,14 +106,14 @@ func TestHitboxSpans(t *testing.T) {
 func TestCPBodyAuthoring(t *testing.T) {
 	m := stageModel(t)
 
-	m.AddCPShape(lottie.CPShapeCircle)
-	m.AddCPShape(lottie.CPShapeBox)
+	m.AddCPShape(lottiecp.ShapeCircle)
+	m.AddCPShape(lottiecp.ShapeBox)
 	if got := len(m.CPBodyShapes()); got != 2 {
 		t.Fatalf("shapes: got %d, want 2", got)
 	}
 	// Selecting a body shape and a hitbox are mutually exclusive: one
 	// thing is dragged at a time.
-	m.AddHitbox(lottie.ResolvRect)
+	m.AddHitbox(lottieresolv.KindRect)
 	if m.SelectedCPShapeIndex() != -1 {
 		t.Fatal("adding a hitbox should drop the body selection")
 	}
@@ -141,10 +143,10 @@ func TestCPBodyAuthoring(t *testing.T) {
 // The full authoring loop: hitboxes and body survive a save and reopen.
 func TestCollisionRoundTripThroughSave(t *testing.T) {
 	m := stageModel(t)
-	m.AddHitbox(lottie.ResolvRect)
+	m.AddHitbox(lottieresolv.KindRect)
 	m.RenameHitbox("punch")
 	m.SetHitboxTagsCSV("hit")
-	m.AddCPShape(lottie.CPShapeCircle)
+	m.AddCPShape(lottiecp.ShapeCircle)
 
 	var buf bytes.Buffer
 	if err := m.Bundle().Encode(&buf); err != nil {
@@ -154,18 +156,35 @@ func TestCollisionRoundTripThroughSave(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DecodeBundle: %v", err)
 	}
-	track, err := rb.ResolvTrack("attack")
+	track, err := lottieresolv.Load(rb, "attack")
 	if err != nil {
-		t.Fatalf("ResolvTrack: %v", err)
+		t.Fatalf("Load track: %v", err)
 	}
 	if len(track.Boxes) != 1 || track.Boxes[0].Name != "punch" || !track.Boxes[0].HasTag("hit") {
 		t.Fatalf("track did not survive: %+v", track.Boxes)
 	}
-	body, err := rb.CPBody(editorCPBodyID)
+	body, err := lottiecp.Load(rb, editorCPBodyID)
 	if err != nil {
-		t.Fatalf("CPBody: %v", err)
+		t.Fatalf("Load body: %v", err)
 	}
-	if len(body.Shapes) != 1 || body.Shapes[0].Type != lottie.CPShapeCircle {
+	if len(body.Shapes) != 1 || body.Shapes[0].Type != lottiecp.ShapeCircle {
 		t.Fatalf("body did not survive: %+v", body.Shapes)
+	}
+}
+
+// Dropping a clip drops its hitbox track too: that cleanup moved from the
+// core to this editor when the data became a plugin payload.
+func TestRemoveClipDropsTrack(t *testing.T) {
+	m := stageModel(t)
+	m.AddHitbox(lottieresolv.KindRect)
+	if got := lottieresolv.IDs(m.Bundle()); len(got) != 1 {
+		t.Fatalf("track ids before removal: %v", got)
+	}
+	m.RemoveClip("attack")
+	if got := lottieresolv.IDs(m.Bundle()); len(got) != 0 {
+		t.Fatalf("track survived its clip: %v", got)
+	}
+	if m.StageTrack() != nil {
+		t.Fatal("cache still serves the removed clip's track")
 	}
 }

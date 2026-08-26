@@ -1,10 +1,10 @@
-module github.com/shibukawa/lottie-go/physics/resolv
+module github.com/shibukawa/lottie-go/plugin/physics/cp
 
 go 1.27.0
 
 require (
+	github.com/jakecoffman/cp/v2 v2.4.0
 	github.com/shibukawa/lottie-go v0.5.2
-	github.com/solarlune/resolv v0.8.1
 )
 
 require (

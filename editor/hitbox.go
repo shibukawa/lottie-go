@@ -6,17 +6,31 @@ import (
 	"sort"
 	"strings"
 
-	lottie "github.com/shibukawa/lottie-go"
+	lottiecp "github.com/shibukawa/lottie-go/plugin/physics/cp"
+	lottieresolv "github.com/shibukawa/lottie-go/plugin/physics/resolv"
 )
 
 // Collision editing: resolv hitbox tracks ride with the clip on stage, the
 // cp body is bundle-wide. Both are drawn over the stage and dragged there;
 // this file is the model side of that.
+//
+// The documents live in the bundle as extension files that the core treats
+// as opaque bytes, so this editor imports the two plugin packages and
+// caches the parsed values — the overlay reads them every frame, and
+// parsing per frame would be silly. Every edit Stores straight back, so
+// the bundle bytes are always current and Save needs no extra sync.
 
 // editorCPBodyID is the body this editor manages. The format allows many
 // bodies per bundle; the editor keeps one, which covers a character bundle,
 // and leaves hand-authored extras untouched.
 const editorCPBodyID = "body"
+
+// resetCollisionCache drops the parsed documents; the bundle they came
+// from was replaced.
+func (m *Model) resetCollisionCache() {
+	m.trackCache = map[string]*lottieresolv.Track{}
+	m.cpBody, m.cpLoaded = nil, false
+}
 
 // StageAnimID is the id of the animation on stage: the previewed clip, or
 // whatever the running machine's state plays.
@@ -30,23 +44,29 @@ func (m *Model) StageAnimID() string {
 	return ""
 }
 
-// StageTrack is the hitbox track of the animation on stage, or nil when the
-// clip has none yet.
-func (m *Model) StageTrack() *lottie.ResolvTrack {
+// StageTrack is the hitbox track of the animation on stage, or nil when
+// the clip has none yet.
+func (m *Model) StageTrack() *lottieresolv.Track {
 	id := m.StageAnimID()
 	if id == "" {
 		return nil
 	}
-	t, err := m.bundle.ResolvTrack(id)
-	if err != nil {
-		return nil
+	if t, ok := m.trackCache[id]; ok {
+		return t
 	}
+	t, err := lottieresolv.Load(m.bundle, id)
+	if err != nil {
+		// Absent or unreadable both read as "no track"; the first edit
+		// starts a fresh one.
+		t = nil
+	}
+	m.trackCache[id] = t
 	return t
 }
 
 // ensureStageTrack returns the stage clip's track, creating an empty one on
 // first use.
-func (m *Model) ensureStageTrack() *lottie.ResolvTrack {
+func (m *Model) ensureStageTrack() *lottieresolv.Track {
 	id := m.StageAnimID()
 	if id == "" {
 		return nil
@@ -54,11 +74,12 @@ func (m *Model) ensureStageTrack() *lottie.ResolvTrack {
 	if t := m.StageTrack(); t != nil {
 		return t
 	}
-	t := &lottie.ResolvTrack{}
-	if err := m.bundle.SetResolvTrack(id, t); err != nil {
+	t := &lottieresolv.Track{}
+	if err := lottieresolv.Store(m.bundle, id, t); err != nil {
 		m.setStatus("cannot create hitbox track: %v", err)
 		return nil
 	}
+	m.trackCache[id] = t
 	return t
 }
 
@@ -68,7 +89,7 @@ func (m *Model) ensureStageTrack() *lottie.ResolvTrack {
 func (m *Model) touchTrack() {
 	if id := m.StageAnimID(); id != "" {
 		if t := m.StageTrack(); t != nil {
-			if err := m.bundle.SetResolvTrack(id, t); err != nil {
+			if err := lottieresolv.Store(m.bundle, id, t); err != nil {
 				m.setStatus("cannot serialize hitboxes: %v", err)
 			}
 		}
@@ -95,7 +116,7 @@ func (m *Model) SelectHitbox(i int) {
 	m.generation++
 }
 
-func (m *Model) SelectedHitbox() *lottie.ResolvBox {
+func (m *Model) SelectedHitbox() *lottieresolv.Box {
 	t := m.StageTrack()
 	if t == nil || m.selBox < 0 || m.selBox >= len(t.Boxes) {
 		return nil
@@ -113,7 +134,7 @@ func (m *Model) resetCollisionSelection() {
 
 // AddHitbox appends a box of the given kind with one span starting at the
 // playhead, placed mid-stage so it is visible before the first drag.
-func (m *Model) AddHitbox(kind lottie.ResolvBoxKind) {
+func (m *Model) AddHitbox(kind lottieresolv.Kind) {
 	t := m.ensureStageTrack()
 	if t == nil {
 		m.setStatus("no clip on stage to attach a hitbox to")
@@ -129,9 +150,9 @@ func (m *Model) AddHitbox(kind lottie.ResolvBoxKind) {
 	if p := m.PreviewPlayer(); p != nil {
 		frame = p.Frame()
 	}
-	span := lottie.ResolvSpan{From: frame, To: frame + 10}
+	span := lottieresolv.Span{From: frame, To: frame + 10}
 	switch kind {
-	case lottie.ResolvCircle:
+	case lottieresolv.KindCircle:
 		span.X, span.Y = float64(w)/2, float64(h)/2
 		span.R = float64(min(w, h)) / 8
 	default:
@@ -142,9 +163,9 @@ func (m *Model) AddHitbox(kind lottie.ResolvBoxKind) {
 	for _, b := range t.Boxes {
 		names = append(names, b.Name)
 	}
-	t.Boxes = append(t.Boxes, lottie.ResolvBox{
+	t.Boxes = append(t.Boxes, lottieresolv.Box{
 		Name: uniqueID("box", names), Kind: kind,
-		Spans: []lottie.ResolvSpan{span},
+		Spans: []lottieresolv.Span{span},
 	})
 	m.selBox, m.selCPShape = len(t.Boxes)-1, -1
 	m.setStatus("added hitbox %q", t.Boxes[m.selBox].Name)
@@ -214,7 +235,7 @@ func (m *Model) stageFrame() float64 {
 
 // SelectedSpan is the selected box's span under the playhead. Geometry
 // drags land here: what you grab is what you see at this frame.
-func (m *Model) SelectedSpan() *lottie.ResolvSpan {
+func (m *Model) SelectedSpan() *lottieresolv.Span {
 	b := m.SelectedHitbox()
 	if b == nil {
 		return nil
@@ -240,7 +261,7 @@ func (m *Model) AddHitboxSpan() {
 		m.generation++
 		return
 	}
-	span := lottie.ResolvSpan{From: frame, To: frame + 10}
+	span := lottieresolv.Span{From: frame, To: frame + 10}
 	src := -1
 	for i := range b.Spans {
 		if b.Spans[i].From <= frame && (src < 0 || b.Spans[i].From > b.Spans[src].From) {
@@ -281,7 +302,7 @@ func (m *Model) DeleteHitboxSpan() {
 }
 
 // SetSpanRange rewrites the current span's frame interval. From is
-// inclusive, To exclusive, matching ResolvSpan.
+// inclusive, To exclusive, matching Span.
 func (m *Model) SetSpanRange(from, to float64) {
 	sp := m.SelectedSpan()
 	if sp == nil || to <= from {
@@ -294,7 +315,7 @@ func (m *Model) SetSpanRange(from, to float64) {
 	m.touchTrack()
 }
 
-func sortSpans(b *lottie.ResolvBox) {
+func sortSpans(b *lottieresolv.Box) {
 	sort.SliceStable(b.Spans, func(i, j int) bool { return b.Spans[i].From < b.Spans[j].From })
 }
 
@@ -317,7 +338,7 @@ func (m *Model) DragHitboxHandle(dx, dy float64) {
 	if b == nil || sp == nil {
 		return
 	}
-	if b.Kind == lottie.ResolvCircle {
+	if b.Kind == lottieresolv.KindCircle {
 		sp.R = max(1, sp.R+dx)
 	} else {
 		sp.W = max(1, sp.W+dx)
@@ -328,32 +349,44 @@ func (m *Model) DragHitboxHandle(dx, dy float64) {
 
 // ---- cp body ----
 
-// CPBodyShapes lists the editor-managed body's shapes; empty when the
-// bundle has no body yet.
-func (m *Model) CPBodyShapes() []lottie.CPShape {
-	body, err := m.bundle.CPBody(editorCPBodyID)
-	if err != nil {
-		return nil
+// loadCPBody returns the editor-managed body, or nil when the bundle has
+// none yet. The parse is cached; edits go through the same pointer.
+func (m *Model) loadCPBody() *lottiecp.Body {
+	if !m.cpLoaded {
+		body, err := lottiecp.Load(m.bundle, editorCPBodyID)
+		if err != nil {
+			body = nil
+		}
+		m.cpBody, m.cpLoaded = body, true
 	}
-	return body.Shapes
+	return m.cpBody
 }
 
-func (m *Model) editableCPBody() *lottie.CPBody {
-	body, err := m.bundle.CPBody(editorCPBodyID)
-	if err == nil {
+// CPBodyShapes lists the editor-managed body's shapes; empty when the
+// bundle has no body yet.
+func (m *Model) CPBodyShapes() []lottiecp.Shape {
+	if body := m.loadCPBody(); body != nil {
+		return body.Shapes
+	}
+	return nil
+}
+
+func (m *Model) editableCPBody() *lottiecp.Body {
+	if body := m.loadCPBody(); body != nil {
 		return body
 	}
-	body = &lottie.CPBody{Type: lottie.CPBodyDynamic}
-	if err := m.bundle.SetCPBody(editorCPBodyID, body); err != nil {
+	body := &lottiecp.Body{Type: lottiecp.BodyDynamic}
+	if err := lottiecp.Store(m.bundle, editorCPBodyID, body); err != nil {
 		m.setStatus("cannot create body: %v", err)
 		return nil
 	}
+	m.cpBody, m.cpLoaded = body, true
 	return body
 }
 
 func (m *Model) touchCPBody() {
-	if body, err := m.bundle.CPBody(editorCPBodyID); err == nil {
-		if err := m.bundle.SetCPBody(editorCPBodyID, body); err != nil {
+	if body := m.loadCPBody(); body != nil {
+		if err := lottiecp.Store(m.bundle, editorCPBodyID, body); err != nil {
 			m.setStatus("cannot serialize body: %v", err)
 		}
 	}
@@ -370,16 +403,16 @@ func (m *Model) SelectCPShape(i int) {
 	m.generation++
 }
 
-func (m *Model) SelectedCPShape() *lottie.CPShape {
-	body, err := m.bundle.CPBody(editorCPBodyID)
-	if err != nil || m.selCPShape < 0 || m.selCPShape >= len(body.Shapes) {
+func (m *Model) SelectedCPShape() *lottiecp.Shape {
+	body := m.loadCPBody()
+	if body == nil || m.selCPShape < 0 || m.selCPShape >= len(body.Shapes) {
 		return nil
 	}
 	return &body.Shapes[m.selCPShape]
 }
 
 // AddCPShape places a fixed circle or box mid-stage on the bundle's body.
-func (m *Model) AddCPShape(kind lottie.CPShapeType) {
+func (m *Model) AddCPShape(kind lottiecp.ShapeType) {
 	body := m.editableCPBody()
 	if body == nil {
 		return
@@ -389,12 +422,12 @@ func (m *Model) AddCPShape(kind lottie.CPShapeType) {
 	if anim != nil {
 		w, h = anim.Size()
 	}
-	s := lottie.CPShape{
+	s := lottiecp.Shape{
 		Type:     kind,
-		Center:   lottie.PhysPoint{X: float64(w) / 2, Y: float64(h) / 2},
+		Center:   lottiecp.Point{X: float64(w) / 2, Y: float64(h) / 2},
 		Friction: 0.7,
 	}
-	if kind == lottie.CPShapeCircle {
+	if kind == lottiecp.ShapeCircle {
 		s.Radius = float64(min(w, h)) / 6
 	} else {
 		s.Width, s.Height = float64(w)/4, float64(h)/3
@@ -406,8 +439,8 @@ func (m *Model) AddCPShape(kind lottie.CPShapeType) {
 }
 
 func (m *Model) DeleteCPShape() {
-	body, err := m.bundle.CPBody(editorCPBodyID)
-	if err != nil || m.selCPShape < 0 || m.selCPShape >= len(body.Shapes) {
+	body := m.loadCPBody()
+	if body == nil || m.selCPShape < 0 || m.selCPShape >= len(body.Shapes) {
 		return
 	}
 	body.Shapes = slices.Delete(body.Shapes, m.selCPShape, m.selCPShape+1)
@@ -421,7 +454,7 @@ func (m *Model) DragCPShape(dx, dy float64) {
 	if s == nil {
 		return
 	}
-	if s.Type == lottie.CPShapePolygon {
+	if s.Type == lottiecp.ShapePolygon {
 		for i := range s.Vertices {
 			s.Vertices[i].X += dx
 			s.Vertices[i].Y += dy
@@ -439,9 +472,9 @@ func (m *Model) DragCPShapeHandle(dx, dy float64) {
 		return
 	}
 	switch s.Type {
-	case lottie.CPShapeCircle:
+	case lottiecp.ShapeCircle:
 		s.Radius = max(1, s.Radius+dx)
-	case lottie.CPShapeBox:
+	case lottiecp.ShapeBox:
 		s.Width = max(1, s.Width+dx*2)
 		s.Height = max(1, s.Height+dy*2)
 	}
@@ -450,6 +483,6 @@ func (m *Model) DragCPShapeHandle(dx, dy float64) {
 
 // HitboxLabel names one box for the picker; the index keeps duplicate
 // names selectable.
-func HitboxLabel(i int, b lottie.ResolvBox) string {
+func HitboxLabel(i int, b lottieresolv.Box) string {
 	return fmt.Sprintf("%d: %s", i+1, b.Name)
 }

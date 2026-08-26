@@ -13,6 +13,8 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	lottie "github.com/shibukawa/lottie-go"
+	lottiecp "github.com/shibukawa/lottie-go/plugin/physics/cp"
+	lottieresolv "github.com/shibukawa/lottie-go/plugin/physics/resolv"
 )
 
 // editorExtraKey names the member this editor stashes in a State's extra
@@ -62,10 +64,14 @@ type Model struct {
 	selectedInput int
 
 	// Collision editing (see hitbox.go). hideCollision is inverted so the
-	// zero value shows the overlay.
+	// zero value shows the overlay. The caches hold parsed plugin
+	// documents; the overlay reads them every frame.
 	hideCollision bool
 	selBox        int
 	selCPShape    int
+	trackCache    map[string]*lottieresolv.Track
+	cpBody        *lottiecp.Body
+	cpLoaded      bool
 
 	// generation counts every change the UI must redraw for, including
 	// selection; widgets hash it in WriteStateKey instead of the whole
@@ -90,6 +96,7 @@ func NewModel() *Model {
 		selectedInput: -1,
 		selBox:        -1,
 		selCPShape:    -1,
+		trackCache:    map[string]*lottieresolv.Track{},
 		dialog:        make(chan dialogResult, 1),
 	}
 	m.status = "New bundle. Import a clip to begin."
@@ -168,6 +175,7 @@ func (m *Model) Open(path string) {
 	m.selectedState, m.selectedTrans = "", -1
 	m.machineID, m.machine = "", nil
 	m.resetCollisionSelection()
+	m.resetCollisionCache()
 	m.generation++
 	if ids := b.StateMachineIDs(); len(ids) > 0 {
 		m.SelectMachine(ids[0])
@@ -230,6 +238,10 @@ func (m *Model) ImportClip(path string) {
 
 func (m *Model) RemoveClip(id string) {
 	m.bundle.RemoveAnimation(id)
+	// The clip's hitbox track goes with it; the core leaves extension
+	// files alone, so the cleanup is this editor's job.
+	lottieresolv.Remove(m.bundle, id)
+	delete(m.trackCache, id)
 	m.setStatus("removed clip %q", id)
 	m.generation++
 }

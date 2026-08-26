@@ -13,7 +13,8 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/vector"
 
-	lottie "github.com/shibukawa/lottie-go"
+	lottiecp "github.com/shibukawa/lottie-go/plugin/physics/cp"
+	lottieresolv "github.com/shibukawa/lottie-go/plugin/physics/resolv"
 )
 
 // Collision overlay and its panel. The overlay paints the stage's live
@@ -81,14 +82,14 @@ func drawCollisionOverlay(dst *ebiten.Image, m *Model, tr stageTransform, u floa
 	}
 }
 
-func drawActiveBox(dst *ebiten.Image, tr stageTransform, ab lottie.ActiveBox, stroke float32, selected bool, u float32) {
+func drawActiveBox(dst *ebiten.Image, tr stageTransform, ab lottieresolv.ActiveBox, stroke float32, selected bool, u float32) {
 	clr := tagColor(ab.Tags)
 	fill := withAlpha(clr, 0x40)
 	edge := withAlpha(clr, 0xe6)
 	if selected {
 		stroke *= 2
 	}
-	if ab.Kind == lottie.ResolvCircle {
+	if ab.Kind == lottieresolv.KindCircle {
 		cx, cy := tr.toScreen(ab.X, ab.Y)
 		r := float32(ab.R * tr.scale)
 		vector.DrawFilledCircle(dst, cx, cy, r, fill, true)
@@ -108,14 +109,14 @@ func drawActiveBox(dst *ebiten.Image, tr stageTransform, ab lottie.ActiveBox, st
 	}
 }
 
-func drawCPShape(dst *ebiten.Image, tr stageTransform, s lottie.CPShape, stroke float32, selected bool, u float32) {
+func drawCPShape(dst *ebiten.Image, tr stageTransform, s lottiecp.Shape, stroke float32, selected bool, u float32) {
 	fill := withAlpha(cpShapeColor, 0x30)
 	edge := withAlpha(cpShapeColor, 0xd0)
 	if selected {
 		stroke *= 2
 	}
 	switch s.Type {
-	case lottie.CPShapeCircle:
+	case lottiecp.ShapeCircle:
 		cx, cy := tr.toScreen(s.Center.X, s.Center.Y)
 		r := float32(s.Radius * tr.scale)
 		vector.DrawFilledCircle(dst, cx, cy, r, fill, true)
@@ -123,7 +124,7 @@ func drawCPShape(dst *ebiten.Image, tr stageTransform, s lottie.CPShape, stroke 
 		if selected {
 			drawHandle(dst, cx+r, cy, u)
 		}
-	case lottie.CPShapeBox:
+	case lottiecp.ShapeBox:
 		x, y := tr.toScreen(s.Center.X-s.Width/2, s.Center.Y-s.Height/2)
 		w := float32(s.Width * tr.scale)
 		h := float32(s.Height * tr.scale)
@@ -132,7 +133,7 @@ func drawCPShape(dst *ebiten.Image, tr stageTransform, s lottie.CPShape, stroke 
 		if selected {
 			drawHandle(dst, x+w, y+h, u)
 		}
-	case lottie.CPShapePolygon:
+	case lottiecp.ShapePolygon:
 		// The editor never authors polygons, but a hand-written one must
 		// still show; an outline is enough for that.
 		n := len(s.Vertices)
@@ -160,7 +161,7 @@ func handleSize(u float32) float32 { return max(6, u/3) }
 func handleAt(m *Model, tr stageTransform) (float32, float32, bool) {
 	if b := m.SelectedHitbox(); b != nil {
 		if sp := m.SelectedSpan(); sp != nil {
-			if b.Kind == lottie.ResolvCircle {
+			if b.Kind == lottieresolv.KindCircle {
 				cx, cy := tr.toScreen(sp.X, sp.Y)
 				return cx + float32(sp.R*tr.scale), cy, true
 			}
@@ -170,10 +171,10 @@ func handleAt(m *Model, tr stageTransform) (float32, float32, bool) {
 	}
 	if s := m.SelectedCPShape(); s != nil {
 		switch s.Type {
-		case lottie.CPShapeCircle:
+		case lottiecp.ShapeCircle:
 			cx, cy := tr.toScreen(s.Center.X, s.Center.Y)
 			return cx + float32(s.Radius*tr.scale), cy, true
-		case lottie.CPShapeBox:
+		case lottiecp.ShapeBox:
 			x, y := tr.toScreen(s.Center.X+s.Width/2, s.Center.Y+s.Height/2)
 			return x, y, true
 		}
@@ -191,7 +192,7 @@ func hitTestBoxes(m *Model, ax, ay float64) (int, bool) {
 	live := track.At(m.stageFrame())
 	for i := len(live) - 1; i >= 0; i-- {
 		ab := live[i]
-		if ab.Kind == lottie.ResolvCircle {
+		if ab.Kind == lottieresolv.KindCircle {
 			if (ax-ab.X)*(ax-ab.X)+(ay-ab.Y)*(ay-ab.Y) <= ab.R*ab.R {
 				return ab.Index, true
 			}
@@ -211,17 +212,17 @@ func hitTestCPShapes(m *Model, ax, ay float64) (int, bool) {
 	for i := len(shapes) - 1; i >= 0; i-- {
 		s := shapes[i]
 		switch s.Type {
-		case lottie.CPShapeCircle:
+		case lottiecp.ShapeCircle:
 			dx, dy := ax-s.Center.X, ay-s.Center.Y
 			if dx*dx+dy*dy <= s.Radius*s.Radius {
 				return i, true
 			}
-		case lottie.CPShapeBox:
+		case lottiecp.ShapeBox:
 			if ax >= s.Center.X-s.Width/2 && ax <= s.Center.X+s.Width/2 &&
 				ay >= s.Center.Y-s.Height/2 && ay <= s.Center.Y+s.Height/2 {
 				return i, true
 			}
-		case lottie.CPShapePolygon:
+		case lottiecp.ShapePolygon:
 			if pointInConvex(s.Vertices, ax, ay) {
 				return i, true
 			}
@@ -230,7 +231,7 @@ func hitTestCPShapes(m *Model, ax, ay float64) (int, bool) {
 	return 0, false
 }
 
-func pointInConvex(vs []lottie.PhysPoint, x, y float64) bool {
+func pointInConvex(vs []lottiecp.Point, x, y float64) bool {
 	n := len(vs)
 	if n < 3 {
 		return false
@@ -339,9 +340,9 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 	})
 
 	c.addRect.SetText("+Rect")
-	c.addRect.OnDown(func(context *guigui.Context) { m.AddHitbox(lottie.ResolvRect) })
+	c.addRect.OnDown(func(context *guigui.Context) { m.AddHitbox(lottieresolv.KindRect) })
 	c.addCircle.SetText("+Circle")
-	c.addCircle.OnDown(func(context *guigui.Context) { m.AddHitbox(lottie.ResolvCircle) })
+	c.addCircle.OnDown(func(context *guigui.Context) { m.AddHitbox(lottieresolv.KindCircle) })
 	c.delBox.SetText("Del")
 	c.delBox.OnDown(func(context *guigui.Context) { m.DeleteHitbox() })
 
@@ -396,9 +397,9 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 
 	label(&c.bodyLabel, fmt.Sprintf("body (%d)", len(m.CPBodyShapes())))
 	c.addCPCirc.SetText("+Circle")
-	c.addCPCirc.OnDown(func(context *guigui.Context) { m.AddCPShape(lottie.CPShapeCircle) })
+	c.addCPCirc.OnDown(func(context *guigui.Context) { m.AddCPShape(lottiecp.ShapeCircle) })
 	c.addCPBox.SetText("+Box")
-	c.addCPBox.OnDown(func(context *guigui.Context) { m.AddCPShape(lottie.CPShapeBox) })
+	c.addCPBox.OnDown(func(context *guigui.Context) { m.AddCPShape(lottiecp.ShapeBox) })
 	c.delCP.SetText("Del")
 	c.delCP.OnDown(func(context *guigui.Context) { m.DeleteCPShape() })
 

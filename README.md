@@ -227,39 +227,44 @@ The gallery samples come from the public-domain (CC0) `data/` set of
 [LottieFiles/test-files](https://github.com/LottieFiles/test-files); see
 [examples/gallery/assets/README.md](examples/gallery/assets/README.md).
 
-## Collision extensions
+## Collision plugins
 
-dotLottie says nothing about physics, so this package defines two
-tool-specific payloads stored inside the bundle, named after the engines
-they feed. The core stays dependency-free: the data types and queries live
-here, the engine wiring lives in two small adapter modules under
-`physics/`.
+dotLottie says nothing about physics, so collision data rides in the
+bundle under `extensions/` — a directory the core treats as opaque bytes
+and carries through any rewrite verbatim (`ExtensionFile` /
+`SetExtensionFile` are the raw accessors, and files from tools this build
+does not know survive untouched).
 
-**Rigid body silhouettes** (`extensions/physics/cp/`) are fixed shapes —
-circles, boxes, convex polygons — describing a character's physical
-outline, with friction, elasticity, and sensor flags. One definition per
-bundle serves every clip. The
-`github.com/shibukawa/lottie-go/physics/cp` module turns one into a
-[jakecoffman/cp](https://github.com/jakecoffman/cp) body:
+Meaning comes from static plugins: importing a plugin module is what
+enables reading and writing its payload, and a program that never imports
+one never links its code or its engine. There are two, named after the
+engines they feed:
+
+**`github.com/shibukawa/lottie-go/plugin/physics/cp`** — rigid body
+silhouettes (`extensions/physics/cp/`): fixed circles, boxes, and convex
+polygons describing a character's physical outline, with friction,
+elasticity, and sensor flags. One definition per bundle serves every clip,
+and it drops straight into a [jakecoffman/cp](https://github.com/jakecoffman/cp)
+space:
 
 ```go
-def, _ := b.CPBody("body")
+def, _ := lottiecp.Load(b, "body")
 body, _ := lottiecp.AddToSpace(space, def)   // *cp.Body, ready to position
 ```
 
-**Frame-stepped hitboxes** (`extensions/physics/resolv/`) are the
-fighting-game kind: named boxes carrying free-form tags — `hit`, `hurt`,
-`push` — each active over frame spans `[from, to)` with constant geometry
-per span. They are authored per animation and queried by frame and tag:
+**`github.com/shibukawa/lottie-go/plugin/physics/resolv`** — frame-stepped
+hitboxes (`extensions/physics/resolv/`), the fighting-game kind: named
+boxes carrying free-form tags — `hit`, `hurt`, `push` — each active over
+frame spans `[from, to)` with constant geometry per span. They are
+authored per animation and queried by frame and tag:
 
 ```go
-track, _ := b.ResolvTrack("attack")
+track, _ := lottieresolv.Load(b, "attack")
 for _, box := range track.At(player.Frame(), "hit") { ... }
 ```
 
-The `github.com/shibukawa/lottie-go/physics/resolv` module mirrors a track
-into a [SolarLune/resolv](https://github.com/SolarLune/resolv) space,
-inserting and removing shapes as spans start and end:
+or mirrored into a [SolarLune/resolv](https://github.com/SolarLune/resolv)
+space, with shapes inserted and removed as spans start and end:
 
 ```go
 tracker := lottieresolv.NewTracker(space, track)
@@ -272,11 +277,10 @@ func (g *Game) Update() error {
 }
 ```
 
-The bundled editor draws both over the stage and edits them there:
-dragging moves and resizes, the span row times when a box appears and
-disappears, and the tag line colors boxes by meaning (hit red, hurt green,
-push amber). Foreign files under `extensions/` pass through a rewrite
-untouched, like every other unmodeled member.
+The bundled editor imports both plugins and edits their data over the
+stage: dragging moves and resizes, the span row times when a box appears
+and disappears, and the tag line colors boxes by meaning (hit red, hurt
+green, push amber).
 
 ## Supported features
 
