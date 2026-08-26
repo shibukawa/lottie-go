@@ -878,3 +878,204 @@ func TestSeveralMachinesRunIndependently(t *testing.T) {
 		t.Error("the same clip decoded twice")
 	}
 }
+
+// twoWorldBundle is the case that motivates swapping: one character with a
+// separate animation set for land and for water, sharing the game's own
+// notion of speed.
+func twoWorldBundle(t *testing.T) *Bundle {
+	t.Helper()
+	b := NewBundle()
+	for _, id := range []string{"walk-anim", "swim-anim"} {
+		if err := b.SetAnimation(id, clipAnimation(30, "")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	machine := func(anim, extra string) []byte {
+		return []byte(`{"initial":"idle-state","states":[
+		  {"name":"idle-state","type":"PlaybackState","animation":"` + anim + `","loop":true,"autoplay":true,
+		   "transitions":[{"type":"Transition","toState":"move-state","guards":[
+		     {"type":"Numeric","inputName":"speed","conditionType":"GreaterThan","compareTo":0}]}]},
+		  {"name":"move-state","type":"PlaybackState","animation":"` + anim + `","loop":true,"autoplay":true}],
+		  "inputs":[{"type":"Numeric","name":"speed","value":0}` + extra + `]}`)
+	}
+	for _, m := range []struct{ id, anim, extra string }{
+		{"land", "walk-anim", ""},
+		{"water", "swim-anim", `,{"type":"Numeric","name":"depth","value":5}`},
+	} {
+		sm, err := ParseStateMachine(machine(m.anim, m.extra))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := b.SetStateMachine(m.id, sm); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return b
+}
+
+// Swapping machines changes the whole animation set at once, and the game's
+// own values come along: whatever speed was, it still is.
+func TestSetMachineCarriesValueInputs(t *testing.T) {
+	b := twoWorldBundle(t)
+	p, err := b.NewStateMachinePlayer("land")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Set("speed", 4.0)
+	p.Update()
+	if p.State() != "move-state" {
+		t.Fatalf("State() = %q; want move-state", p.State())
+	}
+
+	if err := p.SetMachine("water"); err != nil {
+		t.Fatal(err)
+	}
+	if p.MachineID() != "water" {
+		t.Errorf("MachineID() = %q; want water", p.MachineID())
+	}
+	// The world did not change under the game's feet.
+	if v, ok := p.Get[float64]("speed"); !ok || v != 4 {
+		t.Errorf("speed = %v, %v; want it carried over", v, ok)
+	}
+	// The new machine enters its initial state and settles against that
+	// carried value straight away, so a character that was moving keeps
+	// moving instead of showing a frame of idle it never really was in.
+	if p.State() != "move-state" {
+		t.Errorf("State() = %q; the carried speed should settle it into move-state on entry", p.State())
+	}
+	// And it is playing the other set's clip.
+	swim, _ := b.Animation("swim-anim")
+	if p.Player().Animation() != swim {
+		t.Error("the swapped machine is not playing its own clip")
+	}
+}
+
+// An input only the new machine declares starts from its declared value.
+func TestSetMachineUsesDeclaredValueForNewInputs(t *testing.T) {
+	b := twoWorldBundle(t)
+	p, err := b.NewStateMachinePlayer("land")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := p.Get[float64]("depth"); ok {
+		t.Fatal("land declares no depth")
+	}
+	if err := p.SetMachine("water"); err != nil {
+		t.Fatal(err)
+	}
+	if v, ok := p.Get[float64]("depth"); !ok || v != 5 {
+		t.Errorf("depth = %v, %v; want the water machine's declared 5", v, ok)
+	}
+}
+
+// Events are momentary: one fired at the machine being left does not arrive
+// at the one being swapped in.
+func TestSetMachineDropsPendingEvents(t *testing.T) {
+	b := NewBundle()
+	if err := b.SetAnimation("a-anim", clipAnimation(30, "")); err != nil {
+		t.Fatal(err)
+	}
+	doc := `{"initial":"idle-state","states":[
+	  {"name":"idle-state","type":"PlaybackState","animation":"a-anim","loop":true,"autoplay":true,
+	   "transitions":[{"type":"Transition","toState":"go-state","guards":[{"type":"Event","inputName":"go"}]}]},
+	  {"name":"go-state","type":"PlaybackState","animation":"a-anim","loop":true,"autoplay":true}],
+	  "inputs":[{"type":"Event","name":"go"}]}`
+	for _, id := range []string{"one", "two"} {
+		sm, err := ParseStateMachine([]byte(doc))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := b.SetStateMachine(id, sm); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p, err := b.NewStateMachinePlayer("one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Fire("go") // queued for the next Update, but we swap first
+	if err := p.SetMachine("two"); err != nil {
+		t.Fatal(err)
+	}
+	p.Update()
+	if p.State() != "idle-state" {
+		t.Errorf("State() = %q; an event fired at the old machine arrived at the new one", p.State())
+	}
+}
+
+// An empty id takes what the manifest names, the way DecodeDotLottie does.
+func TestNewStateMachinePlayerHonoursTheManifest(t *testing.T) {
+	b := twoWorldBundle(t)
+	b.Manifest().Initial = &ManifestInitial{StateMachine: "water"}
+	p, err := b.NewStateMachinePlayer("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.MachineID() != "water" {
+		t.Errorf("MachineID() = %q; want the manifest's water", p.MachineID())
+	}
+}
+
+// With nothing named, the first listed wins.
+func TestNewStateMachinePlayerFallsBackToTheFirst(t *testing.T) {
+	b := twoWorldBundle(t)
+	p, err := b.NewStateMachinePlayer("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := b.StateMachineIDs()[0]; p.MachineID() != want {
+		t.Errorf("MachineID() = %q; want %q", p.MachineID(), want)
+	}
+}
+
+func TestNewStateMachinePlayerWithNoMachines(t *testing.T) {
+	b := NewBundle()
+	if err := b.SetAnimation("a-anim", clipAnimation(10, "")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.NewStateMachinePlayer(""); err == nil {
+		t.Error("a bundle with no machines produced a player")
+	}
+}
+
+// A failed swap leaves the player running what it was.
+func TestSetMachineRejectsUnknownID(t *testing.T) {
+	b := twoWorldBundle(t)
+	p, err := b.NewStateMachinePlayer("land")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Set("speed", 4.0)
+	if err := p.SetMachine("nope"); err == nil {
+		t.Fatal("SetMachine accepted an unknown id")
+	}
+	if p.MachineID() != "land" {
+		t.Errorf("MachineID() = %q; a failed swap changed the machine", p.MachineID())
+	}
+	if v, _ := p.Get[float64]("speed"); v != 4 {
+		t.Errorf("speed = %v; a failed swap disturbed the inputs", v)
+	}
+	p.Update()
+	if p.State() == "" {
+		t.Error("the player stopped running after a failed swap")
+	}
+}
+
+// Without a carried value satisfying anything, a swapped-in machine sits at
+// its initial state.
+func TestSetMachineEntersTheInitialStateWhenNothingApplies(t *testing.T) {
+	b := twoWorldBundle(t)
+	p, err := b.NewStateMachinePlayer("land")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.State() != "idle-state" {
+		t.Fatalf("State() = %q", p.State())
+	}
+	if err := p.SetMachine("water"); err != nil {
+		t.Fatal(err)
+	}
+	if p.State() != "idle-state" {
+		t.Errorf("State() = %q; want idle-state with speed still 0", p.State())
+	}
+}

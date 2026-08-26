@@ -106,6 +106,24 @@ func (g *Game) Draw(screen *ebiten.Image) {
 }
 ```
 
+A bundle may hold several machines. `NewStateMachinePlayer("")` takes the one
+the manifest names as initial, or the first listed. `SetMachine` swaps
+another in, which is how a game changes a character's whole animation set at
+once — surfacing from underwater onto land:
+
+```go
+sm, _ := b.NewStateMachinePlayer("")   // or a specific id
+sm.SetMachine("underwater")
+```
+
+The new machine starts at its own initial state, but **value inputs carry
+over by name**: they describe the game's world, not the machine, so whatever
+`speed` or `grounded` were, they still are — and the machine settles against
+them on entry rather than showing a frame it was never really in. Events do
+not carry; one fired at the machine being left is dropped. This is a
+lottie-go convenience, not part of the dotLottie schema, and it changes
+nothing about the document.
+
 `Fire` queues an event for the next `Update`, so calling it from anywhere in
 a frame is safe. An event is consumed by the transition that takes it, so one
 `Fire` moves one step.

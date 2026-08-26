@@ -29,8 +29,9 @@ const maxTransitionsPerUpdate = 16
 // A StateMachinePlayer is not safe for concurrent use; drive it from the
 // game's Update/Draw loop.
 type StateMachinePlayer struct {
-	bundle *Bundle
-	sm     *StateMachine
+	bundle    *Bundle
+	sm        *StateMachine
+	machineID string
 
 	current *State
 	player  *Player
@@ -49,40 +50,100 @@ type StateMachinePlayer struct {
 	err         error
 }
 
-// NewStateMachinePlayer starts the state machine with the given id. It
-// enters the machine's initial state, so the returned player is already
+// NewStateMachinePlayer starts the state machine with the given id. An empty
+// id takes the one the manifest names as initial, or the first listed, the
+// same way DecodeDotLottie picks an animation.
+//
+// It enters the machine's initial state, so the returned player is already
 // showing something.
 func (b *Bundle) NewStateMachinePlayer(id string) (*StateMachinePlayer, error) {
-	sm, err := b.StateMachine(id)
-	if err != nil {
-		return nil, err
-	}
 	m := &StateMachinePlayer{
 		bundle:      b,
-		sm:          sm,
-		inputs:      make(map[string]json.RawMessage, len(sm.Inputs)),
+		inputs:      map[string]json.RawMessage{},
 		pending:     map[string]bool{},
 		active:      map[string]bool{},
 		unsupported: map[string]struct{}{},
 	}
-	for _, f := range sm.UnsupportedFeatures() {
-		m.unsupported[f] = struct{}{}
+	if id == "" {
+		var ok bool
+		id, ok = b.initialMachineID()
+		if !ok {
+			return nil, fmt.Errorf("lottie: bundle holds no state machines")
+		}
 	}
+	if err := m.SetMachine(id); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// initialMachineID is the machine a player loads when none is named: the
+// manifest's choice, or the first listed.
+func (b *Bundle) initialMachineID() (string, bool) {
+	if in := b.manifest.Initial; in != nil && in.StateMachine != "" {
+		return in.StateMachine, true
+	}
+	if ids := b.StateMachineIDs(); len(ids) > 0 {
+		return ids[0], true
+	}
+	return "", false
+}
+
+// MachineID is the id of the machine currently running.
+func (m *StateMachinePlayer) MachineID() string { return m.machineID }
+
+// SetMachine swaps in another of the bundle's machines, which is how a game
+// changes a character's whole animation set at once — surfacing from
+// underwater onto land, say.
+//
+// The new machine starts at its own initial state. Value inputs carry over
+// by name, since they describe the game's world rather than the machine:
+// whatever "speed" or "grounded" were, they still are. An input the new
+// machine declares but the old one did not gets its declared value. Events
+// do not carry: they are momentary, and any that were fired but not yet
+// consumed belonged to the machine being left.
+//
+// This is a lottie-go convenience, not part of the dotLottie schema, which
+// has no action for it. It changes nothing about the document.
+func (m *StateMachinePlayer) SetMachine(id string) error {
+	sm, err := m.bundle.StateMachine(id)
+	if err != nil {
+		return err
+	}
+	if sm.Initial == "" {
+		return fmt.Errorf("lottie: state machine %q has no initial state", id)
+	}
+
+	carried := m.inputs
+	m.sm, m.machineID = sm, id
+	m.inputs = make(map[string]json.RawMessage, len(sm.Inputs))
 	for _, in := range sm.Inputs {
-		if in.Type != InputEvent && len(in.Value) > 0 {
+		if in.Type == InputEvent {
+			continue
+		}
+		if v, ok := carried[in.Name]; ok {
+			m.inputs[in.Name] = v
+			continue
+		}
+		if len(in.Value) > 0 {
 			m.inputs[in.Name] = in.Value
 		}
 	}
-	if sm.Initial == "" {
-		return nil, fmt.Errorf("lottie: state machine %q has no initial state", id)
+	clear(m.pending)
+	clear(m.active)
+	m.current, m.err = nil, nil
+	clear(m.unsupported)
+	for _, f := range sm.UnsupportedFeatures() {
+		m.unsupported[f] = struct{}{}
 	}
+
 	if !m.enter(sm.Initial) {
-		return nil, m.err
+		return m.err
 	}
 	// The initial state may be a GlobalState, or may have an unconditional
-	// transition out of it; settle before handing the player back.
+	// transition out of it; settle before handing control back.
 	m.step()
-	return m, nil
+	return nil
 }
 
 // Definition returns the document this player runs. Treat it as read-only

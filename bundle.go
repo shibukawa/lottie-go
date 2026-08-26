@@ -319,13 +319,10 @@ func (b *Bundle) InitialAnimation() (*Animation, error) {
 // initial, falling back to the first one listed. It reports false when the
 // bundle has none.
 func (b *Bundle) InitialStateMachine() (*StateMachine, bool, error) {
-	id := ""
-	if in := b.manifest.Initial; in != nil && in.StateMachine != "" {
-		id = in.StateMachine
-	} else if ids := b.StateMachineIDs(); len(ids) > 0 {
-		id = ids[0]
-	}
-	if id == "" {
+	// Shares initialMachineID with NewStateMachinePlayer so the two cannot
+	// disagree about which machine "initial" means.
+	id, ok := b.initialMachineID()
+	if !ok {
 		return nil, false, nil
 	}
 	s, err := b.StateMachine(id)
