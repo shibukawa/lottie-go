@@ -131,8 +131,8 @@ func TestCPBodyAuthoring(t *testing.T) {
 	}
 	r := s.Radius
 	m.DragCPShapeHandle(3, 0)
-	if s.Radius != r+3 {
-		t.Fatalf("resize: got %v, want %v", s.Radius, r+3)
+	if s.Radius != round2(r+3) {
+		t.Fatalf("resize: got %v, want %v", s.Radius, round2(r+3))
 	}
 
 	m.DeleteCPShape()

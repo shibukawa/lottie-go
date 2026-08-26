@@ -210,12 +210,12 @@ func (m *Model) AddHitbox(kind lottieresolv.Kind) {
 	switch kind {
 	case lottieresolv.KindCircle:
 		span.X, span.Y = float64(w)/2, float64(h)/2
-		span.R = float64(min(w, h)) / 8
+		span.R = round2(float64(min(w, h)) / 8)
 	case lottieresolv.KindWindow:
 		// A pure timed flag; there is no geometry to place.
 	default:
-		span.W, span.H = float64(w)/4, float64(h)/4
-		span.X, span.Y = float64(w)/2-span.W/2, float64(h)/2-span.H/2
+		span.W, span.H = round2(float64(w)/4), round2(float64(h)/4)
+		span.X, span.Y = round2(float64(w)/2-span.W/2), round2(float64(h)/2-span.H/2)
 	}
 	names := make([]string, 0, len(t.Boxes))
 	for _, b := range t.Boxes {
@@ -440,14 +440,19 @@ func (m *Model) NormalizeSpans(box int) {
 	m.touchTrack()
 }
 
+// round2 keeps dragged values to centipixel precision: cursor deltas
+// divided by the stage scale otherwise leave fifteen-digit fractions in
+// the saved JSON and the inspector fields.
+func round2(v float64) float64 { return math.Round(v*100) / 100 }
+
 // DragHitbox moves the current span by a delta in animation coordinates.
 func (m *Model) DragHitbox(dx, dy float64) {
 	sp := m.SelectedSpan()
 	if sp == nil {
 		return
 	}
-	sp.X += dx
-	sp.Y += dy
+	sp.X = round2(sp.X + dx)
+	sp.Y = round2(sp.Y + dy)
 	m.touchTrack()
 }
 
@@ -460,10 +465,10 @@ func (m *Model) DragHitboxHandle(dx, dy float64) {
 		return
 	}
 	if b.Kind == lottieresolv.KindCircle {
-		sp.R = max(1, sp.R+dx)
+		sp.R = round2(max(1, sp.R+dx))
 	} else {
-		sp.W = max(1, sp.W+dx)
-		sp.H = max(1, sp.H+dy)
+		sp.W = round2(max(1, sp.W+dx))
+		sp.H = round2(max(1, sp.H+dy))
 	}
 	m.touchTrack()
 }
@@ -550,9 +555,9 @@ func (m *Model) AddCPShape(kind lottiecp.ShapeType) {
 		Friction: 0.7,
 	}
 	if kind == lottiecp.ShapeCircle {
-		s.Radius = float64(min(w, h)) / 6
+		s.Radius = round2(float64(min(w, h)) / 6)
 	} else {
-		s.Width, s.Height = float64(w)/4, float64(h)/3
+		s.Width, s.Height = round2(float64(w)/4), round2(float64(h)/3)
 	}
 	body.Shapes = append(body.Shapes, s)
 	m.selCPShape, m.selBox = len(body.Shapes)-1, -1
@@ -580,12 +585,12 @@ func (m *Model) DragCPShape(dx, dy float64) {
 	}
 	if s.Type == lottiecp.ShapePolygon {
 		for i := range s.Vertices {
-			s.Vertices[i].X += dx
-			s.Vertices[i].Y += dy
+			s.Vertices[i].X = round2(s.Vertices[i].X + dx)
+			s.Vertices[i].Y = round2(s.Vertices[i].Y + dy)
 		}
 	} else {
-		s.Center.X += dx
-		s.Center.Y += dy
+		s.Center.X = round2(s.Center.X + dx)
+		s.Center.Y = round2(s.Center.Y + dy)
 	}
 	m.touchCPBody()
 }
@@ -597,10 +602,10 @@ func (m *Model) DragCPShapeHandle(dx, dy float64) {
 	}
 	switch s.Type {
 	case lottiecp.ShapeCircle:
-		s.Radius = max(1, s.Radius+dx)
+		s.Radius = round2(max(1, s.Radius+dx))
 	case lottiecp.ShapeBox:
-		s.Width = max(1, s.Width+dx*2)
-		s.Height = max(1, s.Height+dy*2)
+		s.Width = round2(max(1, s.Width+dx*2))
+		s.Height = round2(max(1, s.Height+dy*2))
 	}
 	m.touchCPBody()
 }
@@ -622,8 +627,8 @@ func (m *Model) DragSocket(dx, dy float64) {
 	// Inverse of the placement's rotate-and-scale, so the on-screen drag
 	// lands exactly under the cursor.
 	sin, cos := math.Sincos(pl.Angle)
-	s.DX += (cos*dx + sin*dy) / pl.ScaleX
-	s.DY += (-sin*dx + cos*dy) / pl.ScaleY
+	s.DX = round2(s.DX + (cos*dx+sin*dy)/pl.ScaleX)
+	s.DY = round2(s.DY + (-sin*dx+cos*dy)/pl.ScaleY)
 	m.touchSockets()
 }
 
