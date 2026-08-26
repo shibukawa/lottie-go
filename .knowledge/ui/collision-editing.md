@@ -19,7 +19,7 @@ ui:
     kind: rows
     id: rows.collision
     children:
-      - {kind: checkbox, id: chk.show, state: overlay visibility}
+      - note: overlay visibility moved to the stage's own top-right corner — three independent toggles (hit / body / sock), gated by the physics config like their groups
       - {kind: select, id: sel.box, state: "N: name per box in the stage clip's track"}
       - {kind: button, label: +Rect / +Circle, action: add hitbox with span at playhead, mid-stage}
       - {kind: button, label: +Win, action: add geometry-less window box; shares tag/span editing, never drawn on stage}
@@ -40,6 +40,8 @@ ui:
     kind: canvas
     id: chart.spans
     state: one row per hitbox/window, spans as tag-colored bars (windows hollow), shared playhead, frame ruler; selected row highlighted; hidden rows when physics config disables resolv
+    state: plot shares the scrub timeline's exact horizontal extent (same gutter and right pad), so a frame sits at one x on both; the played range (segment) shows as a band in the header
+    state: span edits clamp to the clip's frame extent — nothing places beyond the last frame
     action: bar drag moves a span, edge drag retimes, header/empty-row drag scrubs, any touch pauses; transport buttons (play/pause, ±1 frame) in the gutter
     state: row label click selects the box; parameters edit in the inspector
 selection: hitbox and body-shape selection mutually exclusive; one thing drags at a time

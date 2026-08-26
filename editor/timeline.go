@@ -107,9 +107,11 @@ func stageDocRange(m *Model) (float64, float64, bool) {
 	return lo, hi, true
 }
 
+// trackRect shares the chart's horizontal extent (gutter to right pad),
+// so a frame sits at the same x on both rulers.
 func (t *timelineView) trackRect(context *guigui.Context, bounds image.Rectangle) image.Rectangle {
 	u := basicwidget.UnitSize(context)
-	return image.Rect(bounds.Min.X+u/2, bounds.Min.Y+u/3,
+	return image.Rect(bounds.Min.X+chartGutter(u), bounds.Min.Y+u/3,
 		bounds.Max.X-u/2, bounds.Min.Y+u/3+u/2)
 }
 

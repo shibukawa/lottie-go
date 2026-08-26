@@ -399,6 +399,47 @@ func TestChartSpanOps(t *testing.T) {
 	if b.Spans[0].From != 0 {
 		t.Fatalf("left edge min width: %+v", b.Spans[0])
 	}
+
+	// Nothing lands beyond the clip's last frame (60 here): shifting far
+	// right parks the span against the end, and the right edge cannot
+	// cross it either.
+	m.ShiftSpan(0, 1, 1000)
+	if b.Spans[1].From != 50 || b.Spans[1].To != 60 {
+		t.Fatalf("clamp at clip end: %+v", b.Spans[1])
+	}
+	m.SetSpanEdge(0, 1, true, 999)
+	if b.Spans[1].To != 60 {
+		t.Fatalf("right edge clamp: %+v", b.Spans[1])
+	}
+}
+
+// New boxes and spans clamp to the clip too: a span started near the end
+// must not spill past it.
+func TestAddSpanClampsToClip(t *testing.T) {
+	m := stageModel(t)
+	m.PreviewSeek(58)
+	m.AddHitbox(lottieresolv.KindRect)
+	sp := m.SelectedHitbox().Spans[0]
+	if sp.From != 58 || sp.To != 60 {
+		t.Fatalf("span at clip end: %+v", sp)
+	}
+}
+
+// Each overlay group toggles on its own.
+func TestOverlayToggles(t *testing.T) {
+	m := stageModel(t)
+	if !m.ShowHitboxes() || !m.ShowBody() || !m.ShowSockets() || !m.OverlayVisible() {
+		t.Fatal("everything should show by default")
+	}
+	m.SetShowHitboxes(false)
+	m.SetShowBody(false)
+	if !m.OverlayVisible() {
+		t.Fatal("sockets still show, so the overlay stays on")
+	}
+	m.SetShowSockets(false)
+	if m.OverlayVisible() {
+		t.Fatal("all off should disable the overlay")
+	}
 }
 
 // Dropping a clip drops its hitbox track too: that cleanup moved from the

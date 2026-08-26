@@ -167,8 +167,17 @@ func (c *chartView) Draw(context *guigui.Context, widgetBounds *guigui.WidgetBou
 	rows := chartRows(m)
 	rowTop := func(i int) float32 { return float32(b.Min.Y + u + i*rowH) }
 
-	// Header ruler with a tick every 10 frames while they stay legible.
+	// The band is the range actually being played — the segment when one
+	// is on stage — mirroring the scrub timeline above, whose ruler this
+	// chart shares pixel for pixel. Spans outside it belong to other
+	// segments of the same file.
 	ruleY := float32(b.Min.Y + u*3/4)
+	if p := m.PreviewPlayer(); p != nil {
+		start, end := p.Range()
+		vector.DrawFilledRect(dst, x(start), float32(b.Min.Y)+float32(u)/4,
+			x(end)-x(start), ruleY-float32(b.Min.Y)-float32(u)/4, pal.band, false)
+	}
+	// Header ruler with a tick every 10 frames while they stay legible.
 	vector.StrokeLine(dst, float32(plot.Min.X), ruleY, float32(plot.Max.X), ruleY,
 		1, pal.tick, false)
 	if step := 10.0; x(step)-x(0) > 4 {

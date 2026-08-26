@@ -125,13 +125,87 @@ func (p *previewPane) Layout(context *guigui.Context, widgetBounds *guigui.Widge
 
 // previewStage renders whatever the preview is showing, scaled to fit. The
 // collision overlay is drawn and dragged here: what you grab is the shape
-// at the pixel you see.
+// at the pixel you see. The overlay visibility toggles sit in the stage's
+// own top-right corner — they change what this widget shows, so they live
+// on it, apart from the authoring strip below.
 type previewStage struct {
 	guigui.DefaultWidget
+
+	hitLbl    basicwidget.Text
+	hitCheck  basicwidget.Checkbox
+	bodyLbl   basicwidget.Text
+	bodyCheck basicwidget.Checkbox
+	sockLbl   basicwidget.Text
+	sockCheck basicwidget.Checkbox
 
 	dragMode   stageDrag
 	dragCP     bool // dragging a body shape rather than a hitbox
 	lastCursor image.Point
+}
+
+func (s *previewStage) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
+	m := s.model(context)
+	if m == nil {
+		return nil
+	}
+	if m.ResolvEnabled() {
+		adder.AddWidget(&s.hitLbl)
+		adder.AddWidget(&s.hitCheck)
+	}
+	if m.CPEnabled() {
+		adder.AddWidget(&s.bodyLbl)
+		adder.AddWidget(&s.bodyCheck)
+	}
+	adder.AddWidget(&s.sockLbl)
+	adder.AddWidget(&s.sockCheck)
+
+	label(&s.hitLbl, "hit")
+	label(&s.bodyLbl, "body")
+	label(&s.sockLbl, "sock")
+	for _, l := range []*basicwidget.Text{&s.hitLbl, &s.bodyLbl, &s.sockLbl} {
+		l.SetScale(0.8)
+		l.SetHorizontalAlign(basicwidget.HorizontalAlignEnd)
+		context.SetPassthrough(l, true)
+	}
+	s.hitCheck.SetValue(m.ShowHitboxes())
+	s.hitCheck.OnValueChanged(func(context *guigui.Context, v bool) { m.SetShowHitboxes(v) })
+	s.bodyCheck.SetValue(m.ShowBody())
+	s.bodyCheck.OnValueChanged(func(context *guigui.Context, v bool) { m.SetShowBody(v) })
+	s.sockCheck.SetValue(m.ShowSockets())
+	s.sockCheck.OnValueChanged(func(context *guigui.Context, v bool) { m.SetShowSockets(v) })
+	return nil
+}
+
+// Layout stacks the toggle groups in from the top-right corner.
+func (s *previewStage) Layout(context *guigui.Context, widgetBounds *guigui.WidgetBounds, layouter *guigui.ChildLayouter) {
+	m := s.model(context)
+	if m == nil {
+		return
+	}
+	u := basicwidget.UnitSize(context)
+	b := widgetBounds.Bounds()
+	x := b.Max.X - u/4
+	y := b.Min.Y + u/4
+	place := func(lbl *basicwidget.Text, chk *basicwidget.Checkbox, lblW int) {
+		x -= u
+		layouter.LayoutWidget(chk, image.Rect(x, y, x+u, y+u))
+		x -= lblW
+		layouter.LayoutWidget(lbl, image.Rect(x, y, x+lblW, y+u))
+		x -= u / 4
+	}
+	place(&s.sockLbl, &s.sockCheck, 3*u/2)
+	if m.CPEnabled() {
+		place(&s.bodyLbl, &s.bodyCheck, 3*u/2)
+	}
+	if m.ResolvEnabled() {
+		place(&s.hitLbl, &s.hitCheck, u)
+	}
+}
+
+func (s *previewStage) WriteStateKey(context *guigui.Context, w *guigui.StateKeyWriter) {
+	if m := s.model(context); m != nil {
+		w.WriteInt(m.Generation())
+	}
 }
 
 type stageDrag int
@@ -205,7 +279,7 @@ func (s *previewStage) Draw(context *guigui.Context, widgetBounds *guigui.Widget
 	op.GeoM.Scale(tr.scale, tr.scale)
 	op.GeoM.Translate(tr.ox, tr.oy)
 	m.PreviewDraw(dst, &op)
-	if m.ShowCollision() {
+	if m.OverlayVisible() {
 		drawCollisionOverlay(dst, m, tr, float32(basicwidget.UnitSize(context)))
 	}
 }
@@ -214,7 +288,7 @@ func (s *previewStage) Draw(context *guigui.Context, widgetBounds *guigui.Widget
 // inside a shape moves it, the white grip resizes, empty stage deselects.
 func (s *previewStage) HandlePointingInput(context *guigui.Context, widgetBounds *guigui.WidgetBounds) guigui.HandleInputResult {
 	m := s.model(context)
-	if m == nil || !m.ShowCollision() {
+	if m == nil || !m.OverlayVisible() {
 		return guigui.HandleInputResult{}
 	}
 	tr, ok := s.transform(m, widgetBounds.Bounds())
@@ -286,7 +360,7 @@ func (s *previewStage) CursorShape(context *guigui.Context, widgetBounds *guigui
 		return ebiten.CursorShapeNWSEResize, true
 	}
 	m := s.model(context)
-	if m == nil || !m.ShowCollision() || !widgetBounds.IsHitAtCursor() {
+	if m == nil || !m.OverlayVisible() || !widgetBounds.IsHitAtCursor() {
 		return 0, false
 	}
 	tr, ok := s.transform(m, widgetBounds.Bounds())

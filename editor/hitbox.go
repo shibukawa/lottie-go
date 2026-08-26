@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"sort"
 	"strings"
@@ -99,11 +100,48 @@ func (m *Model) touchTrack() {
 	m.generation++
 }
 
-func (m *Model) ShowCollision() bool { return !m.hideCollision }
+// The overlay groups toggle independently: tuning hitboxes with the body
+// and sockets in the way (or the reverse) was the annoyance.
 
-func (m *Model) SetShowCollision(v bool) {
-	m.hideCollision = !v
+func (m *Model) ShowHitboxes() bool { return !m.hideHitboxes }
+
+func (m *Model) SetShowHitboxes(v bool) {
+	m.hideHitboxes = !v
 	m.generation++
+}
+
+func (m *Model) ShowBody() bool { return !m.hideBody }
+
+func (m *Model) SetShowBody(v bool) {
+	m.hideBody = !v
+	m.generation++
+}
+
+func (m *Model) ShowSockets() bool { return !m.hideSockets }
+
+func (m *Model) SetShowSockets(v bool) {
+	m.hideSockets = !v
+	m.generation++
+}
+
+// OverlayVisible reports whether any overlay group shows, which is what
+// the stage checks before drawing or hit-testing at all.
+func (m *Model) OverlayVisible() bool {
+	return m.ShowHitboxes() || m.ShowBody() || m.ShowSockets()
+}
+
+// stageFrameLimit is the last meaningful frame of the stage animation;
+// spans beyond it can never be live, so edits clamp against it.
+func (m *Model) stageFrameLimit() float64 {
+	anim := m.PreviewAnimation()
+	if anim == nil {
+		return math.MaxFloat64
+	}
+	total := anim.Duration().Seconds() * anim.FrameRate()
+	for _, mk := range anim.Markers() {
+		total = max(total, mk.End)
+	}
+	return total
 }
 
 // ---- hitbox selection ----
@@ -153,7 +191,7 @@ func (m *Model) AddHitbox(kind lottieresolv.Kind) {
 	if p := m.PreviewPlayer(); p != nil {
 		frame = p.Frame()
 	}
-	span := lottieresolv.Span{From: frame, To: frame + 10}
+	span := lottieresolv.Span{From: frame, To: min(frame+10, max(m.stageFrameLimit(), frame+1))}
 	switch kind {
 	case lottieresolv.KindCircle:
 		span.X, span.Y = float64(w)/2, float64(h)/2
@@ -268,7 +306,7 @@ func (m *Model) AddHitboxSpan() {
 		m.generation++
 		return
 	}
-	span := lottieresolv.Span{From: frame, To: frame + 10}
+	span := lottieresolv.Span{From: frame, To: min(frame+10, max(m.stageFrameLimit(), frame+1))}
 	src := -1
 	for i := range b.Spans {
 		if b.Spans[i].From <= frame && (src < 0 || b.Spans[i].From > b.Spans[src].From) {
@@ -354,6 +392,10 @@ func (m *Model) ShiftSpan(box, span int, delta float64) {
 		sp.To -= sp.From
 		sp.From = 0
 	}
+	if limit := m.stageFrameLimit(); sp.To > limit {
+		sp.From = max(0, sp.From-(sp.To-limit))
+		sp.To = limit
+	}
 	m.touchTrack()
 }
 
@@ -366,7 +408,7 @@ func (m *Model) SetSpanEdge(box, span int, right bool, frame float64) {
 		return
 	}
 	if right {
-		sp.To = max(frame, sp.From+1)
+		sp.To = min(max(frame, sp.From+1), max(m.stageFrameLimit(), sp.From+1))
 	} else {
 		sp.From = max(0, min(frame, sp.To-1))
 	}

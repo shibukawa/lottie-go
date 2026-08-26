@@ -76,18 +76,18 @@ func (t stageTransform) toAnim(x, y int) (float64, float64) {
 // smallest marks and must not drown.
 func drawCollisionOverlay(dst *ebiten.Image, m *Model, tr stageTransform, u float32) {
 	stroke := max(1, u/12)
-	if m.CPEnabled() {
+	if m.CPEnabled() && m.ShowBody() {
 		for i, s := range m.CPBodyShapes() {
 			drawCPShape(dst, tr, s, stroke, i == m.SelectedCPShapeIndex(), u)
 		}
 	}
 	frame := m.stageFrame()
-	if track := m.StageTrack(); track != nil && m.ResolvEnabled() {
+	if track := m.StageTrack(); track != nil && m.ResolvEnabled() && m.ShowHitboxes() {
 		for _, ab := range track.At(frame) {
 			drawActiveBox(dst, tr, ab, stroke, ab.Index == m.SelectedHitboxIndex(), u)
 		}
 	}
-	if anim := m.PreviewAnimation(); anim != nil {
+	if anim := m.PreviewAnimation(); anim != nil && m.ShowSockets() {
 		for i, sock := range m.Sockets() {
 			pl, ok := anim.LayerPlacement(sock.LayerName(), frame)
 			if !ok {
@@ -222,7 +222,7 @@ func handleAt(m *Model, tr stageTransform) (float32, float32, bool) {
 // point. Later boxes draw later, so they win.
 func hitTestBoxes(m *Model, ax, ay float64) (int, bool) {
 	track := m.StageTrack()
-	if track == nil || !m.ResolvEnabled() {
+	if track == nil || !m.ResolvEnabled() || !m.ShowHitboxes() {
 		return 0, false
 	}
 	live := track.At(m.stageFrame())
@@ -244,7 +244,7 @@ func hitTestBoxes(m *Model, ax, ay float64) (int, bool) {
 // hitTestCPShapes returns the topmost body shape under an animation-space
 // point.
 func hitTestCPShapes(m *Model, ax, ay float64) (int, bool) {
-	if !m.CPEnabled() {
+	if !m.CPEnabled() || !m.ShowBody() {
 		return 0, false
 	}
 	shapes := m.CPBodyShapes()
@@ -298,8 +298,7 @@ func pointInConvex(vs []lottiecp.Point, x, y float64) bool {
 type collisionPanel struct {
 	guigui.DefaultWidget
 
-	showLabel basicwidget.Text
-	showCheck basicwidget.Checkbox
+	hbLabel   basicwidget.Text
 	boxCombo  basicwidget.Select[int]
 	addRect   basicwidget.Button
 	addCircle basicwidget.Button
@@ -339,11 +338,12 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 		return nil
 	}
 	// Parameters of the selected item (name, tags, span, material, z) are
-	// edited in the inspector; this strip only adds, selects, and deletes.
-	// The config's physics switch decides which groups exist at all.
-	widgets := []guigui.Widget{&c.showLabel, &c.showCheck}
+	// edited in the inspector, and the visibility toggles sit on the stage
+	// itself; this strip only adds, selects, and deletes. The config's
+	// physics switch decides which groups exist at all.
+	var widgets []guigui.Widget
 	if m.ResolvEnabled() {
-		widgets = append(widgets, &c.boxCombo, &c.addRect, &c.addCircle, &c.addWin, &c.delBox)
+		widgets = append(widgets, &c.hbLabel, &c.boxCombo, &c.addRect, &c.addCircle, &c.addWin, &c.delBox)
 	}
 	if m.CPEnabled() {
 		widgets = append(widgets, &c.bodyLabel, &c.addCPCirc, &c.addCPBox, &c.delCP)
@@ -355,12 +355,7 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 
 	onStage := m.StageAnimID() != ""
 
-	label(&c.showLabel, "hitboxes")
-	c.showCheck.SetValue(m.ShowCollision())
-	c.showCheck.OnValueChanged(func(context *guigui.Context, v bool) {
-		m.SetShowCollision(v)
-	})
-
+	label(&c.hbLabel, "hitboxes")
 	var boxItems []basicwidget.SelectItem[int]
 	if t := m.StageTrack(); t != nil {
 		for i, b := range t.Boxes {
@@ -468,12 +463,9 @@ func (c *collisionPanel) layout(context *guigui.Context) guigui.LinearLayout {
 		resolvOn, cpOn = m.ResolvEnabled(), m.CPEnabled()
 	}
 	c.rowAItems = slices.Delete(c.rowAItems, 0, len(c.rowAItems))
-	c.rowAItems = append(c.rowAItems,
-		guigui.LinearLayoutItem{Widget: &c.showLabel, Size: guigui.FixedSize(5 * u / 2)},
-		guigui.LinearLayoutItem{Widget: &c.showCheck, Size: guigui.FixedSize(u)},
-	)
 	if resolvOn {
 		c.rowAItems = append(c.rowAItems,
+			guigui.LinearLayoutItem{Widget: &c.hbLabel, Size: guigui.FixedSize(5 * u / 2)},
 			guigui.LinearLayoutItem{Widget: &c.boxCombo, Size: guigui.FlexibleSize(3)},
 			guigui.LinearLayoutItem{Widget: &c.addRect, Size: guigui.FixedSize(2 * u)},
 			guigui.LinearLayoutItem{Widget: &c.addCircle, Size: guigui.FixedSize(5 * u / 2)},
@@ -506,10 +498,12 @@ func (c *collisionPanel) layout(context *guigui.Context) guigui.LinearLayout {
 	}
 
 	c.items = slices.Delete(c.items, 0, len(c.items))
+	if len(c.rowAItems) > 0 {
+		c.items = append(c.items,
+			guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.rowA})
+	}
 	c.items = append(c.items,
-		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.rowA},
-		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.rowB},
-	)
+		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.rowB})
 	return guigui.LinearLayout{
 		Direction: guigui.LayoutDirectionVertical, Items: c.items, Gap: u / 4,
 	}

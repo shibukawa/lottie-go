@@ -83,10 +83,12 @@ type Model struct {
 	// parameters of what was last touched.
 	inspect inspectTarget
 
-	// Collision editing (see hitbox.go). hideCollision is inverted so the
-	// zero value shows the overlay. The caches hold parsed plugin
-	// documents; the overlay reads them every frame.
-	hideCollision bool
+	// Collision editing (see hitbox.go). The hide flags are inverted so
+	// the zero value shows each overlay group. The caches hold parsed
+	// plugin documents; the overlay reads them every frame.
+	hideHitboxes  bool
+	hideBody      bool
+	hideSockets   bool
 	selBox        int
 	selCPShape    int
 	selSocket     int
