@@ -444,9 +444,9 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 		c.delBox.SetText("Delete")
 		c.delBox.OnDown(func(context *guigui.Context) { m.DeleteHitbox() })
 		for _, w := range []guigui.Widget{&c.addRect, &c.addCircle, &c.addWin} {
-			context.SetEnabled(w, onStage)
+			context.SetEnabled(w, onStage && !m.Viewer())
 		}
-		context.SetEnabled(&c.delBox, m.SelectedHitbox() != nil)
+		context.SetEnabled(&c.delBox, m.SelectedHitbox() != nil && !m.Viewer())
 	case colBody:
 		adder.AddWidget(&c.bodyList)
 		for _, w := range []guigui.Widget{&c.addCPCirc, &c.addCPBox, &c.delCP} {
@@ -460,9 +460,9 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 		c.delCP.SetText("Delete")
 		c.delCP.OnDown(func(context *guigui.Context) { m.DeleteCPShape() })
 		for _, w := range []guigui.Widget{&c.addCPCirc, &c.addCPBox} {
-			context.SetEnabled(w, onStage)
+			context.SetEnabled(w, onStage && !m.Viewer())
 		}
-		context.SetEnabled(&c.delCP, m.SelectedCPShape() != nil)
+		context.SetEnabled(&c.delCP, m.SelectedCPShape() != nil && !m.Viewer())
 	case colSockets:
 		adder.AddWidget(&c.sockList)
 		adder.AddWidget(&c.delSock)
@@ -482,11 +482,11 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 			if set != nil {
 				_, bound = set.Find(name)
 			}
-			context.SetEnabled(btn, onStage && !bound)
+			context.SetEnabled(btn, onStage && !bound && !m.Viewer())
 		}
 		c.delSock.SetText("Delete")
 		c.delSock.OnDown(func(context *guigui.Context) { m.DeleteSocket() })
-		context.SetEnabled(&c.delSock, m.SelectedSocket() != nil)
+		context.SetEnabled(&c.delSock, m.SelectedSocket() != nil && !m.Viewer())
 	}
 	return nil
 }

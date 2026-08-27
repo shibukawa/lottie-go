@@ -148,7 +148,25 @@ func (m *Model) setStatus(format string, args ...any) {
 
 // Touch records an edit made directly against the document, which the
 // inspector does when it writes into a State or Guard in place.
-func (m *Model) Touch() { m.touch() }
+func (m *Model) Touch() {
+	if m.blockEdit() {
+		return
+	}
+	m.touch()
+}
+
+// blockEdit refuses document mutation in viewer mode, where the disk owns
+// the document and any edit would be silently thrown away by the next
+// auto-reload. Guarding here, in the model, covers every path at once —
+// buttons, inspector fields, stage drags, graph node moves.
+func (m *Model) blockEdit() bool {
+	if !m.viewer {
+		return false
+	}
+	m.setStatus("viewer mode: read-only")
+	m.generation++
+	return true
+}
 
 // syncMachine writes the machine back into the bundle so a save, a
 // validation, or a preview restart sees the current edits. It does not mark
@@ -220,6 +238,9 @@ func (m *Model) Open(path string) {
 
 // Save writes the bundle as dotLottie v2.
 func (m *Model) Save(path string) {
+	if m.blockEdit() {
+		return
+	}
 	path = strings.TrimSpace(path)
 	if path == "" {
 		path = m.path
@@ -301,6 +322,9 @@ func (m *Model) Reload() {
 }
 
 func (m *Model) RemoveClip(id string) {
+	if m.blockEdit() {
+		return
+	}
 	m.bundle.RemoveAnimation(id)
 	// The clip's hitbox track goes with it; the core leaves extension
 	// files alone, so the cleanup is this editor's job.
@@ -403,6 +427,9 @@ func (m *Model) PhysicsBackend() string {
 }
 
 func (m *Model) SetPhysicsBackend(v string) {
+	if m.blockEdit() {
+		return
+	}
 	cfg := m.editorConfigValue()
 	cfg.Physics = v
 	m.setEditorConfig(cfg)
@@ -480,6 +507,9 @@ func (m *Model) SelectMachine(id string) {
 
 // NewMachine creates an empty machine and selects it.
 func (m *Model) NewMachine() {
+	if m.blockEdit() {
+		return
+	}
 	id := uniqueID("machine", m.bundle.StateMachineIDs())
 	sm := &lottie.StateMachine{}
 	if err := m.bundle.SetStateMachine(id, sm); err != nil {
@@ -506,6 +536,9 @@ func (m *Model) InitialMachine() string {
 // SetInitialMachine records which machine a player loads by default, or
 // clears the choice when id is empty so the first listed wins again.
 func (m *Model) SetInitialMachine(id string) {
+	if m.blockEdit() {
+		return
+	}
 	man := m.bundle.Manifest()
 	if man.Initial == nil {
 		if id == "" {
@@ -527,6 +560,9 @@ func (m *Model) SetInitialMachine(id string) {
 // RenameMachine changes a machine's id, which is also the name of its file
 // under s/.
 func (m *Model) RenameMachine(old, name string) {
+	if m.blockEdit() {
+		return
+	}
 	name = strings.TrimSpace(name)
 	if name == "" || name == old {
 		return
@@ -568,6 +604,9 @@ func (m *Model) RenameMachine(old, name string) {
 
 // DeleteMachine drops a machine and moves to whatever is left.
 func (m *Model) DeleteMachine(id string) {
+	if m.blockEdit() {
+		return
+	}
 	if id == "" {
 		return
 	}
@@ -627,6 +666,9 @@ func (m *Model) SelectedStateName() string { return m.selectedState }
 
 // AddState appends a playback state wired to the first available clip.
 func (m *Model) AddState() {
+	if m.blockEdit() {
+		return
+	}
 	if m.machine == nil {
 		m.NewMachine()
 	}
@@ -655,6 +697,9 @@ func (m *Model) AddState() {
 }
 
 func (m *Model) DeleteState(name string) {
+	if m.blockEdit() {
+		return
+	}
 	if m.machine == nil {
 		return
 	}
@@ -689,6 +734,9 @@ func (m *Model) DeleteState(name string) {
 
 // RenameState renames a state and repoints every transition to it.
 func (m *Model) RenameState(old, name string) {
+	if m.blockEdit() {
+		return
+	}
 	name = strings.TrimSpace(name)
 	if m.machine == nil || name == "" || name == old {
 		return
@@ -718,6 +766,9 @@ func (m *Model) RenameState(old, name string) {
 }
 
 func (m *Model) SetInitial(name string) {
+	if m.blockEdit() {
+		return
+	}
 	if m.machine == nil {
 		return
 	}
@@ -744,6 +795,9 @@ func (m *Model) SelectTransition(i int) {
 func (m *Model) SelectedTransitionIndex() int { return m.selectedTrans }
 
 func (m *Model) AddTransition(to string) {
+	if m.blockEdit() {
+		return
+	}
 	st := m.SelectedState()
 	if st == nil {
 		return
@@ -756,6 +810,9 @@ func (m *Model) AddTransition(to string) {
 }
 
 func (m *Model) DeleteTransition(i int) {
+	if m.blockEdit() {
+		return
+	}
 	st := m.SelectedState()
 	if st == nil || i < 0 || i >= len(st.Transitions) {
 		return
@@ -768,6 +825,9 @@ func (m *Model) DeleteTransition(i int) {
 // MoveTransition reorders a transition. Order decides which one wins, so it
 // is a semantic edit, not cosmetic.
 func (m *Model) MoveTransition(i, delta int) {
+	if m.blockEdit() {
+		return
+	}
 	st := m.SelectedState()
 	if st == nil {
 		return
@@ -784,6 +844,9 @@ func (m *Model) MoveTransition(i, delta int) {
 // ---- guards ----
 
 func (m *Model) AddGuard() {
+	if m.blockEdit() {
+		return
+	}
 	tr := m.SelectedTransition()
 	if tr == nil {
 		return
@@ -802,6 +865,9 @@ func (m *Model) AddGuard() {
 }
 
 func (m *Model) DeleteGuard(i int) {
+	if m.blockEdit() {
+		return
+	}
 	tr := m.SelectedTransition()
 	if tr == nil || i < 0 || i >= len(tr.Guards) {
 		return
@@ -813,6 +879,9 @@ func (m *Model) DeleteGuard(i int) {
 // ---- inputs ----
 
 func (m *Model) AddInput(t lottie.InputType) {
+	if m.blockEdit() {
+		return
+	}
 	if m.machine == nil {
 		m.NewMachine()
 	}
@@ -834,6 +903,9 @@ func (m *Model) AddInput(t lottie.InputType) {
 }
 
 func (m *Model) DeleteInput(i int) {
+	if m.blockEdit() {
+		return
+	}
 	if m.machine == nil || i < 0 || i >= len(m.machine.Inputs) {
 		return
 	}
@@ -842,6 +914,9 @@ func (m *Model) DeleteInput(i int) {
 }
 
 func (m *Model) RenameInput(i int, name string) {
+	if m.blockEdit() {
+		return
+	}
 	name = strings.TrimSpace(name)
 	if m.machine == nil || i < 0 || i >= len(m.machine.Inputs) || name == "" {
 		return
@@ -1323,6 +1398,9 @@ func gridPos(index int) image.Point {
 }
 
 func (m *Model) SetNodePos(index int, p image.Point) {
+	if m.blockEdit() {
+		return
+	}
 	if m.machine == nil || index < 0 || index >= len(m.machine.States) {
 		return
 	}

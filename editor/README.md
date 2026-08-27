@@ -22,9 +22,15 @@ reloads automatically when any of them changes on disk. A change only
 triggers once the file stats hold still for a poll interval, so a tool
 rewriting several files (a `lottierepack`, an agent editing clips) is
 picked up when it finishes, not mid-write. The disk is the source of
-truth in this mode: saving is greyed out and in-editor edits last only
-until the next reload. It is the intended way to watch AI edits land
-live:
+truth in this mode, so the document is read-only: saving, machine
+new/delete, input and state editing, hitbox / body / socket authoring
+and graph-node dragging are all refused (the model itself rejects
+mutations, so stage drags are covered too, not just buttons). Driving
+the preview — Try buttons, value inputs, tabs, clip selection — stays
+live, since that reads the document rather than changing it. Viewer
+mode can also be toggled at runtime from the Config pane, which stays
+clickable for exactly that reason. It is the intended way to watch AI
+edits land live:
 
 ```bash
 cd editor && go run . -viewer ../testdata/presets/chibi-male/chibi-male.lottie

@@ -153,12 +153,14 @@ type inspectorContent struct {
 	cpFormItems    []basicwidget.FormItem
 
 	// Config pane.
-	cfgTitle     basicwidget.Text
-	cfgPhysLabel basicwidget.Text
-	cfgPhysSel   basicwidget.Select[string]
-	cfgNote      basicwidget.Text
-	cfgForm      basicwidget.Form
-	cfgFormItems []basicwidget.FormItem
+	cfgTitle       basicwidget.Text
+	cfgViewerLabel basicwidget.Text
+	cfgViewer      basicwidget.Checkbox
+	cfgPhysLabel   basicwidget.Text
+	cfgPhysSel     basicwidget.Select[string]
+	cfgNote        basicwidget.Text
+	cfgForm        basicwidget.Form
+	cfgFormItems   []basicwidget.FormItem
 
 	// Socket pane.
 	sockTitle      basicwidget.Text
@@ -301,7 +303,7 @@ func (c *inspectorContent) buildMachinePane(context *guigui.Context, m *Model) {
 	c.machAddState.OnDown(func(context *guigui.Context) { m.AddState() })
 
 	for _, w := range []guigui.Widget{&c.machNameInput, &c.machInitial, &c.machAddState} {
-		context.SetEnabled(w, current != "")
+		context.SetEnabled(w, current != "" && !m.Viewer())
 	}
 
 	c.machFormItems = slices.Delete(c.machFormItems, 0, len(c.machFormItems))
@@ -379,10 +381,10 @@ func (c *inspectorContent) buildHitboxPane(context *guigui.Context, m *Model) {
 	c.hbDelSpan.OnDown(func(context *guigui.Context) { m.DeleteHitboxSpan() })
 
 	for _, w := range []guigui.Widget{&c.hbNameInput, &c.hbTagsInput, &c.hbAddSpan} {
-		context.SetEnabled(w, b != nil)
+		context.SetEnabled(w, b != nil && !m.Viewer())
 	}
 	for _, w := range []guigui.Widget{&c.hbFromInput, &c.hbToInput, &c.hbDelSpan} {
-		context.SetEnabled(w, sp != nil)
+		context.SetEnabled(w, sp != nil && !m.Viewer())
 	}
 
 	c.hbFormItems = slices.Delete(c.hbFormItems, 0, len(c.hbFormItems))
@@ -449,7 +451,7 @@ func (c *inspectorContent) buildCPShapePane(context *guigui.Context, m *Model) {
 	})
 
 	for _, w := range []guigui.Widget{&c.cpFrictInput, &c.cpElasticInput, &c.cpSensorCheck} {
-		context.SetEnabled(w, s != nil)
+		context.SetEnabled(w, s != nil && !m.Viewer())
 	}
 
 	c.cpFormItems = slices.Delete(c.cpFormItems, 0, len(c.cpFormItems))
@@ -528,7 +530,7 @@ func (c *inspectorContent) buildSocketPane(context *guigui.Context, m *Model) {
 	c.sockZBtn.OnDown(func(context *guigui.Context) { m.ToggleSocketZ() })
 
 	for _, w := range []guigui.Widget{&c.sockNameInput, &c.sockZBtn, &c.sockRotBtn, &c.sockDXInput, &c.sockDYInput, &c.sockDRInput} {
-		context.SetEnabled(w, s != nil)
+		context.SetEnabled(w, s != nil && !m.Viewer())
 	}
 
 	c.sockFormItems = slices.Delete(c.sockFormItems, 0, len(c.sockFormItems))
@@ -544,13 +546,14 @@ func (c *inspectorContent) buildSocketPane(context *guigui.Context, m *Model) {
 
 func (c *inspectorContent) buildStateForm(context *guigui.Context, m *Model, st *lottie.State) {
 	c.addState.SetText("Add state")
+	context.SetEnabled(&c.addState, !m.Viewer())
 	c.addState.OnDown(func(context *guigui.Context) { m.AddState() })
 	c.delState.SetText("Delete")
 	c.delState.OnDown(func(context *guigui.Context) { m.DeleteState(m.SelectedStateName()) })
 	c.setInitial.SetText("Set initial")
 	c.setInitial.OnDown(func(context *guigui.Context) { m.SetInitial(m.SelectedStateName()) })
-	context.SetEnabled(&c.delState, st != nil)
-	context.SetEnabled(&c.setInitial, st != nil)
+	context.SetEnabled(&c.delState, st != nil && !m.Viewer())
+	context.SetEnabled(&c.setInitial, st != nil && !m.Viewer())
 
 	label(&c.nameLabel, "name")
 	label(&c.typeLabel, "type")
@@ -868,7 +871,14 @@ func (c *inspectorContent) buildConfigPane(context *guigui.Context, m *Model) {
 	setBold(&c.cfgTitle, "Config")
 	label(&c.cfgPhysLabel, "physics")
 
+	label(&c.cfgViewerLabel, "viewer mode")
+	c.cfgViewer.SetValue(m.Viewer())
+	c.cfgViewer.OnValueChanged(func(context *guigui.Context, v bool) {
+		m.SetViewer(v)
+	})
+
 	setOptions(&c.cfgPhysSel, "both", "cp", "resolv", "none")
+	context.SetEnabled(&c.cfgPhysSel, !m.Viewer())
 	c.cfgPhysSel.SelectItemByValue(m.PhysicsBackend())
 	c.cfgPhysSel.OnItemSelected(func(context *guigui.Context, index int) {
 		it, ok := c.cfgPhysSel.ItemByIndex(index)
@@ -883,6 +893,7 @@ func (c *inspectorContent) buildConfigPane(context *guigui.Context, m *Model) {
 
 	c.cfgFormItems = slices.Delete(c.cfgFormItems, 0, len(c.cfgFormItems))
 	c.cfgFormItems = append(c.cfgFormItems,
+		basicwidget.FormItem{PrimaryWidget: &c.cfgViewerLabel, SecondaryWidget: &c.cfgViewer},
 		basicwidget.FormItem{PrimaryWidget: &c.cfgPhysLabel, SecondaryWidget: &c.cfgPhysSel},
 	)
 	c.cfgForm.SetItems(c.cfgFormItems)
