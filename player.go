@@ -16,6 +16,10 @@ type DrawOptions struct {
 	ColorScale ebiten.ColorScale
 	// DisableAntiAlias turns off anti-aliased path rendering.
 	DisableAntiAlias bool
+	// Smooth renders at DrawFrame instead of the tick cursor, so on a
+	// display faster than the tick rate each Draw lands on its own point
+	// of the timeline.
+	Smooth bool
 }
 
 // Player is a playback instance of an Animation. A Player is not safe for
@@ -41,6 +45,10 @@ type Player struct {
 	onLoopComplete func()
 	onMarker       func(Marker)
 	onFrameSpan    func(from, to float64)
+
+	// Draw-side smoothing; see DrawFrame.
+	tickAt time.Time
+	now    func() time.Time // nil means time.Now; tests substitute
 
 	// Idle snapshot cache; see drawSnapshot.
 	snapKey      snapshotKey
@@ -258,18 +266,83 @@ func (p *Player) Duration() time.Duration {
 // Update advances the animation by one tick (1/TPS seconds, scaled by
 // speed). Call it from ebiten.Game's Update.
 func (p *Player) Update() {
+	p.tickAt = p.timeNow()
 	if !p.playing {
 		return
 	}
-	tps := float64(ebiten.TPS())
-	if tps <= 0 {
-		tps = 60
-	}
-	delta := p.anim.frameRate / tps * p.speed
+	delta := p.anim.frameRate / tickTPS() * p.speed
 	if p.reverse {
 		delta = -delta
 	}
 	p.advance(delta)
+}
+
+func (p *Player) timeNow() time.Time {
+	if p.now != nil {
+		return p.now()
+	}
+	return time.Now()
+}
+
+// tickTPS is the tick rate Update advances by, with the headless fallback.
+func tickTPS() float64 {
+	tps := float64(ebiten.TPS())
+	if tps <= 0 {
+		tps = 60
+	}
+	return tps
+}
+
+// DrawFrame is the frame for draw-side reads: the tick cursor plus however
+// far into the current tick the wall clock is, so on a 144Hz display each
+// Draw sees its own point of the timeline instead of the 60Hz staircase
+// Frame gives. Because the animation is a pure function of the fractional
+// frame, this samples the real curves — no linear approximation. Use it for
+// what the eye tracks between ticks: rendering (DrawOptions.Smooth does the
+// same for Draw itself) and attachment reads in Draw, such as feeding a
+// particle emitter from a socket. Gameplay — hitboxes, root motion, cues —
+// stays on Frame, the value Update's events are ordered against.
+//
+// It reads ahead of Frame by less than one tick and never past where Update
+// will go: the range end holds and a loop wraps, exactly as advance will
+// decide, but no callbacks fire — those belong to Update. While paused it
+// returns Frame.
+func (p *Player) DrawFrame() float64 {
+	if !p.playing || p.tickAt.IsZero() {
+		return p.frame
+	}
+	elapsed := p.timeNow().Sub(p.tickAt).Seconds()
+	if elapsed < 0 {
+		elapsed = 0
+	}
+	if tick := 1 / tickTPS(); elapsed > tick {
+		elapsed = tick
+	}
+	delta := elapsed * p.anim.frameRate * p.speed
+	if p.reverse {
+		delta = -delta
+	}
+	return p.peekFrame(p.frame + delta)
+}
+
+// peekFrame confines f to the active range the way advance would move there
+// — wrapping while looping, holding at the boundary otherwise — without
+// touching playback state.
+func (p *Player) peekFrame(f float64) float64 {
+	in, out := p.bounds()
+	if in <= f && f < out {
+		return f
+	}
+	// On the final counted pass advance finishes at the boundary rather
+	// than wrapping; hold there like it will.
+	wraps := p.loop && (p.loopCount == 0 || p.loopsDone < p.loopCount-1)
+	if wraps && out > in {
+		return in + mod(f-in, out-in)
+	}
+	if f < in {
+		return in
+	}
+	return out
 }
 
 // advance moves the cursor, wrapping at the range boundary while passes
@@ -378,12 +451,15 @@ func (p *Player) Draw(dst *ebiten.Image, opts *DrawOptions) {
 	root := identityMatrix
 	var cs ebiten.ColorScale
 	antialias := true
+	f := p.frame
 	if opts != nil {
 		root = matrixFromGeoM(opts.GeoM)
 		cs = opts.ColorScale
 		antialias = !opts.DisableAntiAlias
+		if opts.Smooth {
+			f = p.DrawFrame()
+		}
 	}
-	f := p.frame
 	// The out point is exclusive; render the last covered frame instead.
 	if _, out := p.bounds(); f >= out {
 		f = out - 1e-6

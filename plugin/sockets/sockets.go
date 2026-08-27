@@ -13,6 +13,12 @@
 // Root motion is a socket named however the game likes (commonly "root"):
 // Displacement reports how far it has traveled between two frames, so a
 // lunge or a dodge roll moves the character exactly as drawn.
+//
+// The frame passed to At and All picks the read's timing. Gameplay reads —
+// hitboxes, root motion — use Player.Frame, the tick cursor events are
+// ordered against. A read in Draw that feeds something the eye tracks, a
+// particle emitter riding a hand, passes Player.DrawFrame instead so the
+// attachment moves at display rate alongside a Smooth draw.
 package lottiesockets
 
 import (
