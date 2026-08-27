@@ -267,7 +267,9 @@ func slideClip() clipDef {
 	from := base().legs(-30, 30).knees(10, 40).arms(25, -25).elbows(-25, -25).lean(8)
 	crouch := base().at(2, 26).legs(-65, -60).knees(115, 108).arms(20, -30).elbows(-30, -20).lean(12).nod(5).squash(103, 95).shade(114)
 	settle := crouch.at(3, 27)
-	glide := base().at(8, 34).lean(-34).legs(-50, -40).knees(140, 15).arms(55, 25).elbows(-25, -12).nod(16).squash(104, 96).shade(124)
+	// Both legs extend forward along the ground, the near one resting
+	// just above the far one.
+	glide := base().at(8, 34).lean(-34).legs(-46, -40).knees(16, 15).arms(55, 25).elbows(-25, -12).nod(16).squash(104, 96).shade(124)
 	slid := glide.at(14, 34)
 	up := base().at(6, 6).lean(-6).legs(-25, 15).knees(28, 12).arms(10, -10).elbows(-15, -15)
 	return def("slide-anim", 30,
