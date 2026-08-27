@@ -146,6 +146,22 @@ func (m *StateMachinePlayer) SetMachine(id string) error {
 	return nil
 }
 
+// EnterState jumps the machine to the named state and settles any
+// transitions that immediately apply, reporting false for an unknown name
+// without touching the current state. Like SetMachine it is a lottie-go
+// host convenience, not part of the document schema; a scene node's entry
+// override is its main caller.
+func (m *StateMachinePlayer) EnterState(name string) bool {
+	if _, ok := m.sm.State(name); !ok {
+		return false
+	}
+	if !m.enter(name) {
+		return false
+	}
+	m.step()
+	return true
+}
+
 // Definition returns the document this player runs. Treat it as read-only
 // while the player is live.
 func (m *StateMachinePlayer) Definition() *StateMachine { return m.sm }
