@@ -65,8 +65,10 @@ func poseAt(keys []kf, t float64) pose {
 			// flip and back are holds: they switch only when the next
 			// key is reached.
 			p.flip, p.swap, p.swapLegs, p.view = a.p.flip, a.p.swap, a.p.swapLegs, a.p.view
+			p.headView, p.headViewSet = a.p.headView, a.p.headViewSet
 			if f >= 1 {
 				p.flip, p.swap, p.swapLegs, p.view = b.p.flip, b.p.swap, b.p.swapLegs, b.p.view
+				p.headView, p.headViewSet = b.p.headView, b.p.headViewSet
 			}
 			return p
 		}
@@ -129,7 +131,7 @@ func drawPart(dst *image.NRGBA, src *image.NRGBA, world mat, opacity float64) {
 // headOf and bodyOf pick the drawing for the pose's view, matching the
 // clips' opacity switches.
 func headOf(p pose) part {
-	switch p.view {
+	switch headViewOf(p) {
 	case viewSide:
 		return headSidePart
 	case viewBack:

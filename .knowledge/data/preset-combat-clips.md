@@ -10,9 +10,9 @@ Attack clips layered on data:preset-clip-set, varying per preset kind (requireme
 per_kind:
   unarmed:              # male-gait / female-gait
     - punch
-    - punch-2           # spinning haymaker: face-on upright windup (no lean-back), then the swing spins past front - back view (head-back + darker body-back) from strike to end, shoulders traded, hips planted; fires directly via punch2 event too
+    - punch-2           # spinning haymaker: face-on upright windup (no lean-back), then the swing spins past front - back view (darker body-back + one-eyed head-side: eyes stay on the opponent, the head turns only halfway) from strike to end, shoulders traded, hips planted; fires directly via punch2 event too
     - kick
-    - kick-2            # spinning high kick, punch-2 pattern on the legs: face-on knee-fold chamber, spin to back view, near leg whips up from leading edge; kick combo follow-up or direct kick2 event
+    - kick-2            # spinning high kick, punch-2 pattern on the legs: face-on knee-fold chamber, spin to back view (body-back + one-eyed head-side), near leg whips up from leading edge; kick combo follow-up or direct kick2 event
     - jump-kick
   one-hand-sword:
     - slash

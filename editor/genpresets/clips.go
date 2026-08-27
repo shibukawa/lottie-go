@@ -25,6 +25,8 @@ type pose struct {
 	swap           bool     // shoulder attach sides swap only (a wrapped-around shoulder)
 	swapLegs       bool     // hip attach sides swap only (a spinning kick)
 	view           viewKind // which head/body drawing shows: front, side, back
+	headView       viewKind // head override: the eyes track the opponent, so
+	headViewSet    bool     // the head often rotates less than the body
 }
 
 // viewKind picks the drawing set for the head and torso, so a rotation
@@ -56,6 +58,19 @@ func (p pose) away() pose                    { p.view = viewBack; return p }
 func (p pose) aside() pose                   { p.view = viewSide; return p }
 func (p pose) swapped() pose                 { p.swap = true; return p }
 func (p pose) swappedLegs() pose             { p.swapLegs = true; return p }
+
+// faceAside keeps the head at the rear-quarter view (one eye on the
+// opponent) while the body shows whatever view is set — the head never
+// turns as far as the body in a spin attack.
+func (p pose) faceAside() pose { p.headView, p.headViewSet = viewSide, true; return p }
+
+// headViewOf is the view the head layers actually show.
+func headViewOf(p pose) viewKind {
+	if p.headViewSet {
+		return p.headView
+	}
+	return p.view
+}
 
 type kf struct {
 	t    float64
@@ -216,32 +231,35 @@ func clip(name string, frames float64, keys []kf) obj {
 	// (front, side); exactly one of each set is visible per pose. The
 	// switches are cuts on hold keys when the clip rotates through views,
 	// and plain alpha tracks otherwise so the hurt flash still eases.
-	viewVaries := false
-	for _, kf := range keys[1:] {
-		if kf.p.view != keys[0].p.view {
-			viewVaries = true
-			break
+	viewOpFor := func(viewOf func(pose) viewKind, visible func(viewKind) bool) obj {
+		varies := false
+		for _, kf := range keys[1:] {
+			if viewOf(kf.p) != viewOf(keys[0].p) {
+				varies = true
+				break
+			}
 		}
-	}
-	viewOp := func(visible func(viewKind) bool) obj {
 		get := func(p pose) []float64 {
-			if visible(p.view) {
+			if visible(viewOf(p)) {
 				return []float64{p.alpha}
 			}
 			return []float64{0}
 		}
-		if viewVaries {
+		if varies {
 			return holdTrack(keys, get)
 		}
 		return track(keys, get)
 	}
+	bodyView := func(p pose) viewKind { return p.view }
+	viewOp := func(visible func(viewKind) bool) obj { return viewOpFor(bodyView, visible) }
+	headViewOp := func(visible func(viewKind) bool) obj { return viewOpFor(headViewOf, visible) }
 	headLayer := func(name string, ind int, visible func(viewKind) bool) obj {
 		tr := transform(
 			static([]float64{headPart.anchor[0], headPart.anchor[1]}),
 			static([]float64{headPart.pos[0], headPart.pos[1]}),
 			flipTrack(keys, []float64{100, 100}, []float64{-100, 100}, imageMirrored),
 			track(keys, scalar(func(p pose) float64 { return p.head })),
-			viewOp(visible),
+			headViewOp(visible),
 		)
 		return imgLayer(name, ind, bodyInd, frames, name, tr)
 	}
@@ -472,10 +490,10 @@ func punch2Clip() clipDef {
 	// The rear arm folds through the back view: elbow bent hard so the
 	// forearm tucks across the turned body — hidden behind the torso,
 	// only the elbow showing at the trailing edge.
-	spin := base().at(4, 0).lean(10).arms(-40, 35).elbows(-55, -110).legs(-8, 8).knees(8, 10).away().swapped()
-	strike := base().at(9, 0).lean(16).squash(103, 97).arms(-100, 30).elbows(-3, -115).legs(-16, 14).knees(6, 14).away().swapped()
-	hold := base().at(7, 0).lean(13).arms(-92, 30).elbows(-6, -115).legs(-16, 14).knees(6, 14).away().swapped()
-	settle := base().at(4, 0).lean(6).arms(-20, 25).elbows(-15, -110).legs(-10, 10).knees(6, 8).away().swapped()
+	spin := base().at(4, 0).lean(10).arms(-40, 35).elbows(-55, -110).legs(-8, 8).knees(8, 10).away().faceAside().swapped()
+	strike := base().at(9, 0).lean(16).squash(103, 97).arms(-100, 30).elbows(-3, -115).legs(-16, 14).knees(6, 14).away().faceAside().swapped()
+	hold := base().at(7, 0).lean(13).arms(-92, 30).elbows(-6, -115).legs(-16, 14).knees(6, 14).away().faceAside().swapped()
+	settle := base().at(4, 0).lean(6).arms(-20, 25).elbows(-15, -110).legs(-10, 10).knees(6, 8).away().faceAside().swapped()
 	return def("punch-2-anim", 28,
 		k(0, from, true), k(5, wind, true), k(9, windDeep, true),
 		k(10, spin, false), k(12, strike, false),
@@ -509,10 +527,10 @@ func kick2Clip() clipDef {
 	from := base().lean(4).arms(-15, -20).elbows(-30, -35).legs(-10, 10).knees(8, 12)
 	chamber := base().at(-3.8, -0.7).lean(0).arms(20, -20).elbows(-45, -25).legs(-35, 10).knees(110, 12)
 	chamberDeep := base().at(-0.9, 0.1).lean(2).arms(24, -22).elbows(-50, -25).legs(-45, 10).knees(125, 14)
-	spin := base().at(-4.1, -3.7).lean(-6).arms(28, 30).elbows(-60, -110).legs(-60, 6).knees(60, 10).away().swapped().swappedLegs()
-	strike := base().at(-4.3, -4.5).lean(-12).squash(102, 98).arms(30, 28).elbows(-80, -110).legs(-104, 12).knees(5, 8).away().swapped().swappedLegs()
-	hold := base().at(-4.2, -4.4).lean(-10).arms(28, 26).elbows(-75, -110).legs(-96, 10).knees(12, 8).away().swapped().swappedLegs()
-	settle := base().at(-1, 0).lean(4).arms(-15, 20).elbows(-30, -105).legs(-15, 10).knees(20, 12).away().swapped().swappedLegs()
+	spin := base().at(-4.1, -3.7).lean(-6).arms(28, 30).elbows(-60, -110).legs(-60, 6).knees(60, 10).away().faceAside().swapped().swappedLegs()
+	strike := base().at(-4.3, -4.5).lean(-12).squash(102, 98).arms(30, 28).elbows(-80, -110).legs(-104, 12).knees(5, 8).away().faceAside().swapped().swappedLegs()
+	hold := base().at(-4.2, -4.4).lean(-10).arms(28, 26).elbows(-75, -110).legs(-96, 10).knees(12, 8).away().faceAside().swapped().swappedLegs()
+	settle := base().at(-1, 0).lean(4).arms(-15, 20).elbows(-30, -105).legs(-15, 10).knees(20, 12).away().faceAside().swapped().swappedLegs()
 	return def("kick-2-anim", 28,
 		k(0, from, true), k(5, chamber, true), k(9, chamberDeep, true),
 		k(10, spin, false), k(12, strike, false),

@@ -90,15 +90,16 @@ returns by itself through the machine.
   the enemy in front). punch-2 is the spinning haymaker: the windup
   stays face-on and upright with the arm cocked behind, and when the
   swing whips through the body has spun past front — from the strike
-  to the end the BACK shows (faceless head-back, darker body-back)
-  with the shoulders traded and the hips planted: a waist twist
-  carried all the way around, which is what puts the fist past the
-  leading edge.
+  to the end the darker body-back shows with the shoulders traded and
+  the hips planted. The head turns only halfway: the rear-quarter
+  head-side stays up with one eye on the opponent, since the eyes
+  never leave the target.
 - kick, jump-kick — ground and air kicks: chambered (knee folded) until
   the strike frame, then the knee snaps straight on impact.
 - kick -> kick-2 — the spinning high kick, punch-2's leg-side sibling:
-  face-on knee-fold chamber, then the spin shows the back through the
-  hit and the bright near leg whips up from the leading edge. Fires as
+  face-on knee-fold chamber, then the spin shows the darker back — the
+  head at the one-eyed rear-quarter view, still watching the target —
+  while the bright near leg whips up from the leading edge. Fires as
   the kick follow-up or directly via kick2.
 - guard / guard-hit — the guard event toggles the stance on and off; a
   hurt event while guarding plays guard-hit instead of hurt.
