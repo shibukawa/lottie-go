@@ -191,6 +191,9 @@ func (m *Model) resetCollisionSelection() {
 // AddHitbox appends a box of the given kind with one span starting at the
 // playhead, placed mid-stage so it is visible before the first drag.
 func (m *Model) AddHitbox(kind lottieresolv.Kind) {
+	if m.blockEdit() {
+		return
+	}
 	t := m.ensureStageTrack()
 	if t == nil {
 		m.setStatus("no clip on stage to attach a hitbox to")
@@ -232,6 +235,9 @@ func (m *Model) AddHitbox(kind lottieresolv.Kind) {
 }
 
 func (m *Model) DeleteHitbox() {
+	if m.blockEdit() {
+		return
+	}
 	t := m.StageTrack()
 	if t == nil || m.selBox < 0 || m.selBox >= len(t.Boxes) {
 		return
@@ -245,6 +251,9 @@ func (m *Model) DeleteHitbox() {
 }
 
 func (m *Model) RenameHitbox(name string) {
+	if m.blockEdit() {
+		return
+	}
 	b := m.SelectedHitbox()
 	name = strings.TrimSpace(name)
 	if b == nil || name == "" || b.Name == name {
@@ -266,6 +275,9 @@ func (m *Model) HitboxTagsCSV() string {
 // SetHitboxTagsCSV parses "hit, hurt" into the box's tags. Tags are the
 // game-facing meaning of a box, so they are free-form here.
 func (m *Model) SetHitboxTagsCSV(csv string) {
+	if m.blockEdit() {
+		return
+	}
 	b := m.SelectedHitbox()
 	if b == nil {
 		return
@@ -311,6 +323,9 @@ func (m *Model) SelectedSpan() *lottieresolv.Span {
 // the nearest earlier span so the box steps rather than jumps somewhere
 // arbitrary.
 func (m *Model) AddHitboxSpan() {
+	if m.blockEdit() {
+		return
+	}
 	b := m.SelectedHitbox()
 	if b == nil {
 		return
@@ -349,6 +364,9 @@ func (m *Model) AddHitboxSpan() {
 }
 
 func (m *Model) DeleteHitboxSpan() {
+	if m.blockEdit() {
+		return
+	}
 	b := m.SelectedHitbox()
 	if b == nil {
 		return
@@ -364,6 +382,9 @@ func (m *Model) DeleteHitboxSpan() {
 // SetSpanRange rewrites the current span's frame interval. From is
 // inclusive, To exclusive, matching Span.
 func (m *Model) SetSpanRange(from, to float64) {
+	if m.blockEdit() {
+		return
+	}
 	sp := m.SelectedSpan()
 	if sp == nil || to <= from {
 		return
@@ -418,6 +439,9 @@ func (m *Model) ShiftSpan(box, span int, delta float64) {
 // span keeps at least one frame so it cannot vanish under the cursor.
 // Like ShiftSpan, ordering is restored by NormalizeSpans on release.
 func (m *Model) SetSpanEdge(box, span int, right bool, frame float64) {
+	if m.blockEdit() {
+		return
+	}
 	_, sp := m.boxSpan(box, span)
 	if sp == nil {
 		return
@@ -540,6 +564,9 @@ func (m *Model) SelectedCPShape() *lottiecp.Shape {
 
 // AddCPShape places a fixed circle or box mid-stage on the bundle's body.
 func (m *Model) AddCPShape(kind lottiecp.ShapeType) {
+	if m.blockEdit() {
+		return
+	}
 	body := m.editableCPBody()
 	if body == nil {
 		return
@@ -567,6 +594,9 @@ func (m *Model) AddCPShape(kind lottiecp.ShapeType) {
 }
 
 func (m *Model) DeleteCPShape() {
+	if m.blockEdit() {
+		return
+	}
 	body := m.loadCPBody()
 	if body == nil || m.selCPShape < 0 || m.selCPShape >= len(body.Shapes) {
 		return
@@ -700,6 +730,9 @@ func (m *Model) SelectSocket(i int) {
 // AddSocket binds a socket to the named layer, using the layer name as the
 // socket name — the common case; hand-edit the table for a differing pair.
 func (m *Model) AddSocket(layer string) {
+	if m.blockEdit() {
+		return
+	}
 	layer = strings.TrimSpace(layer)
 	if layer == "" {
 		return
@@ -721,6 +754,9 @@ func (m *Model) AddSocket(layer string) {
 }
 
 func (m *Model) DeleteSocket() {
+	if m.blockEdit() {
+		return
+	}
 	set := m.loadSockets()
 	if set == nil || m.selSocket < 0 || m.selSocket >= len(set.Sockets) {
 		return
@@ -745,6 +781,9 @@ func (m *Model) SelectedSocket() *lottiesockets.Socket {
 // RenameSocket gives the selected socket a game-facing name of its own,
 // pinning the layer binding first so the rename does not rebind it.
 func (m *Model) RenameSocket(name string) {
+	if m.blockEdit() {
+		return
+	}
 	s := m.SelectedSocket()
 	name = strings.TrimSpace(name)
 	if s == nil || name == "" || s.Name == name {

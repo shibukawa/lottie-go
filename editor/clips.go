@@ -186,7 +186,7 @@ func (c *clipsPane) buildClips(context *guigui.Context, m *Model) {
 			m.ShowMachine()
 		}
 	})
-	context.SetEnabled(&c.removeBtn, c.selectedClip.Anim != "")
+	context.SetEnabled(&c.removeBtn, c.selectedClip.Anim != "" && !m.Viewer())
 }
 
 // buildMachines is the machine list beside the clips. A bundle can hold
@@ -224,10 +224,11 @@ func (c *clipsPane) buildMachines(context *guigui.Context, m *Model) {
 	// list keeps only add and delete, delete gated on a selection.
 	current := m.MachineID()
 	c.newMachineBtn.SetText("New")
+	context.SetEnabled(&c.newMachineBtn, !m.Viewer())
 	c.newMachineBtn.OnDown(func(context *guigui.Context) { m.NewMachine() })
 	c.delMachineBtn.SetText("Del")
 	c.delMachineBtn.OnDown(func(context *guigui.Context) { m.DeleteMachine(current) })
-	context.SetEnabled(&c.delMachineBtn, current != "")
+	context.SetEnabled(&c.delMachineBtn, current != "" && !m.Viewer())
 }
 
 func (c *clipsPane) buildTabs(context *guigui.Context) {
@@ -451,13 +452,16 @@ func (c *clipsPane) buildEditors(context *guigui.Context, m *Model) {
 			m.RenameInput(idx, text)
 		}
 	})
-	context.SetEnabled(&c.inputName, editable)
+	context.SetEnabled(&c.inputName, editable && !m.Viewer())
 
 	c.addEvent.SetText("+Event")
 	c.addEvent.OnDown(func(context *guigui.Context) { m.AddInput(lottie.InputEvent) })
 	c.addBool.SetText("+Bool")
 	c.addBool.OnDown(func(context *guigui.Context) { m.AddInput(lottie.InputBoolean) })
 	c.addNumber.SetText("+Num")
+	for _, w := range []guigui.Widget{&c.addEvent, &c.addBool, &c.addNumber} {
+		context.SetEnabled(w, !m.Viewer())
+	}
 	c.addNumber.OnDown(func(context *guigui.Context) { m.AddInput(lottie.InputNumeric) })
 	c.removeInput.SetText("Delete")
 	c.removeInput.OnDown(func(context *guigui.Context) {
@@ -465,7 +469,7 @@ func (c *clipsPane) buildEditors(context *guigui.Context, m *Model) {
 		c.selectedRow = restartRowIndex
 		m.SelectInput(-1)
 	})
-	context.SetEnabled(&c.removeInput, editable)
+	context.SetEnabled(&c.removeInput, editable && !m.Viewer())
 }
 
 func (c *clipsPane) WriteStateKey(context *guigui.Context, w *guigui.StateKeyWriter) {

@@ -107,6 +107,7 @@ func (r *Root) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 	// disk is the source of truth there, and saving over a file another
 	// tool is writing would fight it.
 	context.SetEnabled(&r.openBtn, !m.DialogOpen())
+	context.SetEnabled(&r.configBtn, !m.DialogOpen())
 	for _, w := range []guigui.Widget{&r.saveBtn, &r.saveAsBtn} {
 		context.SetEnabled(w, !m.DialogOpen() && !m.Viewer())
 	}
@@ -128,6 +129,14 @@ func (r *Root) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 // the generation, and the state key below turns that into a rebuild.
 func (r *Root) Tick(context *guigui.Context, widgetBounds *guigui.WidgetBounds) error {
 	r.model.PumpDialogs()
+	// Viewer mode can be toggled at runtime (Config pane) as well as by
+	// the -viewer flag, so the watcher follows the model here.
+	if r.model.Viewer() && r.watch == nil {
+		r.watch = newWatcher(r.model)
+	}
+	if !r.model.Viewer() {
+		r.watch = nil
+	}
 	if r.watch != nil {
 		r.watch.tick()
 	}
@@ -199,9 +208,6 @@ func main() {
 	root.model.SetViewer(*viewer)
 	if flag.NArg() > 0 {
 		root.model.Open(flag.Arg(0))
-	}
-	if *viewer {
-		root.watch = newWatcher(root.model)
 	}
 	title := "Lottie State Machine Editor"
 	if *viewer {
