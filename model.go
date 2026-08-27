@@ -45,7 +45,36 @@ type rawFont struct {
 // rawTextData is the "t" object of a text layer.
 type rawTextData struct {
 	D *rawTextDoc     `json:"d"`
-	A json.RawMessage `json:"a"` // text animators
+	A json.RawMessage `json:"a"` // text animators; parsed by buildText
+}
+
+// rawTextAnimator is one entry of a text layer's animator list.
+type rawTextAnimator struct {
+	Name string            `json:"nm"`
+	S    *rawTextSelector  `json:"s"`
+	A    *rawTextAnimProps `json:"a"`
+}
+
+// rawTextSelector is an animator's range selector.
+type rawTextSelector struct {
+	B  int      `json:"b"`  // based on: 1 chars, 2 chars excl. spaces, 3 words, 4 lines
+	Sh int      `json:"sh"` // shape: 1 square, 2 ramp up, 3 ramp down, 4 triangle, 5 round, 6 smooth
+	M  int      `json:"m"`  // mode: 1 add
+	R  int      `json:"r"`  // range units: 1 percent, 2 index
+	A  *rawProp `json:"a"`  // max amount, percent
+	S  *rawProp `json:"s"`  // range start
+	E  *rawProp `json:"e"`  // range end
+	O  *rawProp `json:"o"`  // range offset
+}
+
+// rawTextAnimProps is the set of properties an animator drives.
+type rawTextAnimProps struct {
+	P  *rawProp `json:"p"`  // position
+	S  *rawProp `json:"s"`  // scale, percent
+	R  *rawProp `json:"r"`  // rotation, degrees
+	O  *rawProp `json:"o"`  // opacity, 0..100
+	FC *rawProp `json:"fc"` // fill color
+	T  *rawProp `json:"t"`  // tracking, thousandths of an em
 }
 
 type rawTextDoc struct {
@@ -167,11 +196,12 @@ type rawShapeItem struct {
 	O *rawProp `json:"o"` // fl, st, tr: opacity / tm, rp: offset
 	W *rawProp `json:"w"` // st: width
 
-	E *rawProp          `json:"e"` // gf, gs: end point / tm: end
-	T int               `json:"t"` // gf, gs: 1 linear, 2 radial
-	G *rawGradientStops `json:"g"` // gf, gs: color stops
-	M int               `json:"m"` // tm: 1 simultaneously, 2 individually
-	H *rawProp          `json:"h"` // gf, gs: radial highlight length
+	E  *rawProp          `json:"e"`  // gf, gs: end point / tm: end
+	T  int               `json:"t"`  // gf, gs: 1 linear, 2 radial
+	G  *rawGradientStops `json:"g"`  // gf, gs: color stops
+	M  int               `json:"m"`  // tm: 1 simultaneously, 2 individually
+	MM int               `json:"mm"` // mm: 1 merge, 2 add, 3 subtract, 4 intersect, 5 exclude
+	H  *rawProp          `json:"h"`  // gf, gs: radial highlight length
 
 	A  *rawProp `json:"a"`  // tr: anchor
 	SK *rawProp `json:"sk"` // tr: skew

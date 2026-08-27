@@ -153,8 +153,17 @@ ends, with no game-side timer.
 Supported: `PlaybackState`, `GlobalState`, both transition kinds, all four
 guard and input types, `OnComplete` / `OnLoopComplete`, and the `Fire`,
 `Toggle`, `Increment`, `Decrement`, `SetFrame`, and `SetProgress` actions.
-Pointer interactions are not run — a game supplies its own input — and
-`OpenUrl` and `SetTheme` are out of scope.
+
+Pointer interactions run when the game feeds input through `PointerDown` /
+`PointerMove` / `PointerUp` (in composition coordinates; apply the inverse
+of your draw transform to the cursor first). `Click` needs press and
+release on the same target, and `PointerEnter` / `PointerExit` derive from
+how each target's hit state changes across moves. An interaction naming a
+layer hit-tests that layer's bounds on the current frame — also available
+directly as `Player.HitTest` — and one naming no layer reacts anywhere.
+
+What `OpenUrl` and `SetTheme` mean is the game's decision: register
+`OnAction` to receive them.
 `StateMachinePlayer.UnsupportedFeatures` reports whatever it skipped, and
 `Err` surfaces a state naming an animation the bundle lacks.
 
@@ -359,16 +368,18 @@ easing; legacy end-value (`e`) keyframes.
 
 **Shapes**: bezier paths, rectangles (incl. rounded), ellipses, polystars
 (stars & polygons incl. roundness), nested groups, trim paths (simultaneous
-& individual, incl. offset wrap), rounded-corner, pucker-bloat and zig-zag
-modifiers, repeaters (cumulative transform + opacity ramp), merge paths
-(merge mode).
+& individual, incl. offset wrap), rounded-corner, pucker-bloat, zig-zag and
+offset-path modifiers, repeaters (cumulative transform + opacity ramp),
+merge paths (merge, add, subtract and exclude-intersections via winding
+rules; intersect needs true path booleans and stays unsupported).
 
 **Styles**: solid fills (non-zero / even-odd), solid strokes (width, cap,
 join, miter), dash patterns (incl. offset), linear & radial gradient fills
 and strokes (Kage shader, alpha stops supported).
 
-**Compositing**: masks (add / subtract / intersect, inverted variants),
-track mattes (alpha, alpha inverted, luma, luma inverted — luma via Kage),
+**Compositing**: masks (add / subtract / intersect, inverted variants,
+expansion), track mattes (alpha, alpha inverted, luma, luma inverted —
+luma via Kage),
 blend modes (normal, multiply, screen and add fixed-function; overlay,
 darken, lighten, color dodge, color burn, hard light, soft light,
 difference and exclusion via a backdrop-sampling Kage shader), time remap
@@ -393,15 +404,17 @@ anim.SetFontResolver(func(family, style string) *text.GoTextFaceSource {
 })
 ```
 
-Document text, size, fill color, justification, line height, and line
-breaks are supported; per-character animators are reported as unsupported.
+Document text, size, fill color, justification, line height, tracking, and
+line breaks are supported. Text animators run per glyph: position, scale,
+rotation, opacity, fill color, and tracking, driven by range selectors
+(percent or index units; characters, characters-excluding-spaces, words or
+lines; square, ramp, triangle, round and smooth shapes).
 
 Skipped-but-tolerated (reported via `anim.UnsupportedFeatures()`):
-expressions, 3D layers, text animators, boolean merge modes,
+expressions, 3D layers, the merge-paths intersect mode,
 hue / saturation / color / luminosity blend modes, difference / lighten /
-darken mask modes, mask expansion, effects other than the five above, and
-the offset-path / twist modifiers. See `.knowledge/` for the full
-requirement catalog.
+darken mask modes, effects other than the five above, and the twist
+modifier. See `.knowledge/` for the full requirement catalog.
 
 ## Design notes
 

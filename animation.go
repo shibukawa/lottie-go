@@ -220,10 +220,11 @@ type layerNode struct {
 
 // maskNode is one compiled mask.
 type maskNode struct {
-	mode     byte // 'a' add, 's' subtract, 'i' intersect
-	inverted bool
-	shape    *shapeTrack
-	opacity  *vectorTrack
+	mode      byte // 'a' add, 's' subtract, 'i' intersect
+	inverted  bool
+	shape     *shapeTrack
+	opacity   *vectorTrack
+	expansion *vectorTrack // nil when absent; pixels, negative contracts
 }
 
 // localTime converts composition frame time to layer-local frames.
@@ -413,10 +414,13 @@ type shapeNode struct {
 	dashPattern []*vectorTrack // alternating dash/gap lengths
 	dashOffset  *vectorTrack
 
-	// Pucker/bloat (pb) and zig-zag (zz).
-	amount   *vectorTrack // pb amount (percent), zz amplitude
+	// Pucker/bloat (pb), zig-zag (zz), offset path (op).
+	amount   *vectorTrack // pb amount (percent), zz amplitude, op distance
 	zzFreq   *vectorTrack // ridges per segment
 	zzPoints *vectorTrack // 1 corner, 2 smooth
+
+	// Merge paths (mm): 2 add, 3 subtract, 5 exclude intersections.
+	mergeMode int
 }
 
 // builder compiles the raw model into node trees, recording unsupported
@@ -657,12 +661,11 @@ func (b *builder) buildMasks(raws []rawMask) []maskNode {
 			b.anim.note(fmt.Sprintf("mask mode %q", rm.Mode))
 			continue
 		}
+		var expansion *vectorTrack
 		if len(rm.Expansion) > 0 {
 			var p rawProp
 			if json.Unmarshal(rm.Expansion, &p) == nil && len(p.K) > 0 {
-				if v, err := numbers(p.K); err == nil && len(v) > 0 && v[0] != 0 {
-					b.anim.note("mask expansion")
-				}
+				expansion = b.vectorProp(&p, "mask expansion", []float64{0})
 			}
 		}
 		tr, err := parseShapeProp(rm.Points)
@@ -671,10 +674,11 @@ func (b *builder) buildMasks(raws []rawMask) []maskNode {
 			continue
 		}
 		out = append(out, maskNode{
-			mode:     mode,
-			inverted: rm.Inverted,
-			shape:    tr,
-			opacity:  b.vectorProp(rm.Opacity, "mask opacity", []float64{100}),
+			mode:      mode,
+			inverted:  rm.Inverted,
+			shape:     tr,
+			opacity:   b.vectorProp(rm.Opacity, "mask opacity", []float64{100}),
+			expansion: expansion,
 		})
 	}
 	return out
@@ -735,7 +739,6 @@ func (b *builder) vectorProp(p *rawProp, what string, def []float64) *vectorTrac
 
 var shapeTypeNames = map[string]string{
 	"tw": "twist",
-	"op": "offset path",
 }
 
 func (b *builder) buildShapeItems(items []rawShapeItem) []*shapeNode {
@@ -898,6 +901,12 @@ func (b *builder) buildShapeItems(items []rawShapeItem) []*shapeNode {
 				zzFreq:   b.vectorProp(it.R, "zig zag ridges", []float64{1}),
 				zzPoints: b.vectorProp(it.Points, "zig zag point type", []float64{1}),
 			})
+		case "op":
+			nodes = append(nodes, &shapeNode{
+				kind:   "op",
+				name:   it.Name,
+				amount: b.vectorProp(it.A, "offset path amount", []float64{0}),
+			})
 		case "rp":
 			n := &shapeNode{
 				kind:   "rp",
@@ -918,10 +927,15 @@ func (b *builder) buildShapeItems(items []rawShapeItem) []*shapeNode {
 			nodes = append(nodes, n)
 		case "mm":
 			// Mode 1 simply merges contours into one path, which matches
-			// how collected geometry already feeds styles; boolean modes
-			// are not implemented.
-			if it.M > 1 {
-				b.anim.note(fmt.Sprintf("merge paths mode %d", it.M))
+			// how collected geometry already feeds styles. Add, subtract
+			// and exclude-intersections combine by winding rules; true
+			// intersection would need path booleans.
+			switch it.MM {
+			case 0, 1:
+			case 2, 3, 5:
+				nodes = append(nodes, &shapeNode{kind: "mm", name: it.Name, mergeMode: it.MM})
+			default:
+				b.anim.note(fmt.Sprintf("merge paths mode %d", it.MM))
 			}
 		case "tr":
 			// Handled by the enclosing group.

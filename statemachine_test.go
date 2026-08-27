@@ -275,7 +275,9 @@ func TestStateMachineUnsupportedFeatures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"action OpenUrl", "action SetTheme", "interaction PointerEnter"}
+	// Pointer interactions are no longer listed: the player acts on them
+	// when the game feeds input through its Pointer methods.
+	want := []string{"action OpenUrl", "action SetTheme"}
 	if got := sm.UnsupportedFeatures(); !slices.Equal(got, want) {
 		t.Errorf("UnsupportedFeatures() = %v; want %v", got, want)
 	}

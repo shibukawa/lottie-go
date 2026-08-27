@@ -67,6 +67,7 @@ func (r *renderer) applyRoundCorners(n *shapeNode, f float64, groupStart int) {
 		t.out = t.out[:0]
 		out := t.nextOut(g.mat)
 		out.alpha = g.alpha
+		out.xor = g.xor
 		out.bez.Closed = g.bez.Closed
 		roundContour(&out.bez, &g.bez, radius)
 		copyGeomInto(g, out)
@@ -186,6 +187,7 @@ func (r *renderer) applyZigZag(n *shapeNode, f float64, groupStart int) {
 		t.out = t.out[:0]
 		out := t.nextOut(g.mat)
 		out.alpha = g.alpha
+		out.xor = g.xor
 		zigZagContour(&out.bez, &g.bez, amp, freq, smooth)
 		copyGeomInto(g, out)
 	}

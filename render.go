@@ -13,11 +13,14 @@ import (
 
 // geometry is one evaluated contour together with the transform that maps it
 // to destination space. The bezier buffers are owned by the renderer and
-// reused across frames. alpha carries per-copy opacity from repeaters.
+// reused across frames. alpha carries per-copy opacity from repeaters; xor
+// marks contours combined by an exclude-intersections merge, which fills
+// select the even-odd rule for.
 type geometry struct {
 	bez   bezierShape
 	mat   matrix
 	alpha float64
+	xor   bool
 }
 
 // drawCmd is one fill or stroke over a range of geometries. Style properties
@@ -243,6 +246,7 @@ type renderer struct {
 	maskPath     vector.Path
 	shapeScratch bezierShape
 	maskScratch  bezierShape
+	maskExpand   bezierShape // expanded mask contour scratch
 	vecScratch   []float64
 	dashVals     []float64
 	repGeoms     []geometry // repeater source snapshot
@@ -258,6 +262,7 @@ func nextSlot(arr []geometry, n *int) ([]geometry, *geometry) {
 	g := &arr[*n]
 	*n++
 	g.alpha = 1
+	g.xor = false
 	return arr, g
 }
 
@@ -278,6 +283,7 @@ func (r *renderer) nextDash() *geometry {
 func copyGeomInto(dst *geometry, src *geometry) {
 	dst.mat = src.mat
 	dst.alpha = src.alpha
+	dst.xor = src.xor
 	dst.bez.Closed = src.bez.Closed
 	dst.bez.V = copyPoints(dst.bez.V, src.bez.V)
 	dst.bez.I = copyPoints(dst.bez.I, src.bez.I)
@@ -812,6 +818,14 @@ func (r *renderer) renderCoverage(coverage *ebiten.Image, masks []maskNode, lt f
 			continue // adds or erases nothing; an opacity-0 intersect still clears
 		}
 		bez := m.shape.at(lt, &r.maskScratch)
+		if m.expansion != nil {
+			if exp := m.expansion.scalarAt(lt, 0); exp != 0 {
+				sc := &r.maskExpand
+				sc.V, sc.I, sc.O = sc.V[:0], sc.I[:0], sc.O[:0]
+				offsetContour(sc, &bez, exp)
+				bez = *sc
+			}
+		}
 		fill := &vector.FillOptions{FillRule: vector.FillRuleNonZero}
 		if !m.inverted && m.mode != 'i' {
 			// Add and subtract affect only the path's inside, so they can
@@ -1022,6 +1036,10 @@ func (r *renderer) walkShapes(nodes []*shapeNode, f float64, mat matrix, opacity
 			r.applyPuckerBloat(n, f, groupStart)
 		case "zz":
 			r.applyZigZag(n, f, groupStart)
+		case "op":
+			r.applyOffsetPath(n, f, groupStart)
+		case "mm":
+			r.applyMerge(n, groupStart)
 		case "rp":
 			r.applyRepeater(n, f, mat, groupStart, cmdStart)
 		}
@@ -1057,6 +1075,13 @@ func (r *renderer) emitStyleRange(n *shapeNode, f float64, opacity float64, star
 		cmd.fillRule = vector.FillRuleNonZero
 		if n.fillRule == 2 {
 			cmd.fillRule = vector.FillRuleEvenOdd
+		}
+		// Exclude-intersections merges rely on the even-odd rule.
+		for i := start; i < end; i++ {
+			if r.geoms[i].xor {
+				cmd.fillRule = vector.FillRuleEvenOdd
+				break
+			}
 		}
 	case "st", "gs":
 		cmd.stroke = true
