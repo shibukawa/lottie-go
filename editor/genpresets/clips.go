@@ -501,13 +501,18 @@ func kickClip() clipDef {
 // the bright near leg whips up from the leading edge, knee snapping
 // straight at head height on the strike frame.
 func kick2Clip() clipDef {
+	// The torso leans slightly BACK through the kick (counterweight to
+	// the raised leg), the bright arm's elbow stays bent, and the body
+	// offsets are solved per key so the support foot's ground contact
+	// never slides: the support leg counters the body lean to stay
+	// vertical, and (bx, by) puts its toe on the same spot every key.
 	from := base().lean(4).arms(-15, -20).elbows(-30, -35).legs(-10, 10).knees(8, 12)
-	chamber := base().at(0, -1).lean(0).arms(20, -20).elbows(-30, -25).legs(-35, 10).knees(110, 12)
-	chamberDeep := base().at(0, -2).lean(2).arms(24, -22).elbows(-32, -25).legs(-45, 10).knees(125, 14)
-	spin := base().at(2, -2).lean(8).arms(30, 30).elbows(-30, -110).legs(-60, 12).knees(60, 16).away().swapped().swappedLegs()
-	strike := base().at(6, -2).lean(14).squash(102, 98).arms(40, 28).elbows(-20, -110).legs(-128, 12).knees(5, 18).away().swapped().swappedLegs()
-	hold := base().at(5, -1).lean(12).arms(35, 26).elbows(-20, -110).legs(-118, 12).knees(12, 18).away().swapped().swappedLegs()
-	settle := base().at(2, 0).lean(6).arms(-15, 20).elbows(-15, -105).legs(-15, 10).knees(20, 12).away().swapped().swappedLegs()
+	chamber := base().at(-3.8, -0.7).lean(0).arms(20, -20).elbows(-45, -25).legs(-35, 10).knees(110, 12)
+	chamberDeep := base().at(-0.9, 0.1).lean(2).arms(24, -22).elbows(-50, -25).legs(-45, 10).knees(125, 14)
+	spin := base().at(-4.1, -3.7).lean(-6).arms(28, 30).elbows(-60, -110).legs(-60, 6).knees(60, 10).away().swapped().swappedLegs()
+	strike := base().at(-4.3, -4.5).lean(-12).squash(102, 98).arms(30, 28).elbows(-80, -110).legs(-104, 12).knees(5, 8).away().swapped().swappedLegs()
+	hold := base().at(-4.2, -4.4).lean(-10).arms(28, 26).elbows(-75, -110).legs(-96, 10).knees(12, 8).away().swapped().swappedLegs()
+	settle := base().at(-1, 0).lean(4).arms(-15, 20).elbows(-30, -105).legs(-15, 10).knees(20, 12).away().swapped().swappedLegs()
 	return def("kick-2-anim", 28,
 		k(0, from, true), k(5, chamber, true), k(9, chamberDeep, true),
 		k(10, spin, false), k(12, strike, false),
