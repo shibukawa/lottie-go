@@ -347,15 +347,21 @@ func walkClip() clipDef {
 		k(36, passB, false), k(48, contactA, false))
 }
 
+// walkTurnClip turns through the camera side: the front stays visible
+// the whole way — no side views — growing a touch as it passes the
+// viewer, and the drawing simply mirrors at the midpoint. The mirror
+// lands on a left/right symmetric pose, so the geometry holds still
+// while the near/far identities trade (a game-friendly lie: the legs
+// swap in the data, not on screen), and the clip starts on the walk's
+// contact pose and ends on its mirror, so the reversed walk picks up
+// seamlessly.
 func walkTurnClip() clipDef {
-	from := base().legs(-22, 22).knees(8, 20).arms(18, -18).elbows(-14, -14).lean(4)
-	gather := base().legs(-8, 8).knees(16, 16).arms(24, -24).elbows(-16, -16).lean(-4).at(0, -2).aside()
-	swapped := base().legs(8, -8).knees(16, 16).arms(-24, 24).elbows(-16, -16).lean(4).at(0, -2).aside().turned()
-	out := base().legs(22, -22).knees(20, 8).arms(-18, 18).elbows(-14, -14).lean(4).turned()
+	from := base().legs(-30, 30).knees(8, 30).arms(25, -25).elbows(-12, -20).lean(4)
+	gatherA := base().at(0, -2).legs(-14, 14).knees(12, 12).arms(16, -16).elbows(-14, -14).squash(103, 103)
+	gatherB := base().at(0, -2).legs(14, -14).knees(12, 12).arms(-16, 16).elbows(-14, -14).squash(103, 103).turned()
+	out := base().legs(30, -30).knees(30, 8).arms(-25, 25).elbows(-20, -12).lean(4).turned()
 	return def("walk-turn-anim", 20,
-		k(0, from, true), k(6, gather, true), k(10, swapped, true),
-		k(14, base().legs(14, -14).knees(16, 10).arms(-20, 20).elbows(-14, -14).lean(4).turned(), true),
-		k(20, out, true))
+		k(0, from, true), k(9, gatherA, true), k(11, gatherB, true), k(20, out, true))
 }
 
 func runClip() clipDef {
