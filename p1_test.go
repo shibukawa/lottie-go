@@ -156,7 +156,9 @@ func TestMaskBuild(t *testing.T) {
 	        { "mode": "a", "pt": { "a": 0, "k": { "c": true,
 	          "v": [[0,0],[50,0],[50,50]], "i": [[0,0],[0,0],[0,0]], "o": [[0,0],[0,0],[0,0]] } },
 	          "o": { "a": 0, "k": 100 } },
-	        { "mode": "i", "pt": { "a": 0, "k": { "c": true,
+	        { "mode": "i", "inv": true, "pt": { "a": 0, "k": { "c": true,
+	          "v": [[0,0],[50,0],[50,50]], "i": [[0,0],[0,0],[0,0]], "o": [[0,0],[0,0],[0,0]] } } },
+	        { "mode": "f", "pt": { "a": 0, "k": { "c": true,
 	          "v": [[0,0],[50,0],[50,50]], "i": [[0,0],[0,0],[0,0]], "o": [[0,0],[0,0],[0,0]] } } }
 	      ],
 	      "shapes": [] }
@@ -166,11 +168,18 @@ func TestMaskBuild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(anim.layers[0].masks) != 1 {
-		t.Errorf("masks = %d; want 1 (intersect skipped)", len(anim.layers[0].masks))
+	masks := anim.layers[0].masks
+	if len(masks) != 2 {
+		t.Fatalf("masks = %d; want 2 (difference skipped)", len(masks))
 	}
-	if !slices.Contains(anim.UnsupportedFeatures(), `mask mode "i"`) {
-		t.Errorf("intersect mode not reported: %v", anim.UnsupportedFeatures())
+	if masks[0].mode != 'a' || masks[0].inverted {
+		t.Errorf("mask 0 = %c inv=%v; want a, false", masks[0].mode, masks[0].inverted)
+	}
+	if masks[1].mode != 'i' || !masks[1].inverted {
+		t.Errorf("mask 1 = %c inv=%v; want i, true", masks[1].mode, masks[1].inverted)
+	}
+	if !slices.Contains(anim.UnsupportedFeatures(), `mask mode "f"`) {
+		t.Errorf("difference mode not reported: %v", anim.UnsupportedFeatures())
 	}
 }
 
