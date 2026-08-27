@@ -23,6 +23,7 @@ read as a back view under a forward-looking face.
 | head-back      | 72x60 | (36,56) | body           | (24,3)    |
 | body           | 48x48 | (24,45) | -              | (128,179) |
 | body-side      | 48x48 | (24,45) | body           | (24,45)   |
+| body-back      | 48x48 | (24,45) | body           | (24,45)   |
 | upper-arm-near | 15x27 | (7,4)   | body           | (3,8)     |
 | forearm-near   | 15x30 | (7,4)   | upper-arm-near | (7,23)    |
 | upper-arm-far  | 15x27 | (7,4)   | body           | (45,8)    |
@@ -60,9 +61,9 @@ a blank-imported WebP decoder handle: PNG and WebP are both fine).
 - **Rotation is shown by view swaps, not mirroring.** head-side is the
   rear-quarter head (back of the head, one eye at the leading edge) and
   body-side the thinned torso — turn clips cut through them; head-back
-  is the faceless full-back head punch-2's windup uses. A restyled
-  character needs all of them drawn, same sizes and anchors as their
-  front versions.
+  and body-back (the darker rear torso) are the full-back pair the
+  punch-2 spin uses. A restyled character needs all of them drawn, same
+  sizes and anchors as their front versions.
 - **Outline everything.** A 1px dark outline is what keeps flat-color
   parts readable against any game background; keep an equivalent edge
   treatment in restyled art.

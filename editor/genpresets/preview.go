@@ -139,8 +139,11 @@ func headOf(p pose) part {
 }
 
 func bodyOf(p pose) part {
-	if p.view == viewSide {
+	switch p.view {
+	case viewSide:
 		return bodySidePart
+	case viewBack:
+		return bodyBackPart
 	}
 	return bodyPart
 }
@@ -183,7 +186,7 @@ func renderPose(p pose) *image.NRGBA {
 		return parent.mul(nodeTransform(pt.pos, pt.anchor, deg, msx, 100))
 	}
 	bodyView := func(p pose, body mat) mat {
-		if p.view != viewSide {
+		if p.view == viewFront {
 			return body
 		}
 		return body.mul(nodeTransform(bodySidePart.pos, bodySidePart.anchor, 0, msx, 100))

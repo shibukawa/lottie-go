@@ -29,6 +29,8 @@ var palette = map[byte]color.NRGBA{
 	'e': {38, 32, 43, 255},    // eye
 	'G': {95, 168, 90, 255},   // torso green
 	'g': {76, 138, 73, 255},   // torso shade
+	'N': {66, 118, 63, 255},   // torso back (darker green)
+	'n': {53, 96, 51, 255},    // torso back shade
 	'B': {58, 53, 80, 255},    // belt
 	'A': {224, 112, 158, 255}, // upper arm pink
 	'F': {238, 154, 184, 255}, // forearm light pink
@@ -80,6 +82,16 @@ var headSideArt = func() []string {
 	rows := make([]string, len(headArt))
 	for i, row := range headArt {
 		rows[i] = strings.Replace(row, "ee", "TT", 1)
+	}
+	return rows
+}()
+
+// bodyBackArt is the torso from behind: the same silhouette in a darker
+// green, so a turned-away character reads at a glance.
+var bodyBackArt = func() []string {
+	rows := make([]string, len(bodyArt))
+	for i, row := range bodyArt {
+		rows[i] = strings.NewReplacer("G", "N", "g", "n").Replace(row)
 	}
 	return rows
 }()
@@ -271,6 +283,7 @@ var (
 	headBackPart = part{name: "head-back", art: headBackArt, anchor: [2]float64{36, 56}, pos: [2]float64{24, 3}}
 	bodyPart     = part{name: "body", art: bodyArt, anchor: [2]float64{24, 45}, pos: [2]float64{restX, restY}}
 	bodySidePart = part{name: "body-side", art: bodySideArt, anchor: [2]float64{24, 45}, pos: [2]float64{24, 45}}
+	bodyBackPart = part{name: "body-back", art: bodyBackArt, anchor: [2]float64{24, 45}, pos: [2]float64{24, 45}}
 	// Facing right in three-quarter view, the camera-side (near) limbs are
 	// the character's left side, which trails on screen (-x); the far limbs
 	// lead (+x) and peek out from behind the torso. Getting this backwards
@@ -287,7 +300,7 @@ var (
 )
 
 var allParts = []part{
-	headPart, headSidePart, headBackPart, bodyPart, bodySidePart,
+	headPart, headSidePart, headBackPart, bodyPart, bodySidePart, bodyBackPart,
 	upperArmN, forearmN, upperArmF, forearmF,
 	thighN, shinNearPart, thighF, shinFarPart,
 	shadowPart,

@@ -36,6 +36,13 @@
    "w": 48
   },
   {
+   "h": 48,
+   "id": "body-back",
+   "p": "chibi-male-body-back.png",
+   "u": "i/",
+   "w": 48
+  },
+  {
    "h": 27,
    "id": "upper-arm-near",
    "p": "chibi-male-upper-arm-near.png",
@@ -1051,6 +1058,47 @@
    "op": 24,
    "parent": 6,
    "refId": "body-side",
+   "st": 0,
+   "ty": 2
+  },
+  {
+   "ind": 15,
+   "ip": 0,
+   "ks": {
+    "a": {
+     "a": 0,
+     "k": [
+      24,
+      45
+     ]
+    },
+    "o": {
+     "a": 0,
+     "k": 0
+    },
+    "p": {
+     "a": 0,
+     "k": [
+      24,
+      45
+     ]
+    },
+    "r": {
+     "a": 0,
+     "k": 0
+    },
+    "s": {
+     "a": 0,
+     "k": [
+      100,
+      100
+     ]
+    }
+   },
+   "nm": "body-back",
+   "op": 24,
+   "parent": 6,
+   "refId": "body-back",
    "st": 0,
    "ty": 2
   },
