@@ -78,6 +78,7 @@ func chibiMachine() *lottie.StateMachine {
 			{Type: lottie.InputEvent, Name: "punch"},
 			{Type: lottie.InputEvent, Name: "punch2"},
 			{Type: lottie.InputEvent, Name: "kick"},
+			{Type: lottie.InputEvent, Name: "kick2"},
 			{Type: lottie.InputEvent, Name: "guard"},
 			{Type: lottie.InputEvent, Name: "hurt"},
 			{Type: lottie.InputEvent, Name: "die"},
@@ -94,6 +95,7 @@ func chibiMachine() *lottie.StateMachine {
 				to("punch-state", event("punch")),
 				to("punch-2-state", event("punch2")),
 				to("kick-state", event("kick")),
+				to("kick-2-state", event("kick2")),
 				to("idle-turn-state", event("turn")),
 				to("guard-state", event("guard")),
 			}), 40, 40),
@@ -151,8 +153,12 @@ func chibiMachine() *lottie.StateMachine {
 				to("idle-state", done),
 			}), 40, 560),
 			at(onceState("kick-state", "kick-anim", []lottie.Transition{
+				to("kick-2-state", event("kick")),
 				to("idle-state", done),
 			}), 260, 430),
+			at(onceState("kick-2-state", "kick-2-anim", []lottie.Transition{
+				to("idle-state", done),
+			}), 920, 430),
 			at(loopState("guard-state", "guard-anim", []lottie.Transition{
 				to("guard-hit-state", event("hurt")),
 				to("idle-state", event("guard")),

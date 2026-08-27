@@ -64,9 +64,9 @@ func poseAt(keys []kf, t float64) pose {
 			p := lerpPose(a.p, b.p, f)
 			// flip and back are holds: they switch only when the next
 			// key is reached.
-			p.flip, p.swap, p.view = a.p.flip, a.p.swap, a.p.view
+			p.flip, p.swap, p.swapLegs, p.view = a.p.flip, a.p.swap, a.p.swapLegs, a.p.view
 			if f >= 1 {
-				p.flip, p.swap, p.view = b.p.flip, b.p.swap, b.p.view
+				p.flip, p.swap, p.swapLegs, p.view = b.p.flip, b.p.swap, b.p.swapLegs, b.p.view
 			}
 			return p
 		}

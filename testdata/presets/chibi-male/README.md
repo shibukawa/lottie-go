@@ -91,6 +91,10 @@ returns by itself through the machine.
   leading edge.
 - kick, jump-kick — ground and air kicks: chambered (knee folded) until
   the strike frame, then the knee snaps straight on impact.
+- kick -> kick-2 — the spinning high kick, punch-2's leg-side sibling:
+  face-on knee-fold chamber, then the spin shows the back through the
+  hit and the bright near leg whips up from the leading edge. Fires as
+  the kick follow-up or directly via kick2.
 - guard / guard-hit — the guard event toggles the stance on and off; a
   hurt event while guarding plays guard-hit instead of hurt.
 - hurt, death — reachable from anywhere via the global state. death holds
@@ -99,8 +103,8 @@ returns by itself through the machine.
 
 ## Machine verbs
 
-Events: walk, run, stop, turn, jump, slide, punch, punch2, kick, guard,
-hurt, die. Booleans: grounded (jump needs it true; fall-loop exits to
+Events: walk, run, stop, turn, jump, slide, punch, punch2, kick, kick2,
+guard, hurt, die. Booleans: grounded (jump needs it true; fall-loop exits to
 idle when it turns true). guard toggles: it enters guard-state from idle
 and leaves it again.
 clipDone is internal: the OnComplete interaction fires it so one-shot

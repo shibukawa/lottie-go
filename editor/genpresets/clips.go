@@ -22,7 +22,8 @@ type pose struct {
 	alpha          float64  // whole-character opacity % (hurt flash)
 	shadow         float64  // ground shadow scale % (reads as height)
 	flip           bool     // turned: limb attach sides swap, head/shins x-mirror
-	swap           bool     // limb attach sides swap only (a wrapped-around shoulder)
+	swap           bool     // shoulder attach sides swap only (a wrapped-around shoulder)
+	swapLegs       bool     // hip attach sides swap only (a spinning kick)
 	view           viewKind // which head/body drawing shows: front, side, back
 }
 
@@ -54,6 +55,7 @@ func (p pose) turned() pose                  { p.flip = true; return p }
 func (p pose) away() pose                    { p.view = viewBack; return p }
 func (p pose) aside() pose                   { p.view = viewSide; return p }
 func (p pose) swapped() pose                 { p.swap = true; return p }
+func (p pose) swappedLegs() pose             { p.swapLegs = true; return p }
 
 type kf struct {
 	t    float64
@@ -137,8 +139,9 @@ func flipTrack(keys []kf, off, on []float64, pred func(pose) bool) obj {
 // hips stay planted there, so only the arms trade.
 func armsSwapped(p pose) bool { return p.flip || p.swap }
 
-// legsSwapped says whether the hips trade sides: only a full turn.
-func legsSwapped(p pose) bool { return p.flip }
+// legsSwapped says whether the hips trade sides: a full turn, or the
+// spin of a turning kick.
+func legsSwapped(p pose) bool { return p.flip || p.swapLegs }
 
 // imageMirrored says whether the head and shoes x-mirror: only a real
 // turn does — a shoulder swap keeps the character facing forward.
@@ -492,6 +495,25 @@ func kickClip() clipDef {
 		k(16, hold, true), k(24, rest, true))
 }
 
+// kick2Clip is the spinning high kick, punch-2's leg-side sibling: the
+// windup stays face-on and chambers by folding the knee, then the spin
+// carries the body past front — back view from there to the end — and
+// the bright near leg whips up from the leading edge, knee snapping
+// straight at head height on the strike frame.
+func kick2Clip() clipDef {
+	from := base().lean(4).arms(-15, -20).elbows(-30, -35).legs(-10, 10).knees(8, 12)
+	chamber := base().at(0, -1).lean(0).arms(20, -20).elbows(-30, -25).legs(-35, 10).knees(110, 12)
+	chamberDeep := base().at(0, -2).lean(2).arms(24, -22).elbows(-32, -25).legs(-45, 10).knees(125, 14)
+	spin := base().at(2, -2).lean(8).arms(30, 30).elbows(-30, -110).legs(-60, 12).knees(60, 16).away().swapped().swappedLegs()
+	strike := base().at(6, -2).lean(14).squash(102, 98).arms(40, 28).elbows(-20, -110).legs(-128, 12).knees(5, 18).away().swapped().swappedLegs()
+	hold := base().at(5, -1).lean(12).arms(35, 26).elbows(-20, -110).legs(-118, 12).knees(12, 18).away().swapped().swappedLegs()
+	settle := base().at(2, 0).lean(6).arms(-15, 20).elbows(-15, -105).legs(-15, 10).knees(20, 12).away().swapped().swappedLegs()
+	return def("kick-2-anim", 28,
+		k(0, from, true), k(5, chamber, true), k(9, chamberDeep, true),
+		k(10, spin, false), k(12, strike, false),
+		k(17, hold, true), k(28, settle, true))
+}
+
 func jumpKickClip() clipDef {
 	air := base().at(0, -48).arms(60, -60).elbows(-25, -25).legs(22, -15).knees(28, 25).shade(55)
 	tuck := base().at(0, -45).lean(8).legs(25, -45).knees(40, 80).arms(40, -40).elbows(-30, -30).shade(55)
@@ -531,7 +553,7 @@ func chibiMaleDefs() []clipDef {
 		runClip(), runTurnClip(), runToIdleClip(),
 		slideClip(), jumpClip(), fallClip(), fallLoopClip(),
 		hurtClip(), deathClip(), punchClip(), punch2Clip(),
-		kickClip(), jumpKickClip(), guardClip(), guardHitClip(),
+		kickClip(), kick2Clip(), jumpKickClip(), guardClip(), guardHitClip(),
 	}
 }
 
