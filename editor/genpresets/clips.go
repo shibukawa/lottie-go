@@ -257,18 +257,22 @@ func runToIdleClip() clipDef {
 		k(0, from, true), k(8, brake, true), k(16, settle, true), k(24, rest, true))
 }
 
-// slideClip is a baseball slide: drop almost horizontal, lead leg
-// extended, trailing knee tucked, near arm planted behind for balance.
-// The character stays in place — horizontal travel is the game's job —
-// so what animates is the drop, the held low pose, and the recovery.
+// slideClip goes down before it goes back: a full squat first — hips
+// all the way down, knees folded, feet planted, torso still upright —
+// and only then the lean-back extension into the slide. Tipping
+// backwards from standing height reads as falling over, not sliding.
+// Horizontal travel is the game's job; the few pixels here just sell
+// the glide.
 func slideClip() clipDef {
-	from := base().legs(-50, 50).knees(15, 70).arms(40, -40).elbows(-40, -40).lean(12)
-	drop := base().at(4, 16).lean(-38).legs(-52, -30).knees(45, 12).arms(50, 25).elbows(-25, -15).nod(14).squash(102, 98).shade(112)
-	low := base().at(10, 26).lean(-62).legs(-45, -22).knees(55, 8).arms(62, 30).elbows(-30, -12).nod(24).squash(104, 96).shade(124)
-	slid := low.at(14, 26)
-	up := base().at(4, 0).lean(-10).legs(-28, 28).knees(12, 20).arms(10, -10).elbows(-15, -15)
-	return def("slide-anim", 28,
-		k(0, from, true), k(4, drop, false), k(7, low, true), k(20, slid, true), k(28, up, true))
+	from := base().legs(-30, 30).knees(10, 40).arms(25, -25).elbows(-25, -25).lean(8)
+	crouch := base().at(2, 26).legs(-65, -60).knees(115, 108).arms(20, -30).elbows(-30, -20).lean(12).nod(5).squash(103, 95).shade(114)
+	settle := crouch.at(3, 27)
+	glide := base().at(8, 34).lean(-34).legs(-50, -40).knees(140, 15).arms(55, 25).elbows(-25, -12).nod(16).squash(104, 96).shade(124)
+	slid := glide.at(14, 34)
+	up := base().at(6, 6).lean(-6).legs(-25, 15).knees(28, 12).arms(10, -10).elbows(-15, -15)
+	return def("slide-anim", 30,
+		k(0, from, true), k(4, crouch, false), k(9, settle, true),
+		k(13, glide, false), k(22, slid, true), k(30, up, true))
 }
 
 // --- Air ---
