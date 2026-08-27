@@ -44,8 +44,8 @@ func TestChibiMalePreset(t *testing.T) {
 	if m.Preview() == nil {
 		t.Fatalf("preview did not start: %v", m.PreviewErr())
 	}
-	if got := len(m.AnimationIDs()); got != 19 {
-		t.Errorf("AnimationIDs() = %d clips; want 19", got)
+	if got := len(m.AnimationIDs()); got != 20 {
+		t.Errorf("AnimationIDs() = %d clips; want 20", got)
 	}
 
 	sm := m.Preview()
@@ -71,6 +71,11 @@ func TestChibiMalePreset(t *testing.T) {
 	fire(t, m, "punch", "punch-2-state", 10)
 	settle(t, sm, "idle-state", 80)
 	fire(t, m, "punch2", "punch-2-state", 10)
+	settle(t, sm, "idle-state", 80)
+	fire(t, m, "kick2", "kick-2-state", 10)
+	settle(t, sm, "idle-state", 80)
+	fire(t, m, "kick", "kick-state", 10)
+	fire(t, m, "kick", "kick-2-state", 10)
 	settle(t, sm, "idle-state", 80)
 
 	// Guard toggles on the guard event; a hit while guarding plays

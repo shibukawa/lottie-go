@@ -11,10 +11,11 @@ themselves; transitions bridge two loops.
   `run-to-idle` (braking stop), `fall` (into fall-loop)
 - One-shots: `slide`, `jump` (chains to fall), `hurt`, `death` (holds
   its last frame, terminal)
-- Attacks (unarmed set): `punch`, `punch-2` (the haymaker: reachable as
-  the combo follow-up and directly via the punch2 event), `kick`,
-  `jump-kick`; defense: `guard` (a loop the guard event toggles on and
-  off), `guard-hit` (flinch, returns to guard)
+- Attacks (unarmed set): `punch`, `punch-2` (the spinning haymaker:
+  combo follow-up or direct via punch2), `kick`, `kick-2` (the spinning
+  high kick: combo follow-up or direct via kick2), `jump-kick`;
+  defense: `guard` (a loop the guard event toggles on and off),
+  `guard-hit` (flinch, returns to guard)
 
 There is deliberately no dash clip: a dash is run played faster (a
 state's `speed` or the game's `SetSpeed`), so adding one would just
