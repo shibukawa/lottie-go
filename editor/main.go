@@ -4,6 +4,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"image"
 	"os"
@@ -40,6 +41,7 @@ type Root struct {
 	status       basicwidget.Text
 
 	model *Model
+	watch *watcher
 
 	toolbar      guigui.LinearLayout
 	toolbarItems []guigui.LinearLayoutItem
@@ -78,6 +80,9 @@ func (r *Root) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 	if p := m.Path(); p != "" {
 		name = filepath.Base(p)
 	}
+	if m.Viewer() {
+		name += "  [viewer]"
+	}
 	r.pathLabel.SetValue(name)
 	r.pathLabel.SetVerticalAlign(basicwidget.VerticalAlignMiddle)
 
@@ -98,9 +103,12 @@ func (r *Root) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 	r.configBtn.OnDown(func(context *guigui.Context) { m.ShowConfigPane() })
 
 	// A second dialog while one is already up would be ignored anyway; grey
-	// the buttons so that is visible.
-	for _, w := range []guigui.Widget{&r.openBtn, &r.saveBtn, &r.saveAsBtn} {
-		context.SetEnabled(w, !m.DialogOpen())
+	// the buttons so that is visible. Viewer mode also greys saving: the
+	// disk is the source of truth there, and saving over a file another
+	// tool is writing would fight it.
+	context.SetEnabled(&r.openBtn, !m.DialogOpen())
+	for _, w := range []guigui.Widget{&r.saveBtn, &r.saveAsBtn} {
+		context.SetEnabled(w, !m.DialogOpen() && !m.Viewer())
 	}
 
 	r.graphPanel.SetContent(&r.graph)
@@ -120,6 +128,9 @@ func (r *Root) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 // the generation, and the state key below turns that into a rebuild.
 func (r *Root) Tick(context *guigui.Context, widgetBounds *guigui.WidgetBounds) error {
 	r.model.PumpDialogs()
+	if r.watch != nil {
+		r.watch.tick()
+	}
 	return nil
 }
 
@@ -181,12 +192,23 @@ func (r *Root) Layout(context *guigui.Context, widgetBounds *guigui.WidgetBounds
 }
 
 func main() {
+	viewer := flag.Bool("viewer", false,
+		"viewer mode: watch every loaded file (.lottie, .json, images) and auto-reload on change; saving is disabled")
+	flag.Parse()
 	root := &Root{model: NewModel()}
-	if len(os.Args) > 1 {
-		root.model.Open(os.Args[1])
+	root.model.SetViewer(*viewer)
+	if flag.NArg() > 0 {
+		root.model.Open(flag.Arg(0))
+	}
+	if *viewer {
+		root.watch = newWatcher(root.model)
+	}
+	title := "Lottie State Machine Editor"
+	if *viewer {
+		title += " (viewer)"
 	}
 	op := &guigui.RunOptions{
-		Title: "Lottie State Machine Editor",
+		Title: title,
 		// Four columns of content: clips and machines, the graph, the
 		// stage, and the inspector. The old 1280 default left the
 		// inspector too narrow to show a transition's target.
