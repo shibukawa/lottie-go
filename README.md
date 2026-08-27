@@ -183,6 +183,115 @@ p.OnMarker(func(m lottie.Marker) { play(m.Name) })
 sm.OnMarker(func(state string, m lottie.Marker) { play(state, m.Name) })
 ```
 
+## Scenes
+
+A scene arranges many animations and state machines into one screen — a
+game scene or a GUI menu — with positions, overlap, focus order, and input
+bindings. It is a standalone JSON file (`*.scene.json`) referencing one or
+more bundles, authored in the `layout/` tool and played back with the same
+runtime:
+
+```go
+scene, _ := lottie.DecodeScene(f)
+sp, _ := scene.NewScenePlayer(func(path string) (*lottie.Bundle, error) {
+    return openBundle(path) // fs.FS / go:embed next to the scene file
+})
+sp.SetScreenMapping(screenW, screenH, lottie.ScaleContain)
+sp.OnCallback(func(node, name string) { /* "start-game", ... */ })
+
+func (g *Game) Update() error {
+    if inpututil.IsKeyJustPressed(ebiten.KeyDown) {
+        sp.MoveFocus(lottie.FocusDown)   // d-pad / cursor keys; FocusNext for Tab
+    }
+    if inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
+        sp.Activate()                    // confirm; sp.Cancel() for the cancel button
+    }
+    x, y := ebiten.CursorPosition()
+    sp.Pointer(float64(x), float64(y), ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft))
+    sp.Update()
+    return nil
+}
+
+func (g *Game) Draw(screen *ebiten.Image) { sp.Draw(screen, nil) }
+```
+
+Focus, hover, click, and the confirm button all reduce to a handful of
+semantic events (`focus`, `blur`, `hover`, `press`, `activate`, `cancel`).
+A node reacts through its bindings — fire an event into its machine, play
+a marker segment, or report a named callback to the game — and a machine
+node that declares an event input of the same name needs no wiring at all:
+a button's normal/focused/pressed looks are just states. Individual nodes
+are reachable by name for values a menu displays:
+
+```go
+if hp, ok := sp.Node("hp-bar"); ok {
+    hp.Set("hp", g.player.HP)
+}
+```
+
+`SetScreenMapping` maps the scene's design resolution onto the real
+window: `ScaleContain` letterboxes, `ScaleCover` fills and crops the
+sides, `ScaleStretch` distorts, `ScaleCenter` stays 1:1. `Pointer` inverts
+the same mapping, so the game passes raw cursor coordinates.
+
+A placed bundle is **one node — one player, one layer**; which of its
+machines or clips it shows is a property of the node, switched in place.
+An animation node can also chain clips: `playback.then` lists what plays
+as each clip completes, so "play the entrance once, then loop idle
+forever" needs no state machine — and every completion fires a `complete`
+event that bindings can turn into a machine event, a phase switch, or a
+callback.
+
+Scenes also run a clock. A node's `start` time delays its entrance — it
+neither draws nor takes input until then — which is how an intro
+choreographs one animation starting over another. `Restart()` replays the
+choreography from zero, `Time()` reads the clock, and a binding can aim
+`fireEvent`/`playSegment` at another node by name (starting it early if
+its time has not come) or move focus with the `focus` action.
+
+A scene's life splits into named **phases** — a startup animation, the
+interactive screen, an outro. A node names the phase it belongs to
+(empty joins all of them and keeps playing across switches); a timed
+phase rolls into its `next` automatically, a binding's `phase` action
+switches on input, and `sp.SetPhase`/`sp.OnPhaseEnd` give the game the
+same control — `OnPhaseEnd` is how it learns the outro finished:
+
+```go
+sp.OnPhaseEnd(func(phase string) {
+    if phase == "outro" { g.leaveMenu() }
+})
+```
+
+Beyond animations, a scene places static **images** and **text**. Text
+nodes carry font, size, alignment, and an anchor (a right-anchored score
+grows leftward), and are named so the game overwrites them at runtime:
+
+```go
+if score, ok := sp.Node("score"); ok {
+    score.SetText(fmt.Sprintf("SCORE %06d", g.score))
+}
+```
+
+Image and font files are referenced beside the bundles and load through
+`NewScenePlayerWithLoader(lottie.SceneLoader{Bundle: ..., File: ...})`;
+image formats come from the binary's blank imports (`image/png`,
+`image/jpeg`, `golang.org/x/image/webp`), as with every image asset.
+
+The layout tool lives in `layout/` (a separate module, like `editor/`):
+
+```
+go run ./layout my-menu.scene.json
+```
+
+It places clips, machines, images, and text from referenced files on a
+canvas — with a live preview of the selected source before placing —
+drags positions, reorders overlap, edits focus order, bindings, and
+phases, and choreographs entrances on a timeline pane: layer rows,
+draggable start bars, a playhead, a phase selector, and a Play/Pause
+transport that starts stopped and pauses itself when the last element
+finishes. The Preview button drives the very same `ScenePlayer` with
+keyboard and mouse.
+
 Run the demos:
 
 ```
@@ -199,6 +308,10 @@ go run ./examples/player [path/to/animation.json]
 # Lottie-driven stopwatch UI: cartoon digits that launch and bounce on
 # change, a squishy colon, and buttons that burst particles on click
 go run ./examples/stopwatch
+
+# a game opening built as one scene: skippable vanity card, a Hokusai-
+# styled breaking wave settling into a calm sea, title, PRESS START
+go run ./examples/layout/opening-animation
 
 # performance target verification (5+ concurrent animations)
 go run ./examples/stress
