@@ -242,21 +242,25 @@ func clip(name string, frames float64, keys []kf) obj {
 		)
 		return imgLayer(name, ind, bodyInd, frames, name, tr)
 	}
-	bodySideLayer := imgLayer("body-side", 13, bodyInd, frames, "body-side", transform(
-		static([]float64{bodySidePart.anchor[0], bodySidePart.anchor[1]}),
-		static([]float64{bodySidePart.pos[0], bodySidePart.pos[1]}),
-		flipTrack(keys, []float64{100, 100}, []float64{-100, 100}, imageMirrored),
-		static(0.0),
-		viewOp(func(v viewKind) bool { return v == viewSide }),
-	))
+	bodyViewLayer := func(name string, ind int, pt part, visible func(viewKind) bool) obj {
+		return imgLayer(name, ind, bodyInd, frames, name, transform(
+			static([]float64{pt.anchor[0], pt.anchor[1]}),
+			static([]float64{pt.pos[0], pt.pos[1]}),
+			flipTrack(keys, []float64{100, 100}, []float64{-100, 100}, imageMirrored),
+			static(0.0),
+			viewOp(visible),
+		))
+	}
+	bodySideLayer := bodyViewLayer("body-side", 13, bodySidePart, func(v viewKind) bool { return v == viewSide })
+	bodyBackLayer := bodyViewLayer("body-back", 15, bodyBackPart, func(v viewKind) bool { return v == viewBack })
 	bodyTr := transform(
 		static([]float64{bodyPart.anchor[0], bodyPart.anchor[1]}),
 		track(keys, func(p pose) []float64 { return []float64{restX + p.bx, restY + p.by} }),
 		track(keys, func(p pose) []float64 { return []float64{p.sx, p.sy} }),
 		track(keys, scalar(func(p pose) float64 { return p.rot })),
 		// A parent's opacity does not cascade in Lottie, so hiding the
-		// front torso during the side view leaves the children alone.
-		viewOp(func(v viewKind) bool { return v != viewSide }),
+		// front torso during the other views leaves the children alone.
+		viewOp(func(v viewKind) bool { return v == viewFront }),
 	)
 	shadowTr := transform(
 		static([]float64{shadowPart.anchor[0], shadowPart.anchor[1]}),
@@ -274,6 +278,7 @@ func clip(name string, frames float64, keys []kf) obj {
 		imgLayer("shin-near", 4, thighNInd, frames, "shin-near", seg(shinNearPart, nil, true, func(p pose) float64 { return p.kneeN })),
 		imgLayer("thigh-near", thighNInd, bodyInd, frames, "thigh-near", seg(thighN, legsSwapped, false, func(p pose) float64 { return p.legN })),
 		bodySideLayer,
+		bodyBackLayer,
 		imgLayer("body", bodyInd, 0, frames, "body", bodyTr),
 		imgLayer("thigh-far", thighFInd, bodyInd, frames, "thigh-far", seg(thighF, legsSwapped, false, func(p pose) float64 { return p.legF })),
 		imgLayer("shin-far", 8, thighFInd, frames, "shin-far", seg(shinFarPart, nil, true, func(p pose) float64 { return p.kneeF })),
@@ -448,26 +453,24 @@ func punchClip() clipDef {
 		k(12, hold, true), k(20, rest, true))
 }
 
-// punch2Clip is the haymaker: the character turns AWAY — back of the
-// head shows, the shoulders trade sides on the same hold-key swap the
-// turns use — winds the punching arm up behind, then snaps back around
-// and swings it through a huge arc. Reachable as the punch follow-up
-// and directly via the punch2 event.
+// punch2Clip is the spinning haymaker. The windup stays face-on and
+// upright — no lean-back — with the arm cocked behind; at the moment
+// the swing whips through, the body has spun past front, so from there
+// to the end the BACK shows (faceless head, darker torso) with the
+// shoulders traded, hips planted: a waist twist carried all the way
+// around. Reachable as the punch follow-up and via the punch2 event.
 func punch2Clip() clipDef {
-	from := base().at(4, 0).lean(8).arms(20, -40).elbows(-40, -15).legs(-12, 12).knees(8, 12)
-	wind := base().at(-2, 0).lean(-8).arms(70, -20).elbows(-30, -20).legs(10, -10).knees(10, 10).nod(-4).away().swapped()
-	windDeep := base().at(-3, 1).lean(-10).arms(95, -22).elbows(-25, -20).legs(10, -10).knees(10, 10).nod(-5).away().swapped()
-	// The shoulders stay traded through the swing — the arm wrapped
-	// around, so the punching shoulder now leads — which is also what
-	// puts the fist well past the body's leading edge.
-	sweep := base().at(2, 0).lean(2).arms(30, 5).elbows(-20, -20).legs(-8, 8).knees(8, 10).swapped()
-	strike := base().at(9, 0).lean(18).squash(103, 97).arms(-100, 25).elbows(-3, -25).legs(-16, 14).knees(6, 14).swapped()
-	hold := base().at(7, 0).lean(15).arms(-92, 20).elbows(-6, -25).legs(-16, 14).knees(6, 14).swapped()
-	rest := base().elbows(-8, -8).knees(3, 3)
+	from := base().at(4, 0).lean(6).arms(20, -40).elbows(-40, -15).legs(-12, 12).knees(8, 12)
+	wind := base().lean(2).arms(70, -20).elbows(-35, -18).legs(-10, 10).knees(8, 10)
+	windDeep := base().at(-1, 1).lean(4).arms(95, -24).elbows(-30, -18).legs(-10, 10).knees(8, 10)
+	spin := base().at(4, 0).lean(10).arms(30, 5).elbows(-20, -20).legs(-8, 8).knees(8, 10).away().swapped()
+	strike := base().at(9, 0).lean(16).squash(103, 97).arms(-100, 25).elbows(-3, -25).legs(-16, 14).knees(6, 14).away().swapped()
+	hold := base().at(7, 0).lean(13).arms(-92, 20).elbows(-6, -25).legs(-16, 14).knees(6, 14).away().swapped()
+	settle := base().at(4, 0).lean(6).arms(-20, 10).elbows(-15, -12).legs(-10, 10).knees(6, 8).away().swapped()
 	return def("punch-2-anim", 28,
-		k(0, from, true), k(4, wind, true), k(8, windDeep, true),
-		k(10, sweep, false), k(12, strike, false),
-		k(17, hold, true), k(28, rest, true))
+		k(0, from, true), k(5, wind, true), k(9, windDeep, true),
+		k(10, spin, false), k(12, strike, false),
+		k(17, hold, true), k(28, settle, true))
 }
 
 // kickClip chambers first — hip raised, knee fully folded — and only
