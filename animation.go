@@ -33,9 +33,10 @@ type Animation struct {
 	fontResolver FontResolver
 
 	// Compiled at decode; see analyzeCompositing.
-	snapshotOK bool
-	phaseNodes int
-	generation int // bumped when mutable state (font resolver) changes
+	snapshotOK      bool
+	rootShaderBlend bool // a root layer blends by sampling the backdrop
+	phaseNodes      int
+	generation      int // bumped when mutable state (font resolver) changes
 }
 
 // Decode parses a Lottie JSON document. Image assets must be embedded as
@@ -122,6 +123,9 @@ func (a *Animation) analyzeCompositing() {
 		if l.blend != 0 {
 			a.snapshotOK = false
 		}
+		if blendNeedsShader(l.blend) {
+			a.rootShaderBlend = true
+		}
 	}
 	// Precomp layer lists are cached per asset and shared between the
 	// layers referencing them, so guard against revisiting.
@@ -134,8 +138,11 @@ func (a *Animation) analyzeCompositing() {
 			}
 			seen[l] = true
 			// Text extent is only known after shaping, so a masked text
-			// layer cannot be given an atlas region up front.
-			l.phaseOK = (len(l.masks) > 0 || l.matteMode != 0 && l.matteSrc != nil) && l.typ != 5
+			// layer cannot be given an atlas region up front. Backdrop-
+			// sampling blends and effects run extra passes on the flattened
+			// content, which the shared atlas regions cannot host.
+			l.phaseOK = (len(l.masks) > 0 || l.matteMode != 0 && l.matteSrc != nil) &&
+				l.typ != 5 && !blendNeedsShader(l.blend) && len(l.effects) == 0
 			if l.phaseOK {
 				a.phaseNodes++
 			}
@@ -190,12 +197,14 @@ type layerNode struct {
 
 	// Precomposition (ty: 0).
 	comp         []*layerNode
-	compW, compH float64 // clip size
+	compW, compH float64      // clip size
+	timeRemap    *vectorTrack // tm: layer time -> comp time, in seconds
 
 	// Image (ty: 2).
 	img *ebiten.Image
 
-	// Masks, track matte, blend.
+	// Masks, track matte, blend, effects.
+	effects   []effectNode
 	masks     []maskNode
 	matteMode int // 0 none; tt: 1 alpha, 2 alpha-inv, 3 luma, 4 luma-inv
 	matteSrc  *layerNode
@@ -211,14 +220,25 @@ type layerNode struct {
 
 // maskNode is one compiled mask.
 type maskNode struct {
-	mode    byte // 'a' add, 's' subtract
-	shape   *shapeTrack
-	opacity *vectorTrack
+	mode     byte // 'a' add, 's' subtract, 'i' intersect
+	inverted bool
+	shape    *shapeTrack
+	opacity  *vectorTrack
 }
 
 // localTime converts composition frame time to layer-local frames.
 func (l *layerNode) localTime(f float64) float64 {
 	return (f - l.st) / l.stretch
+}
+
+// compTime maps layer-local frames to the referenced composition's frames,
+// applying time remap when present. The tm property yields seconds into the
+// precomposition.
+func (l *layerNode) compTime(lt, frameRate float64) float64 {
+	if l.timeRemap == nil {
+		return lt
+	}
+	return l.timeRemap.scalarAt(lt, 0) * frameRate
 }
 
 // transformTracks bundles the animatable transform properties.
@@ -392,6 +412,11 @@ type shapeNode struct {
 	// Stroke dashes (st, gs).
 	dashPattern []*vectorTrack // alternating dash/gap lengths
 	dashOffset  *vectorTrack
+
+	// Pucker/bloat (pb) and zig-zag (zz).
+	amount   *vectorTrack // pb amount (percent), zz amplitude
+	zzFreq   *vectorTrack // ridges per segment
+	zzPoints *vectorTrack // 1 corner, 2 smooth
 }
 
 // builder compiles the raw model into node trees, recording unsupported
@@ -478,8 +503,8 @@ func (b *builder) buildLayers(raws []rawLayer) []*layerNode {
 		case 0:
 			n.comp = b.buildComp(rl.RefID)
 			n.compW, n.compH = rl.W, rl.H
-			if len(rl.TM) > 0 && string(rl.TM) != "null" {
-				b.anim.note("time remap")
+			if rl.TM != nil {
+				n.timeRemap = b.vectorProp(rl.TM, "time remap", []float64{0})
 			}
 		case 2:
 			n.img = b.buildImage(rl.RefID)
@@ -491,6 +516,7 @@ func (b *builder) buildLayers(raws []rawLayer) []*layerNode {
 		}
 		n.autoOrient = rl.AO != 0
 		n.masks = b.buildMasks(rl.Masks)
+		n.effects = b.buildEffects(rl.Effects)
 		if rl.Matte != nil && *rl.Matte != 0 {
 			mode := *rl.Matte
 			if mode >= 1 && mode <= 4 {
@@ -623,14 +649,12 @@ func (b *builder) buildMasks(raws []rawMask) []maskNode {
 			mode = 'a'
 		case "s":
 			mode = 's'
+		case "i":
+			mode = 'i'
 		case "n", "":
 			continue
 		default:
 			b.anim.note(fmt.Sprintf("mask mode %q", rm.Mode))
-			continue
-		}
-		if rm.Inverted {
-			b.anim.note("inverted mask")
 			continue
 		}
 		if len(rm.Expansion) > 0 {
@@ -647,22 +671,24 @@ func (b *builder) buildMasks(raws []rawMask) []maskNode {
 			continue
 		}
 		out = append(out, maskNode{
-			mode:    mode,
-			shape:   tr,
-			opacity: b.vectorProp(rm.Opacity, "mask opacity", []float64{100}),
+			mode:     mode,
+			inverted: rm.Inverted,
+			shape:    tr,
+			opacity:  b.vectorProp(rm.Opacity, "mask opacity", []float64{100}),
 		})
 	}
 	return out
 }
 
 func (b *builder) noteLayerExtras(rl *rawLayer) {
-	switch rl.Blend {
-	case 0, 1, 2: // normal, multiply, screen
+	switch {
+	case rl.Blend == 0 || rl.Blend == 1 || rl.Blend == 2 || rl.Blend == 16:
+		// normal, multiply, screen, add: fixed-function blends
+	case blendNeedsShader(rl.Blend):
+		// overlay .. exclusion: composited through blendShader
 	default:
+		// 12-15 (hue, saturation, color, luminosity) and 17 (hard mix)
 		b.anim.note(fmt.Sprintf("blend mode %d", rl.Blend))
-	}
-	if len(rl.Effects) > 0 && string(rl.Effects) != "[]" && string(rl.Effects) != "null" {
-		b.anim.note("effects")
 	}
 	if rl.DDD != 0 {
 		b.anim.note("3d layer")
@@ -708,9 +734,7 @@ func (b *builder) vectorProp(p *rawProp, what string, def []float64) *vectorTrac
 }
 
 var shapeTypeNames = map[string]string{
-	"pb": "pucker/bloat",
 	"tw": "twist",
-	"zz": "zig zag",
 	"op": "offset path",
 }
 
@@ -859,6 +883,20 @@ func (b *builder) buildShapeItems(items []rawShapeItem) []*shapeNode {
 				kind:      "rd",
 				name:      it.Name,
 				roundness: b.vectorProp(it.R, "corner radius", []float64{0}),
+			})
+		case "pb":
+			nodes = append(nodes, &shapeNode{
+				kind:   "pb",
+				name:   it.Name,
+				amount: b.vectorProp(it.A, "pucker/bloat amount", []float64{0}),
+			})
+		case "zz":
+			nodes = append(nodes, &shapeNode{
+				kind:     "zz",
+				name:     it.Name,
+				amount:   b.vectorProp(it.S, "zig zag size", []float64{0}),
+				zzFreq:   b.vectorProp(it.R, "zig zag ridges", []float64{1}),
+				zzPoints: b.vectorProp(it.Points, "zig zag point type", []float64{1}),
 			})
 		case "rp":
 			n := &shapeNode{

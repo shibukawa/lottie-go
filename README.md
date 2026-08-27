@@ -359,16 +359,25 @@ easing; legacy end-value (`e`) keyframes.
 
 **Shapes**: bezier paths, rectangles (incl. rounded), ellipses, polystars
 (stars & polygons incl. roundness), nested groups, trim paths (simultaneous
-& individual, incl. offset wrap), rounded-corner modifiers, repeaters
-(cumulative transform + opacity ramp), merge paths (merge mode).
+& individual, incl. offset wrap), rounded-corner, pucker-bloat and zig-zag
+modifiers, repeaters (cumulative transform + opacity ramp), merge paths
+(merge mode).
 
 **Styles**: solid fills (non-zero / even-odd), solid strokes (width, cap,
 join, miter), dash patterns (incl. offset), linear & radial gradient fills
 and strokes (Kage shader, alpha stops supported).
 
-**Compositing**: masks (add / subtract), track mattes (alpha, alpha
-inverted, luma, luma inverted — luma via Kage), blend modes (normal,
-multiply, screen).
+**Compositing**: masks (add / subtract / intersect, inverted variants),
+track mattes (alpha, alpha inverted, luma, luma inverted — luma via Kage),
+blend modes (normal, multiply, screen and add fixed-function; overlay,
+darken, lighten, color dodge, color burn, hard light, soft light,
+difference and exclusion via a backdrop-sampling Kage shader), time remap
+on precompositions.
+
+**Effects**: Gaussian blur, drop shadow, fill, tint, tritone. Blur and
+shadow softness run as separable Kage passes (large radii blur a
+downscaled copy); parameters may be animated. Other effect types are
+reported as unsupported and skipped.
 
 **Containers**: Lottie JSON (`.json`) and dotLottie (`.lottie`), both
 archive layouts — version 2 (`a/ i/ s/ t/ f/`) and version 1
@@ -388,9 +397,11 @@ Document text, size, fill color, justification, line height, and line
 breaks are supported; per-character animators are reported as unsupported.
 
 Skipped-but-tolerated (reported via `anim.UnsupportedFeatures()`):
-expressions, effects, 3D layers, time remap, text animators, boolean merge
-modes, other blend and mask modes, zig-zag / offset-path / pucker-bloat
-modifiers. See `.knowledge/` for the full requirement catalog.
+expressions, 3D layers, text animators, boolean merge modes,
+hue / saturation / color / luminosity blend modes, difference / lighten /
+darken mask modes, mask expansion, effects other than the five above, and
+the offset-path / twist modifiers. See `.knowledge/` for the full
+requirement catalog.
 
 ## Design notes
 

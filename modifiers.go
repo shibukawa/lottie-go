@@ -125,6 +125,142 @@ func isZeroPt(p [2]float64) bool {
 	return math.Abs(p[0]) < 1e-9 && math.Abs(p[1]) < 1e-9
 }
 
+// applyPuckerBloat pulls vertices toward the contour's centroid and pushes
+// tangent endpoints away from it — or the reverse for negative amounts —
+// following lottie-web's construction.
+func (r *renderer) applyPuckerBloat(n *shapeNode, f float64, groupStart int) {
+	amount := n.amount.scalarAt(f, 0) / 100
+	if amount == 0 {
+		return
+	}
+	for gi := groupStart; gi < r.nGeoms; gi++ {
+		bez := &r.geoms[gi].bez
+		nv := len(bez.V)
+		if nv == 0 {
+			continue
+		}
+		for len(bez.I) < nv {
+			bez.I = append(bez.I, [2]float64{})
+		}
+		for len(bez.O) < nv {
+			bez.O = append(bez.O, [2]float64{})
+		}
+		var cx, cy float64
+		for _, v := range bez.V {
+			cx += v[0]
+			cy += v[1]
+		}
+		cx /= float64(nv)
+		cy /= float64(nv)
+		for i := 0; i < nv; i++ {
+			v := bez.V[i]
+			// Tangent endpoints in absolute coordinates.
+			ix, iy := v[0]+bez.I[i][0], v[1]+bez.I[i][1]
+			ox, oy := v[0]+bez.O[i][0], v[1]+bez.O[i][1]
+			vx := v[0] + (cx-v[0])*amount
+			vy := v[1] + (cy-v[1])*amount
+			nix := ix - (cx-ix)*amount
+			niy := iy - (cy-iy)*amount
+			nox := ox - (cx-ox)*amount
+			noy := oy - (cy-oy)*amount
+			bez.V[i] = [2]float64{vx, vy}
+			bez.I[i] = [2]float64{nix - vx, niy - vy}
+			bez.O[i] = [2]float64{nox - vx, noy - vy}
+		}
+	}
+}
+
+// applyZigZag replaces each contour with ridge points sampled along its
+// segments, offset alternately along the curve normal. Point type 2 links
+// the ridges with smooth tangents (a wave); anything else leaves corners.
+func (r *renderer) applyZigZag(n *shapeNode, f float64, groupStart int) {
+	amp := n.amount.scalarAt(f, 0)
+	freq := int(math.Max(0, math.Round(n.zzFreq.scalarAt(f, 1))))
+	smooth := n.zzPoints.scalarAt(f, 1) == 2
+	if amp == 0 {
+		return
+	}
+	t := &r.trim
+	for gi := groupStart; gi < r.nGeoms; gi++ {
+		g := &r.geoms[gi]
+		t.out = t.out[:0]
+		out := t.nextOut(g.mat)
+		out.alpha = g.alpha
+		zigZagContour(&out.bez, &g.bez, amp, freq, smooth)
+		copyGeomInto(g, out)
+	}
+}
+
+func zigZagContour(dst, src *bezierShape, amp float64, freq int, smooth bool) {
+	n := len(src.V)
+	dst.Closed = src.Closed
+	if n < 2 {
+		dst.V = append(dst.V, src.V...)
+		dst.I = append(dst.I, src.I...)
+		dst.O = append(dst.O, src.O...)
+		return
+	}
+	segs := n - 1
+	if src.Closed {
+		segs = n
+	}
+	dir := 1.0
+	place := func(s int, u float64) {
+		p0, p1, p2, p3 := segmentPoints(src, s)
+		x, y := cubicPoint(p0, p1, p2, p3, u)
+		nx, ny := cubicNormal(p0, p1, p2, p3, u)
+		dst.V = append(dst.V, [2]float64{x + nx*amp*dir, y + ny*amp*dir})
+		dir = -dir
+	}
+	// Each segment contributes its start vertex plus freq interior ridges;
+	// an open contour then needs its final vertex appended.
+	for s := 0; s < segs; s++ {
+		for j := 0; j <= freq; j++ {
+			place(s, float64(j)/float64(freq+1))
+		}
+	}
+	if !src.Closed {
+		place(segs-1, 1)
+	}
+	m := len(dst.V)
+	dst.I = dst.I[:0]
+	dst.O = dst.O[:0]
+	for i := 0; i < m; i++ {
+		if !smooth {
+			dst.I = append(dst.I, [2]float64{})
+			dst.O = append(dst.O, [2]float64{})
+			continue
+		}
+		// Catmull-Rom style tangents from the neighboring ridges.
+		prev, next := i-1, i+1
+		if src.Closed {
+			prev, next = (i-1+m)%m, (i+1)%m
+		} else {
+			prev, next = max(prev, 0), min(next, m-1)
+		}
+		tx := (dst.V[next][0] - dst.V[prev][0]) / 4
+		ty := (dst.V[next][1] - dst.V[prev][1]) / 4
+		dst.I = append(dst.I, [2]float64{-tx, -ty})
+		dst.O = append(dst.O, [2]float64{tx, ty})
+	}
+}
+
+// cubicNormal returns the unit normal of the segment at parameter u, falling
+// back to the chord for degenerate tangents.
+func cubicNormal(p0, p1, p2, p3 [2]float64, u float64) (nx, ny float64) {
+	mu := 1 - u
+	dx := 3*mu*mu*(p1[0]-p0[0]) + 6*mu*u*(p2[0]-p1[0]) + 3*u*u*(p3[0]-p2[0])
+	dy := 3*mu*mu*(p1[1]-p0[1]) + 6*mu*u*(p2[1]-p1[1]) + 3*u*u*(p3[1]-p2[1])
+	if dx == 0 && dy == 0 {
+		dx, dy = p3[0]-p0[0], p3[1]-p0[1]
+	}
+	l := math.Hypot(dx, dy)
+	if l == 0 {
+		return 0, 0
+	}
+	return dy / l, -dx / l
+}
+
 // maxRepeaterCopies bounds runaway repeater values.
 const maxRepeaterCopies = 512
 

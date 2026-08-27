@@ -100,7 +100,7 @@ type rawLayer struct {
 	Blend       int             `json:"bm"`
 	Effects     json.RawMessage `json:"ef"`
 	DDD         int             `json:"ddd"`
-	TM          json.RawMessage `json:"tm"` // time remap (precomp)
+	TM          *rawProp        `json:"tm"` // time remap (precomp), in seconds
 
 	// Precomposition / image layer (ty: 0 / 2).
 	RefID string  `json:"refId"`
@@ -114,6 +114,21 @@ type rawLayer struct {
 	SolidW     float64 `json:"sw"`
 	SolidH     float64 `json:"sh"`
 	SolidColor string  `json:"sc"` // "#rrggbb"
+}
+
+// rawEffect is one entry of a layer's "ef" array.
+type rawEffect struct {
+	Type    int             `json:"ty"`
+	Name    string          `json:"nm"`
+	Enabled *int            `json:"en"`
+	Values  []rawEffectItem `json:"ef"`
+}
+
+// rawEffectItem is one parameter of an effect, in schema order.
+type rawEffectItem struct {
+	Type int      `json:"ty"`
+	Name string   `json:"nm"`
+	V    *rawProp `json:"v"`
 }
 
 // rawMask is one entry of masksProperties.
