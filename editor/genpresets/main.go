@@ -1,0 +1,170 @@
+// Command genpresets writes the character animation presets under
+// testdata/presets. Presets are the templates AI-assisted workflows start
+// from (see .knowledge requirement:animation-presets): raster cutout rigs
+// whose part images are the contract a design swap must honor, with every
+// clip and the state machine wired so a customized copy is game-ready.
+// Everything is generated in-repository, so licensing is unambiguous.
+//
+//	go run ./genpresets
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"maps"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+
+	lottie "github.com/shibukawa/lottie-go"
+)
+
+func main() {
+	out := flag.String("out", filepath.Join("..", "testdata", "presets"), "output directory")
+	flag.Parse()
+	if err := run(*out); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run(out string) error {
+	return writePreset(filepath.Join(out, "chibi-male"), "chibi-male")
+}
+
+func writePreset(dir, name string) error {
+	if err := os.MkdirAll(filepath.Join(dir, "parts"), 0o755); err != nil {
+		return err
+	}
+	clips := chibiMaleClips()
+	if err := removeStaleClips(dir, clips); err != nil {
+		return err
+	}
+	if err := removeStaleParts(filepath.Join(dir, "parts")); err != nil {
+		return err
+	}
+
+	b := lottie.NewBundle()
+	for _, p := range allParts {
+		data, err := p.pngBytes()
+		if err != nil {
+			return fmt.Errorf("%s: %w", p.name, err)
+		}
+		// The loose copy is for inspection and for redrawing a part
+		// without unzipping the bundle; the bundle copy is what plays.
+		if err := os.WriteFile(filepath.Join(dir, "parts", p.file()), data, 0o644); err != nil {
+			return err
+		}
+		b.SetImage(p.file(), data)
+	}
+	// Sorted so the manifest order is stable run to run.
+	for _, id := range slices.Sorted(maps.Keys(clips)) {
+		data, err := json.MarshalIndent(clips[id], "", " ")
+		if err != nil {
+			return fmt.Errorf("%s/%s: %w", name, id, err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, id+".json"), data, 0o644); err != nil {
+			return err
+		}
+		if err := b.SetAnimation(id, data); err != nil {
+			return fmt.Errorf("%s/%s: %w", name, id, err)
+		}
+	}
+	if err := b.SetStateMachine(name, chibiMachine()); err != nil {
+		return err
+	}
+	b.Manifest().Generator = "lottie-go/editor genpresets"
+	if problems := b.Validate(); len(problems) > 0 {
+		return fmt.Errorf("%s: %v", name, problems)
+	}
+	var buf bytes.Buffer
+	if err := b.Encode(&buf); err != nil {
+		return err
+	}
+	path := filepath.Join(dir, name+".lottie")
+	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
+		return err
+	}
+	if err := verify(buf.Bytes()); err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+	sheet, err := previewSheet(chibiMaleDefs(), 6)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "preview.png"), sheet, 0o644); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte(readme), 0o644); err != nil {
+		return err
+	}
+	fmt.Printf("wrote %s (%d clips, %d parts, %d bytes)\n", path, len(clips), len(allParts), buf.Len())
+	return nil
+}
+
+// verify re-reads the written bundle the way a game would and rejects the
+// run if any clip fails to decode clean: presets must load with zero
+// unsupported features, or the AI workflow's own validation baseline lies.
+func verify(data []byte) error {
+	b, err := lottie.DecodeBundle(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return err
+	}
+	for _, id := range b.AnimationIDs() {
+		a, err := b.Animation(id)
+		if err != nil {
+			return err
+		}
+		if notes := a.UnsupportedFeatures(); len(notes) > 0 {
+			return fmt.Errorf("%s: unsupported features: %v", id, notes)
+		}
+	}
+	return nil
+}
+
+// removeStaleParts deletes part images a rig change no longer produces,
+// so an old slot's file does not look like part of the contract.
+func removeStaleParts(dir string) error {
+	entries, err := filepath.Glob(filepath.Join(dir, "*.png"))
+	if err != nil {
+		return err
+	}
+	current := map[string]bool{}
+	for _, p := range allParts {
+		current[p.file()] = true
+	}
+	for _, path := range entries {
+		if current[filepath.Base(path)] {
+			continue
+		}
+		if err := os.Remove(path); err != nil {
+			return err
+		}
+		fmt.Printf("removed stale %s\n", path)
+	}
+	return nil
+}
+
+// removeStaleClips deletes the .json clips in dir that are not being
+// written, so a renamed clip does not leave its old name looking like
+// part of the preset.
+func removeStaleClips(dir string, clips map[string]obj) error {
+	entries, err := filepath.Glob(filepath.Join(dir, "*.json"))
+	if err != nil {
+		return err
+	}
+	for _, path := range entries {
+		id := strings.TrimSuffix(filepath.Base(path), ".json")
+		if _, ok := clips[id]; ok {
+			continue
+		}
+		if err := os.Remove(path); err != nil {
+			return err
+		}
+		fmt.Printf("removed stale %s\n", path)
+	}
+	return nil
+}

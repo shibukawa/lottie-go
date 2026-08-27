@@ -1,0 +1,102 @@
+package main
+
+// readme is written next to the preset. It is the seed of the future
+// skill document: everything an agent needs to customize the preset
+// without breaking it.
+const readme = `# chibi-male preset
+
+A 2.5-heads-tall character as a raster cutout rig: eleven PNG part images
+moved by transforms and nothing else — no vector shapes, no expressions,
+no effects — so every clip decodes with zero unsupported features in
+lottie-go and plays in any Lottie player. The drawing is a deliberate
+placeholder — one flat color per part, three-quarter view — because the
+preset's value is the motion; "male" describes the gait, not the art.
+
+Open it:
+
+` + "```bash" + `
+cd editor && go run . ../testdata/presets/chibi-male/chibi-male.lottie
+` + "```" + `
+
+Regenerate after editing the generator:
+
+` + "```bash" + `
+cd editor && go run ./genpresets
+` + "```" + `
+
+## Rig
+
+The character leads right; a left-facing character is the runtime mirror
+(` + "`Mirrored` / `MirrorX`" + `), so there are no *-left clips. Limbs are
+named by depth (near/far), not left/right, because the mirror swaps which
+body-side is near. Arms and legs are two-segment chains: the forearm is
+parented to the upper arm (elbow), the shin to the thigh (knee).
+
+Parts live in the bundle under ` + "`i/`" + ` and as loose files under
+` + "`parts/`" + `. Each is referenced by every clip with a fixed anchor
+(the joint it rotates around) and position in its parent's space:
+
+| slot           | size  | anchor  | parent         | attach    |
+|----------------|-------|---------|----------------|-----------|
+| head           | 72x60 | (36,56) | body           | (24,3)    |
+| body           | 48x48 | (24,45) | -              | (128,179) |
+| upper-arm-near | 15x27 | (7,4)   | body           | (45,8)    |
+| forearm-near   | 15x30 | (7,4)   | upper-arm-near | (7,23)    |
+| upper-arm-far  | 15x27 | (7,4)   | body           | (3,8)     |
+| forearm-far    | 15x30 | (7,4)   | upper-arm-far  | (7,23)    |
+| thigh-near     | 18x33 | (9,4)   | body           | (32,45)   |
+| shin-near      | 21x36 | (9,4)   | thigh-near     | (9,29)    |
+| thigh-far      | 18x33 | (9,4)   | body           | (16,45)   |
+| shin-far       | 21x36 | (9,4)   | thigh-far      | (9,29)    |
+| shadow         | 84x15 | (42,7)  | -              | (128,236) |
+
+Files are chibi-male-<slot>.png. Canvas is 256x256, ground at y=236,
+60fps.
+
+**Design swaps replace the images and nothing else.** A new outfit or a
+new character (samurai, knight, robot) is eleven new images at the same
+sizes with the same anchor meanings: head drawn with the neck at (36,56),
+limb segments hanging straight down from their joint, the shoe toe
+pointing +x. Keep the far-side copies darker than the near side so depth
+still reads. The keyframes never change.
+
+## Clips
+
+Loops: idle, walk, run, fall-loop, guard. Everything else is one-shot and
+returns by itself through the machine.
+
+- idle / walk / run / dash / slide — ground movement; dash is the burst
+  that settles into run.
+- idle-turn / walk-turn / run-turn — facing-flip bridges: the body
+  squashes to a sliver at the midpoint, which is where the game flips its
+  mirror flag.
+- run-to-idle — braking stop.
+- jump -> fall -> fall-loop — the air chain; each hands over on complete.
+- punch -> punch-2 — firing punch during punch chains the follow-up.
+- kick, jump-kick — ground and air kicks.
+- guard / guard-hit — hold stance while the guarding boolean is true; a
+  hurt event while guarding plays guard-hit instead of hurt.
+- hurt, death — reachable from anywhere via the global state. death holds
+  its last frame and has no way out: the game stops firing events and
+  restarts the player (or the editor's Restart) to revive.
+
+## Machine verbs
+
+Events: walk, run, dash, stop, turn, jump, slide, punch, kick, hurt, die.
+Booleans: grounded (jump needs it true; fall-loop exits to idle when it
+turns true), guarding (idle enters guard while true).
+clipDone is internal: the OnComplete interaction fires it so one-shot
+states hand over without a game-side timer.
+
+## Rules for editing
+
+- No expressions, effects, 3D, or time remap: keyframes only.
+- Blend modes beyond normal/multiply/screen and mask modes beyond
+  add/subtract are skipped by lottie-go — do not rely on them.
+- After any edit, re-open the bundle and check
+  ` + "`Animation.UnsupportedFeatures()`" + ` is empty (the generator's
+  verify step shows the pattern).
+
+preview.png is a contact sheet of every clip sampled six times, rendered
+straight from the pose data by the generator.
+`
