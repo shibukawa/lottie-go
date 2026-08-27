@@ -243,7 +243,7 @@ rigs (part images moved by transform keyframes — no vector shapes, no
 expressions) with a full clip set and a wired state machine. The first is
 `chibi-male`, a 2.5-heads character with 19 clips from idle to death. The
 art is a deliberate placeholder — one flat color per part — because the
-value is the motion: replace the eleven part images at the same sizes and
+value is the motion: replace the fourteen part images at the same sizes and
 anchors and every clip plays with the new look.
 
 Presets are built for automated editing. Two commands close the loop:

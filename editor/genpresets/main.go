@@ -32,6 +32,12 @@ func main() {
 }
 
 func run(out string) error {
+	// The default output is relative to the editor directory. Running from
+	// elsewhere (genpresets/ itself is the classic slip) would silently
+	// create a second testdata tree, so refuse unless the target exists.
+	if _, err := os.Stat(out); err != nil {
+		return fmt.Errorf("output directory %s not found: run from the editor directory (go run ./genpresets) or pass -out", out)
+	}
 	return writePreset(filepath.Join(out, "chibi-male"), "chibi-male")
 }
 

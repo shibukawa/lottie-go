@@ -17,6 +17,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"strings"
 )
 
 // pxScale is how many PNG pixels one art pixel covers.
@@ -60,6 +61,49 @@ var headArt = []string{
 	"....OOTTTTTTTTTTTTOO....",
 	"......OOOOOOOOOOOO......",
 	"........................",
+}
+
+// headBackArt is the head seen from behind: the same silhouette with no
+// face. punch-2 switches to it while winding up turned away.
+var headBackArt = func() []string {
+	rows := make([]string, len(headArt))
+	for i, row := range headArt {
+		rows[i] = strings.ReplaceAll(row, "e", "T")
+	}
+	return rows
+}()
+
+// headSideArt is the rear-quarter view a turning head passes through:
+// mostly the back of the head with just the leading eye visible. Same
+// silhouette, the trailing eye removed.
+var headSideArt = func() []string {
+	rows := make([]string, len(headArt))
+	for i, row := range headArt {
+		rows[i] = strings.Replace(row, "ee", "TT", 1)
+	}
+	return rows
+}()
+
+// bodySideArt is the torso mid-turn: the same canvas with a narrower
+// silhouette, so the body visibly thins as it rotates instead of
+// mirroring in place.
+var bodySideArt = []string{
+	"....OOOOOOOO....",
+	"...OGGGGGGGGO...",
+	"...OGGGGGGGGO...",
+	"...OGGGGGGGGO...",
+	"...OGGGGGGGGO...",
+	"...OGGGGGGGGO...",
+	"...OGGGGGGGGO...",
+	"...OGGGGGGGGO...",
+	"...OGGGGGGGGO...",
+	"...OGGGGGGGGO...",
+	"...OGGGGGGGGO...",
+	"...OGGGGGGGGO...",
+	"...OggggggggO...",
+	"...OBBBBBBBBO...",
+	"...OBBBBBBBBO...",
+	"....OOOOOOOO....",
 }
 
 // The base torso stays undecorated on purpose: collars, plackets and
@@ -222,8 +266,11 @@ const (
 )
 
 var (
-	headPart = part{name: "head", art: headArt, anchor: [2]float64{36, 56}, pos: [2]float64{24, 3}}
-	bodyPart = part{name: "body", art: bodyArt, anchor: [2]float64{24, 45}, pos: [2]float64{restX, restY}}
+	headPart     = part{name: "head", art: headArt, anchor: [2]float64{36, 56}, pos: [2]float64{24, 3}}
+	headSidePart = part{name: "head-side", art: headSideArt, anchor: [2]float64{36, 56}, pos: [2]float64{24, 3}}
+	headBackPart = part{name: "head-back", art: headBackArt, anchor: [2]float64{36, 56}, pos: [2]float64{24, 3}}
+	bodyPart     = part{name: "body", art: bodyArt, anchor: [2]float64{24, 45}, pos: [2]float64{restX, restY}}
+	bodySidePart = part{name: "body-side", art: bodySideArt, anchor: [2]float64{24, 45}, pos: [2]float64{24, 45}}
 	// Facing right in three-quarter view, the camera-side (near) limbs are
 	// the character's left side, which trails on screen (-x); the far limbs
 	// lead (+x) and peek out from behind the torso. Getting this backwards
@@ -240,7 +287,7 @@ var (
 )
 
 var allParts = []part{
-	headPart, bodyPart,
+	headPart, headSidePart, headBackPart, bodyPart, bodySidePart,
 	upperArmN, forearmN, upperArmF, forearmF,
 	thighN, shinNearPart, thighF, shinFarPart,
 	shadowPart,
