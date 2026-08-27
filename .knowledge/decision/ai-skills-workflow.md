@@ -15,7 +15,7 @@ components:
   - preset .lottie templates with rig naming convention (requirement:animation-presets)
   - skill doc: supported-subset rules, rig convention, part-image spec, edit recipes
   - validation CLI: load -> UnsupportedFeatures() empty -> render frame PNGs for agent self-check
-  - editor auto-reload on file change (substitutes MCP live view)
+  - editor viewer mode: `editor -viewer file` polls all source files, reloads when writes settle, disables saving (substitutes MCP live view)
 tasks:
   - motion: edit keyframes/timing, author new clips from preset reference
   - design: regenerate WebP part images to slot spec (image-gen capability supplied by user's stack)

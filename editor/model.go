@@ -52,6 +52,14 @@ type Model struct {
 	machineID string
 	machine   *lottie.StateMachine
 
+	// sources is every disk file the document was built from — the opened
+	// bundle or clip plus later imports — in load order, so viewer mode
+	// can watch them and Reload can replay them.
+	sources []string
+	// viewer marks watch-and-reload mode: the disk is the source of truth,
+	// saving is disabled, and edits only last until the next reload.
+	viewer bool
+
 	selectedState string
 	selectedTrans int
 
@@ -172,6 +180,7 @@ func (m *Model) Open(path string) {
 		m.bundle = lottie.NewBundle()
 		m.path = ""
 		m.machineID, m.machine = "", nil
+		m.sources = nil
 		m.ImportClip(path)
 		return
 	}
@@ -196,6 +205,7 @@ func (m *Model) Open(path string) {
 	}
 	m.bundle = b
 	m.path = path
+	m.sources = []string{path}
 	m.selectedState, m.selectedTrans = "", -1
 	m.machineID, m.machine = "", nil
 	m.resetCollisionSelection()
@@ -256,7 +266,37 @@ func (m *Model) ImportClip(path string) {
 		m.generation++
 		return
 	}
+	if !slices.Contains(m.sources, path) {
+		m.sources = append(m.sources, path)
+	}
 	m.setStatus("imported clip %q", id)
+	m.generation++
+}
+
+// Sources lists the disk files behind the current document, oldest first.
+func (m *Model) Sources() []string { return m.sources }
+
+// SetViewer switches watch-and-reload mode on; Viewer reports it.
+func (m *Model) SetViewer(v bool) { m.viewer = v }
+func (m *Model) Viewer() bool     { return m.viewer }
+
+// Reload rebuilds the document from its source files, replaying the open
+// and every import, and keeps the selected machine when it still exists.
+// It is how viewer mode follows edits made outside the editor.
+func (m *Model) Reload() {
+	if len(m.sources) == 0 {
+		return
+	}
+	srcs := slices.Clone(m.sources)
+	prevMachine := m.machineID
+	m.Open(srcs[0])
+	for _, p := range srcs[1:] {
+		m.ImportClip(p)
+	}
+	if prevMachine != "" && slices.Contains(m.bundle.StateMachineIDs(), prevMachine) {
+		m.SelectMachine(prevMachine)
+	}
+	m.setStatus("auto-reloaded %s", filepath.Base(srcs[0]))
 	m.generation++
 }
 

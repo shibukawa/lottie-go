@@ -15,6 +15,21 @@ The path argument is optional; **Open…**, **Save As…**, and **Import…** op
 native file dialogs through [zenity](https://github.com/ncruces/zenity),
 which is pure Go and needs no cgo.
 
+`-viewer` starts **viewer mode**: the editor watches every file the
+document was loaded from — the `.lottie` bundle (whose images travel
+inside it), or a loose clip `.json` plus anything imported after — and
+reloads automatically when any of them changes on disk. A change only
+triggers once the file stats hold still for a poll interval, so a tool
+rewriting several files (a `lottierepack`, an agent editing clips) is
+picked up when it finishes, not mid-write. The disk is the source of
+truth in this mode: saving is greyed out and in-editor edits last only
+until the next reload. It is the intended way to watch AI edits land
+live:
+
+```bash
+cd editor && go run . -viewer ../testdata/presets/chibi-male/chibi-male.lottie
+```
+
 The editor is its own module and depends on a released `lottie-go`, so it
 installs like any other command:
 

@@ -37,6 +37,12 @@ The dump layout: `work/<clip-id>.json` (one animation per file),
 `work/parts/*.png` (shared images), `work/machines/<id>.json` (state
 machines). Deleting a clip file deletes the clip on repack.
 
+If the lottie-go checkout is available, the user can watch your edits
+land live: `cd editor && go run . -viewer path/to/character.lottie`
+auto-reloads whenever the bundle changes on disk. Suggest it when the
+user wants to follow along; it changes nothing about your workflow —
+keep repacking and checking as usual.
+
 **Always close the loop**: after any edit, repack, run lottiecheck with
 `-render`, and actually look at the rendered PNGs (they are small; read a
 few key frames). "It repacked" is not verification — a wrong anchor or a
