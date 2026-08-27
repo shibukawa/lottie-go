@@ -2,6 +2,7 @@ package lottie
 
 import (
 	"image"
+	"math"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -468,6 +469,41 @@ func (p *Player) Draw(dst *ebiten.Image, opts *DrawOptions) {
 		return
 	}
 	p.r.render(dst, p.anim, f, root, cs, antialias)
+}
+
+// HitTest reports whether the point lies within a named layer's bounds at
+// the current frame, in the animation's composition coordinates — the same
+// space Draw's GeoM maps to the screen, so apply the inverse of that
+// transform to a cursor position first. Nested precompositions are searched
+// too. Layers whose extent cannot be known up front (text) never hit.
+func (p *Player) HitTest(name string, x, y float64) bool {
+	if name == "" {
+		return false
+	}
+	pt := image.Pt(int(math.Floor(x)), int(math.Floor(y)))
+	var walk func(layers []*layerNode, f float64, root matrix) bool
+	walk = func(layers []*layerNode, f float64, root matrix) bool {
+		for _, l := range layers {
+			if l.hidden || l.matteOnly || f < l.ip || f >= l.op {
+				continue
+			}
+			lt := l.localTime(f)
+			mat := root.mul(layerMatrix(l, f, 0))
+			if l.name == name {
+				if b, ok := p.r.layerBounds(l, f, lt, mat); ok && pt.In(b) {
+					return true
+				}
+			}
+			if l.typ == 0 && len(l.comp) > 0 {
+				if walk(l.comp, l.compTime(lt, p.anim.frameRate), mat) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	p.r.anim = p.anim
+	return walk(p.anim.layers, p.frame, identityMatrix)
 }
 
 // SetSnapshotCache toggles the idle snapshot cache (default on). While a

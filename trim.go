@@ -22,6 +22,7 @@ func (t *trimmer) nextOut(mat matrix) *geometry {
 	g := &t.out[len(t.out)-1]
 	g.mat = mat
 	g.alpha = 1
+	g.xor = false
 	g.bez.Closed = false
 	g.bez.V = g.bez.V[:0]
 	g.bez.I = g.bez.I[:0]
@@ -254,6 +255,7 @@ func (t *trimmer) extract(g *geometry, f0, f1 float64) {
 	if f0 <= 0 && f1 >= 1 {
 		out := t.nextOut(g.mat)
 		out.alpha = g.alpha
+		out.xor = g.xor
 		out.bez.Closed = g.bez.Closed
 		out.bez.V = append(out.bez.V, g.bez.V...)
 		out.bez.I = append(out.bez.I, g.bez.I...)
@@ -290,6 +292,7 @@ func (t *trimmer) extract(g *geometry, f0, f1 float64) {
 
 	out := t.nextOut(g.mat)
 	out.alpha = g.alpha
+	out.xor = g.xor
 
 	push := func(v, in, o [2]float64) {
 		out.bez.V = append(out.bez.V, v)
