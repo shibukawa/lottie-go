@@ -1,6 +1,6 @@
 package main
 
-// The preset's state machine wires all twenty clips behind game-facing
+// The preset's state machine wires all nineteen clips behind game-facing
 // verbs. Conventions follow editor/gensamples: -state / -anim suffixes,
 // bare input names, clipDone fired by the OnComplete interaction so
 // one-shot clips hand over by themselves.
@@ -71,7 +71,6 @@ func chibiMachine() *lottie.StateMachine {
 		Inputs: []lottie.Input{
 			{Type: lottie.InputEvent, Name: "walk"},
 			{Type: lottie.InputEvent, Name: "run"},
-			{Type: lottie.InputEvent, Name: "dash"},
 			{Type: lottie.InputEvent, Name: "stop"},
 			{Type: lottie.InputEvent, Name: "turn"},
 			{Type: lottie.InputEvent, Name: "jump"},
@@ -88,7 +87,6 @@ func chibiMachine() *lottie.StateMachine {
 			// Column 1: ground loops and their turns.
 			at(loopState("idle-state", "idle-anim", []lottie.Transition{
 				to("jump-state", event("jump"), grounded),
-				to("dash-state", event("dash")),
 				to("run-state", event("run")),
 				to("walk-state", event("walk")),
 				to("punch-state", event("punch")),
@@ -102,7 +100,6 @@ func chibiMachine() *lottie.StateMachine {
 			at(loopState("walk-state", "walk-anim", []lottie.Transition{
 				to("jump-state", event("jump"), grounded),
 				to("run-state", event("run")),
-				to("dash-state", event("dash")),
 				to("idle-state", event("stop")),
 				to("walk-turn-state", event("turn")),
 			}), 260, 40),
@@ -119,10 +116,6 @@ func chibiMachine() *lottie.StateMachine {
 			at(onceState("run-turn-state", "run-turn-anim", []lottie.Transition{
 				to("run-state", done),
 			}), 480, 170),
-			at(onceState("dash-state", "dash-anim", []lottie.Transition{
-				to("jump-state", event("jump"), grounded),
-				to("run-state", done),
-			}), 700, 40),
 			at(onceState("run-to-idle-state", "run-to-idle-anim", []lottie.Transition{
 				to("idle-state", done),
 			}), 700, 170),

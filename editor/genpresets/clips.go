@@ -21,6 +21,7 @@ type pose struct {
 	kneeN, kneeF   float64 // shin rotation relative to the thigh
 	alpha          float64 // whole-character opacity % (hurt flash)
 	shadow         float64 // ground shadow scale % (reads as height)
+	flip           bool    // turned: limb attach sides swap, head/shins x-mirror
 }
 
 func base() pose { return pose{sx: 100, sy: 100, alpha: 100, shadow: 100} }
@@ -35,6 +36,7 @@ func (p pose) legs(near, far float64) pose   { p.legN, p.legF = near, far; retur
 func (p pose) knees(near, far float64) pose  { p.kneeN, p.kneeF = near, far; return p }
 func (p pose) fade(a float64) pose           { p.alpha = a; return p }
 func (p pose) shade(s float64) pose          { p.shadow = s; return p }
+func (p pose) turned() pose                  { p.flip = true; return p }
 
 type kf struct {
 	t    float64
@@ -84,6 +86,40 @@ func scalar(get func(pose) float64) func(pose) []float64 {
 	return func(p pose) []float64 { return []float64{get(p)} }
 }
 
+// flipTrack is a two-state property driven by pose.flip: off / on values
+// with hold keyframes, so the switch is instant — a turn shows no
+// morphing in between, the sides just trade places at the midpoint.
+func flipTrack(keys []kf, off, on []float64) obj {
+	animated := false
+	for _, kf := range keys[1:] {
+		if kf.p.flip != keys[0].p.flip {
+			animated = true
+			break
+		}
+	}
+	if !animated {
+		v := off
+		if keys[0].p.flip {
+			v = on
+		}
+		return static(v)
+	}
+	ks := make([]obj, len(keys))
+	for i, kf := range keys {
+		v := off
+		if kf.p.flip {
+			v = on
+		}
+		ks[i] = holdKey(kf.t, v)
+	}
+	return anim(ks...)
+}
+
+// bodyMirrorX reflects an attach point across the body's vertical center.
+func bodyMirrorX(pos [2]float64) [2]float64 {
+	return [2]float64{48 - pos[0], pos[1]}
+}
+
 // clip assembles the rig into a document. Limbs are two-segment chains
 // (upper arm carrying a forearm, thigh carrying a shin) parented through
 // the body. Layer order is front to back: the near arm chain crosses in
@@ -97,11 +133,25 @@ func clip(name string, frames float64, keys []kf) obj {
 		thighFInd    = 7
 		upperArmFInd = 9
 	)
-	seg := func(p part, get func(pose) float64) obj {
+	// swapSides: attach point trades sides on flip (limb roots).
+	// mirror: the image x-mirrors on flip (head keeps the face reading
+	// left; shins keep the shoe toe pointing the way the character now
+	// faces). Chain children (forearms, shins) follow their parent, so
+	// their attach never moves.
+	seg := func(p part, swapSides, mirror bool, get func(pose) float64) obj {
+		pos := obj(static([]float64{p.pos[0], p.pos[1]}))
+		if swapSides {
+			m := bodyMirrorX(p.pos)
+			pos = flipTrack(keys, []float64{p.pos[0], p.pos[1]}, []float64{m[0], m[1]})
+		}
+		scale := obj(static([]float64{100, 100}))
+		if mirror {
+			scale = flipTrack(keys, []float64{100, 100}, []float64{-100, 100})
+		}
 		return transform(
 			static([]float64{p.anchor[0], p.anchor[1]}),
-			static([]float64{p.pos[0], p.pos[1]}),
-			static([]float64{100, 100}),
+			pos,
+			scale,
 			track(keys, scalar(get)),
 			track(keys, scalar(func(p pose) float64 { return p.alpha })),
 		)
@@ -121,16 +171,16 @@ func clip(name string, frames float64, keys []kf) obj {
 		static(28.0),
 	)
 	return doc(name, frames, []obj{
-		imgLayer("forearm-near", 1, upperArmNInd, frames, "forearm-near", seg(forearmN, func(p pose) float64 { return p.elbowN })),
-		imgLayer("upper-arm-near", upperArmNInd, bodyInd, frames, "upper-arm-near", seg(upperArmN, func(p pose) float64 { return p.armN })),
-		imgLayer("head", 3, bodyInd, frames, "head", seg(headPart, func(p pose) float64 { return p.head })),
-		imgLayer("shin-near", 4, thighNInd, frames, "shin-near", seg(shinNearPart, func(p pose) float64 { return p.kneeN })),
-		imgLayer("thigh-near", thighNInd, bodyInd, frames, "thigh-near", seg(thighN, func(p pose) float64 { return p.legN })),
+		imgLayer("forearm-near", 1, upperArmNInd, frames, "forearm-near", seg(forearmN, false, false, func(p pose) float64 { return p.elbowN })),
+		imgLayer("upper-arm-near", upperArmNInd, bodyInd, frames, "upper-arm-near", seg(upperArmN, true, false, func(p pose) float64 { return p.armN })),
+		imgLayer("head", 3, bodyInd, frames, "head", seg(headPart, false, true, func(p pose) float64 { return p.head })),
+		imgLayer("shin-near", 4, thighNInd, frames, "shin-near", seg(shinNearPart, false, true, func(p pose) float64 { return p.kneeN })),
+		imgLayer("thigh-near", thighNInd, bodyInd, frames, "thigh-near", seg(thighN, true, false, func(p pose) float64 { return p.legN })),
 		imgLayer("body", bodyInd, 0, frames, "body", bodyTr),
-		imgLayer("thigh-far", thighFInd, bodyInd, frames, "thigh-far", seg(thighF, func(p pose) float64 { return p.legF })),
-		imgLayer("shin-far", 8, thighFInd, frames, "shin-far", seg(shinFarPart, func(p pose) float64 { return p.kneeF })),
-		imgLayer("upper-arm-far", upperArmFInd, bodyInd, frames, "upper-arm-far", seg(upperArmF, func(p pose) float64 { return p.armF })),
-		imgLayer("forearm-far", 10, upperArmFInd, frames, "forearm-far", seg(forearmF, func(p pose) float64 { return p.elbowF })),
+		imgLayer("thigh-far", thighFInd, bodyInd, frames, "thigh-far", seg(thighF, true, false, func(p pose) float64 { return p.legF })),
+		imgLayer("shin-far", 8, thighFInd, frames, "shin-far", seg(shinFarPart, false, true, func(p pose) float64 { return p.kneeF })),
+		imgLayer("upper-arm-far", upperArmFInd, bodyInd, frames, "upper-arm-far", seg(upperArmF, true, false, func(p pose) float64 { return p.armF })),
+		imgLayer("forearm-far", 10, upperArmFInd, frames, "forearm-far", seg(forearmF, false, false, func(p pose) float64 { return p.elbowF })),
 		imgLayer("shadow", 11, 0, frames, "shadow", shadowTr),
 	})
 }
@@ -144,13 +194,17 @@ func idleClip() clipDef {
 		k(0, rest, true), k(48, up, true), k(96, rest, true))
 }
 
-// Turn clips bridge a facing flip: the body squashes to a sliver at the
-// midpoint, where the game flips its Mirrored flag.
+// Turn clips actually turn: the shoulders swing around, and at the
+// midpoint the limb chains trade sides while the head and shoes mirror —
+// an instant swap on hold keyframes, no morphing in between. The clip
+// therefore ENDS facing the other way; the game flips its Mirrored flag
+// when the turn completes, and the mirrored idle matches the end pose.
 func idleTurnClip() clipDef {
 	rest := base().elbows(-8, -8).knees(3, 3)
-	mid := base().squash(12, 100).arms(25, -25).elbows(-15, -15).nod(-4)
-	return def("idle-turn-anim", 24,
-		k(0, rest, true), k(12, mid, true), k(24, rest, true))
+	windup := base().lean(-6).arms(25, -25).elbows(-18, -18).legs(-8, 8).knees(8, 8).nod(-4).at(0, -2)
+	swapped := base().lean(6).arms(-25, 25).elbows(-18, -18).legs(8, -8).knees(8, 8).at(0, -2).turned()
+	return def("idle-turn-anim", 20,
+		k(0, rest, true), k(8, windup, true), k(10, swapped, true), k(20, rest.turned(), true))
 }
 
 func walkClip() clipDef {
@@ -165,17 +219,11 @@ func walkClip() clipDef {
 
 func walkTurnClip() clipDef {
 	from := base().legs(-22, 22).knees(8, 20).arms(18, -18).elbows(-14, -14).lean(4)
-	mid := base().squash(15, 100).arms(30, -30).elbows(-18, -18).at(0, -3)
+	gather := base().legs(-8, 8).knees(16, 16).arms(24, -24).elbows(-16, -16).lean(-5).at(0, -3)
+	swapped := base().legs(8, -8).knees(16, 16).arms(-24, 24).elbows(-16, -16).lean(5).at(0, -3).turned()
+	out := base().legs(22, -22).knees(20, 8).arms(-18, 18).elbows(-14, -14).lean(4).turned()
 	return def("walk-turn-anim", 20,
-		k(0, from, true), k(10, mid, true), k(20, from, true))
-}
-
-func dashClip() clipDef {
-	crouch := base().at(0, 7).squash(108, 90).lean(8).legs(-15, 15).knees(20, 20).arms(20, -20).elbows(-30, -30)
-	lunge := base().at(10, -4).squash(94, 104).lean(22).legs(-55, 50).knees(10, 60).arms(-40, 35).elbows(-35, -20)
-	settle := base().lean(12).legs(-45, 45).knees(15, 55).arms(35, -35).elbows(-40, -40)
-	return def("dash-anim", 20,
-		k(0, crouch, true), k(8, lunge, true), k(20, settle, true))
+		k(0, from, true), k(8, gather, true), k(10, swapped, true), k(20, out, true))
 }
 
 func runClip() clipDef {
@@ -189,9 +237,11 @@ func runClip() clipDef {
 
 func runTurnClip() clipDef {
 	from := base().legs(-45, 45).knees(15, 55).arms(35, -35).elbows(-40, -40).lean(12)
-	mid := base().squash(15, 100).lean(-5).arms(40, -40).elbows(-30, -30).at(0, -5)
+	brake := base().legs(-15, 15).knees(30, 30).arms(20, -20).elbows(-30, -30).lean(-8).at(2, -2)
+	swapped := base().legs(15, -15).knees(30, 30).arms(-20, 20).elbows(-30, -30).lean(8).at(-2, -2).turned()
+	out := base().legs(45, -45).knees(55, 15).arms(-35, 35).elbows(-40, -40).lean(12).turned()
 	return def("run-turn-anim", 16,
-		k(0, from, true), k(8, mid, true), k(16, from, true))
+		k(0, from, true), k(6, brake, true), k(8, swapped, true), k(16, out, true))
 }
 
 func runToIdleClip() clipDef {
@@ -203,12 +253,17 @@ func runToIdleClip() clipDef {
 		k(0, from, true), k(8, brake, true), k(16, settle, true), k(24, rest, true))
 }
 
+// slideClip is a baseball slide: drop almost horizontal, lead leg
+// extended, trailing knee tucked, near arm planted behind for balance.
+// The character stays in place — horizontal travel is the game's job —
+// so what animates is the drop, the held low pose, and the recovery.
 func slideClip() clipDef {
 	from := base().legs(-50, 50).knees(15, 70).arms(40, -40).elbows(-40, -40).lean(12)
-	low := base().at(0, 24).lean(-50).legs(-65, -50).knees(25, 15).arms(45, 60).elbows(-20, -20).nod(20).squash(104, 96)
+	drop := base().at(-2, 16).lean(-38).legs(-52, -30).knees(45, 12).arms(50, 25).elbows(-25, -15).nod(14).squash(102, 98)
+	low := base().at(-4, 26).lean(-62).legs(-45, -22).knees(55, 8).arms(62, 30).elbows(-30, -12).nod(24).squash(104, 96)
 	up := base().lean(-10).legs(-28, 28).knees(12, 20).arms(10, -10).elbows(-15, -15)
 	return def("slide-anim", 28,
-		k(0, from, true), k(4, low, true), k(20, low, true), k(28, up, true))
+		k(0, from, true), k(4, drop, false), k(7, low, true), k(20, low, true), k(28, up, true))
 }
 
 // --- Air ---
@@ -259,12 +314,17 @@ func deathClip() clipDef {
 }
 
 // --- Attacks (unarmed) ---
+//
+// Strikes lead with the far-side limb: after the near/far correction it
+// is the limb on the leading (+x) edge, so it reaches the enemy in front
+// instead of crossing the whole body. The combo follow-up then swings
+// the trailing (near) limb through for the bigger second hit.
 
 func punchClip() clipDef {
-	ready := base().lean(4).arms(-15, 15).elbows(-30, -25).legs(-10, 10).knees(8, 12)
-	windup := base().lean(-4).arms(30, 20).elbows(-70, -25).legs(-10, 10).knees(8, 12)
-	strike := base().at(6, 0).lean(10).arms(-95, 20).elbows(-5, -25).legs(-14, 12).knees(6, 14)
-	hold := base().at(4, 0).lean(8).arms(-88, 18).elbows(-8, -25).legs(-14, 12).knees(6, 14)
+	ready := base().lean(4).arms(-20, -15).elbows(-35, -40).legs(-10, 10).knees(8, 12)
+	windup := base().lean(-4).arms(-25, 30).elbows(-35, -75).legs(-10, 10).knees(8, 12)
+	strike := base().at(6, 0).lean(12).arms(25, -95).elbows(-45, -5).legs(-14, 12).knees(6, 14)
+	hold := base().at(4, 0).lean(10).arms(20, -88).elbows(-40, -8).legs(-14, 12).knees(6, 14)
 	rest := base().elbows(-8, -8).knees(3, 3)
 	return def("punch-anim", 20,
 		k(0, ready, true), k(4, windup, true), k(7, strike, false),
@@ -272,30 +332,33 @@ func punchClip() clipDef {
 }
 
 func punch2Clip() clipDef {
-	from := base().at(4, 0).lean(6).arms(-40, 15).elbows(-15, -30).legs(-12, 12).knees(8, 12)
-	windup := base().lean(-2).arms(-20, 35).elbows(-20, -70).legs(-12, 12).knees(8, 12)
-	strike := base().at(8, 0).lean(14).squash(102, 98).arms(15, -100).elbows(-25, -3).legs(-16, 14).knees(6, 14)
-	hold := base().at(6, 0).lean(12).arms(12, -92).elbows(-25, -6).legs(-16, 14).knees(6, 14)
+	from := base().at(4, 0).lean(8).arms(20, -40).elbows(-40, -15).legs(-12, 12).knees(8, 12)
+	windup := base().lean(-2).arms(35, -20).elbows(-75, -20).legs(-12, 12).knees(8, 12)
+	strike := base().at(8, 0).lean(16).squash(102, 98).arms(-100, 15).elbows(-3, -25).legs(-16, 14).knees(6, 14)
+	hold := base().at(6, 0).lean(14).arms(-92, 12).elbows(-6, -25).legs(-16, 14).knees(6, 14)
 	rest := base().elbows(-8, -8).knees(3, 3)
 	return def("punch-2-anim", 24,
 		k(0, from, true), k(5, windup, true), k(9, strike, false),
 		k(14, hold, true), k(24, rest, true))
 }
 
+// kickClip chambers first — hip raised, knee fully folded — and only
+// snaps the knee straight at the moment of impact.
 func kickClip() clipDef {
 	rest := base().elbows(-8, -8).knees(3, 3)
-	windup := base().lean(-8).legs(18, 6).knees(50, 10).arms(-20, 20).elbows(-25, -25)
-	strike := base().at(0, -3).lean(-14).legs(-90, 12).knees(5, 15).arms(35, -35).elbows(-20, -20)
-	hold := base().at(0, -2).lean(-12).legs(-80, 12).knees(10, 15).arms(28, -28).elbows(-20, -20)
+	chamber := base().at(0, -2).lean(-10).legs(8, -55).knees(10, 85).arms(25, -20).elbows(-25, -25)
+	raised := base().at(0, -3).lean(-13).legs(8, -68).knees(10, 95).arms(28, -24).elbows(-25, -25)
+	strike := base().at(2, -3).lean(-16).legs(8, -85).knees(10, 5).arms(32, -30).elbows(-20, -20)
+	hold := base().at(1, -2).lean(-14).legs(8, -75).knees(10, 15).arms(28, -26).elbows(-20, -20)
 	return def("kick-anim", 24,
-		k(0, rest, true), k(5, windup, true), k(9, strike, false),
-		k(15, hold, true), k(24, rest, true))
+		k(0, rest, true), k(6, chamber, true), k(10, raised, true), k(12, strike, false),
+		k(16, hold, true), k(24, rest, true))
 }
 
 func jumpKickClip() clipDef {
 	air := base().at(0, -48).arms(-60, 60).elbows(-25, -25).legs(-15, 22).knees(25, 28).shade(55)
-	tuck := base().at(0, -45).lean(8).legs(25, 28).knees(55, 30).arms(-40, 40).elbows(-30, -30).shade(55)
-	strike := base().at(3, -42).lean(12).legs(-75, 32).knees(5, 32).arms(45, -50).elbows(-25, -25).shade(55)
+	tuck := base().at(0, -45).lean(8).legs(25, -45).knees(40, 80).arms(-40, 40).elbows(-30, -30).shade(55)
+	strike := base().at(3, -42).lean(12).legs(30, -72).knees(45, 5).arms(45, -50).elbows(-25, -25).shade(55)
 	out := base().at(0, -40).arms(-60, 60).elbows(-25, -25).legs(-18, 26).knees(28, 30).shade(57)
 	return def("jump-kick-anim", 28,
 		k(0, air, true), k(6, tuck, true), k(10, strike, false),
@@ -328,7 +391,7 @@ func guardHitClip() clipDef {
 func chibiMaleDefs() []clipDef {
 	return []clipDef{
 		idleClip(), idleTurnClip(), walkClip(), walkTurnClip(),
-		dashClip(), runClip(), runTurnClip(), runToIdleClip(),
+		runClip(), runTurnClip(), runToIdleClip(),
 		slideClip(), jumpClip(), fallClip(), fallLoopClip(),
 		hurtClip(), deathClip(), punchClip(), punch2Clip(),
 		kickClip(), jumpKickClip(), guardClip(), guardHitClip(),

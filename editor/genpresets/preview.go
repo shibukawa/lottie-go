@@ -61,7 +61,13 @@ func poseAt(keys []kf, t float64) pose {
 		if t <= keys[i].t {
 			a, b := keys[i-1], keys[i]
 			f := (t - a.t) / (b.t - a.t)
-			return lerpPose(a.p, b.p, f)
+			p := lerpPose(a.p, b.p, f)
+			// flip is a hold: it switches only when the next key is reached.
+			p.flip = a.p.flip
+			if f >= 1 {
+				p.flip = b.p.flip
+			}
+			return p
 		}
 	}
 	return keys[len(keys)-1].p
@@ -140,10 +146,26 @@ func renderPose(p pose) *image.NRGBA {
 	seg := func(parent mat, pt part, deg float64) mat {
 		return parent.mul(nodeTransform(pt.pos, pt.anchor, deg, 100, 100))
 	}
-	uArmN := seg(body, upperArmN, p.armN)
-	uArmF := seg(body, upperArmF, p.armF)
-	thN := seg(body, thighN, p.legN)
-	thF := seg(body, thighF, p.legF)
+	// On flip, limb roots trade sides and the head and shins x-mirror,
+	// matching the clip builder's flipTrack.
+	root := func(pt part, deg float64) mat {
+		pos := pt.pos
+		if p.flip {
+			pos = bodyMirrorX(pos)
+		}
+		return body.mul(nodeTransform(pos, pt.anchor, deg, 100, 100))
+	}
+	msx := 100.0
+	if p.flip {
+		msx = -100
+	}
+	mirrored := func(parent mat, pt part, deg float64) mat {
+		return parent.mul(nodeTransform(pt.pos, pt.anchor, deg, msx, 100))
+	}
+	uArmN := root(upperArmN, p.armN)
+	uArmF := root(upperArmF, p.armF)
+	thN := root(thighN, p.legN)
+	thF := root(thighF, p.legF)
 	shadow := nodeTransform(shadowPart.pos, shadowPart.anchor, 0, p.shadow, p.shadow)
 	type draw struct {
 		pt      part
@@ -155,12 +177,12 @@ func renderPose(p pose) *image.NRGBA {
 		{shadowPart, shadow, 28},
 		{forearmF, seg(uArmF, forearmF, p.elbowF), p.alpha},
 		{upperArmF, uArmF, p.alpha},
-		{shinFarPart, seg(thF, shinFarPart, p.kneeF), p.alpha},
+		{shinFarPart, mirrored(thF, shinFarPart, p.kneeF), p.alpha},
 		{thighF, thF, p.alpha},
 		{bodyPart, body, p.alpha},
 		{thighN, thN, p.alpha},
-		{shinNearPart, seg(thN, shinNearPart, p.kneeN), p.alpha},
-		{headPart, seg(body, headPart, p.head), p.alpha},
+		{shinNearPart, mirrored(thN, shinNearPart, p.kneeN), p.alpha},
+		{headPart, mirrored(body, headPart, p.head), p.alpha},
 		{upperArmN, uArmN, p.alpha},
 		{forearmN, seg(uArmN, forearmN, p.elbowN), p.alpha},
 	} {

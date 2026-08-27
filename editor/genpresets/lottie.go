@@ -40,6 +40,13 @@ func key(t float64, v []float64, ease bool) obj {
 	return k
 }
 
+// holdKey is a hold keyframe: the value switches instantly and stays
+// until the next key. Turn clips use it to swap limb sides and mirror
+// the head with no morphing in between.
+func holdKey(t float64, v []float64) obj {
+	return obj{"t": t, "s": v, "h": 1}
+}
+
 // anim is an animated property built from keyframes.
 func anim(keys ...obj) obj { return obj{"a": 1, "k": keys} }
 

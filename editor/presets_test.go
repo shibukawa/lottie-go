@@ -44,8 +44,8 @@ func TestChibiMalePreset(t *testing.T) {
 	if m.Preview() == nil {
 		t.Fatalf("preview did not start: %v", m.PreviewErr())
 	}
-	if got := len(m.AnimationIDs()); got != 20 {
-		t.Errorf("AnimationIDs() = %d clips; want 20", got)
+	if got := len(m.AnimationIDs()); got != 19 {
+		t.Errorf("AnimationIDs() = %d clips; want 19", got)
 	}
 
 	sm := m.Preview()
