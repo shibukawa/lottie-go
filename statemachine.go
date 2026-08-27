@@ -363,13 +363,17 @@ func (s *StateMachine) unreachableStates() []string {
 }
 
 // UnsupportedFeatures lists members of the document that this package models
-// but deliberately does not act on, such as pointer interactions a game
-// supplies itself. Playback continues without them.
+// but does not act on by itself. Pointer interactions run when the game
+// feeds input through the StateMachinePlayer's Pointer methods; OpenUrl and
+// SetTheme actions are listed here until an OnAction handler receives them.
+// Playback continues without them.
 func (s *StateMachine) UnsupportedFeatures() []string {
 	found := map[string]struct{}{}
 	for _, in := range s.Interactions {
 		switch in.Type {
-		case InteractionOnComplete, InteractionOnLoopComplete:
+		case InteractionOnComplete, InteractionOnLoopComplete,
+			InteractionClick, InteractionPointerUp, InteractionPointerDown,
+			InteractionPointerEnter, InteractionPointerMove, InteractionPointerExit:
 		default:
 			found[fmt.Sprintf("interaction %s", in.Type)] = struct{}{}
 		}

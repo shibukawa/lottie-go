@@ -2,6 +2,7 @@ package lottie
 
 import (
 	"image"
+	"image/color"
 	"math"
 	"os"
 	"sync"
@@ -12,11 +13,14 @@ import (
 
 // geometry is one evaluated contour together with the transform that maps it
 // to destination space. The bezier buffers are owned by the renderer and
-// reused across frames. alpha carries per-copy opacity from repeaters.
+// reused across frames. alpha carries per-copy opacity from repeaters; xor
+// marks contours combined by an exclude-intersections merge, which fills
+// select the even-odd rule for.
 type geometry struct {
 	bez   bezierShape
 	mat   matrix
 	alpha float64
+	xor   bool
 }
 
 // drawCmd is one fill or stroke over a range of geometries. Style properties
@@ -242,6 +246,7 @@ type renderer struct {
 	maskPath     vector.Path
 	shapeScratch bezierShape
 	maskScratch  bezierShape
+	maskExpand   bezierShape // expanded mask contour scratch
 	vecScratch   []float64
 	dashVals     []float64
 	repGeoms     []geometry // repeater source snapshot
@@ -257,6 +262,7 @@ func nextSlot(arr []geometry, n *int) ([]geometry, *geometry) {
 	g := &arr[*n]
 	*n++
 	g.alpha = 1
+	g.xor = false
 	return arr, g
 }
 
@@ -277,6 +283,7 @@ func (r *renderer) nextDash() *geometry {
 func copyGeomInto(dst *geometry, src *geometry) {
 	dst.mat = src.mat
 	dst.alpha = src.alpha
+	dst.xor = src.xor
 	dst.bez.Closed = src.bez.Closed
 	dst.bez.V = copyPoints(dst.bez.V, src.bez.V)
 	dst.bez.I = copyPoints(dst.bez.I, src.bez.I)
@@ -289,6 +296,33 @@ func copyPoints(dst, src [][2]float64) [][2]float64 {
 
 // render draws the whole animation at composition frame f.
 func (r *renderer) render(dst *ebiten.Image, anim *Animation, f float64, root matrix, cs ebiten.ColorScale, antialias bool) {
+	if anim.rootShaderBlend {
+		// Backdrop-sampling blends on root layers would have to read dst,
+		// which Ebitengine forbids when dst is the screen. Render through an
+		// offscreen instead; those blends then composite against the
+		// animation's own lower layers.
+		b := dst.Bounds()
+		if ab, ok := r.animBounds(anim, f, root); ok {
+			b = b.Intersect(ab)
+		}
+		if b.Empty() {
+			return
+		}
+		off, offBase := sharedPool.get(b.Dx(), b.Dy())
+		shift := identityMatrix.translate(-float64(b.Min.X), -float64(b.Min.Y))
+		r.renderRoot(off, anim, f, shift.mul(root), cs, antialias)
+		var op ebiten.DrawImageOptions
+		op.GeoM.Translate(float64(b.Min.X), float64(b.Min.Y))
+		dst.DrawImage(off, &op)
+		sharedPool.put(offBase)
+		return
+	}
+	r.renderRoot(dst, anim, f, root, cs, antialias)
+}
+
+// renderRoot draws the root layer list, holding the scratch atlases when
+// available.
+func (r *renderer) renderRoot(dst *ebiten.Image, anim *Animation, f float64, root matrix, cs ebiten.ColorScale, antialias bool) {
 	r.anim = anim
 	if anim.phaseNodes > 0 && !phaseBatchDisabled && sharedAtlas.mu.TryLock() {
 		sharedAtlas.reset()
@@ -506,9 +540,10 @@ func (r *renderer) renderLayer(dst *ebiten.Image, l *layerNode, f float64, root 
 	}
 	mat := root.mul(layerMatrix(l, f, 0))
 	blend := blendFor(l.blend)
+	shaderBlend := blendNeedsShader(l.blend)
 
 	hasMatte := applyMatte && l.matteMode != 0 && l.matteSrc != nil
-	if len(l.masks) == 0 && !hasMatte {
+	if len(l.masks) == 0 && !hasMatte && !shaderBlend && len(l.effects) == 0 {
 		r.renderBody(dst, l, f, lt, mat, opacity, cs, blend, antialias)
 		return
 	}
@@ -536,6 +571,9 @@ func (r *renderer) renderLayer(dst *ebiten.Image, l *layerNode, f float64, root 
 	if len(l.masks) > 0 {
 		r.applyMasks(content, l.masks, lt, bodyMat, antialias)
 	}
+	if len(l.effects) > 0 {
+		r.applyEffects(content, l, lt, mat)
+	}
 	if hasMatte {
 		matteImg, matteBase := sharedPool.get(w, h)
 		src := l.matteSrc
@@ -546,12 +584,16 @@ func (r *renderer) renderLayer(dst *ebiten.Image, l *layerNode, f float64, root 
 		sharedPool.put(matteBase)
 	}
 
-	var op ebiten.DrawImageOptions
-	op.GeoM.Translate(float64(bounds.Min.X), float64(bounds.Min.Y))
-	op.ColorScale = cs
-	op.ColorScale.ScaleAlpha(float32(opacity))
-	op.Blend = blend
-	dst.DrawImage(content, &op)
+	if shaderBlend {
+		compositeBlend(dst, content, bounds, l.blend, opacity, cs)
+	} else {
+		var op ebiten.DrawImageOptions
+		op.GeoM.Translate(float64(bounds.Min.X), float64(bounds.Min.Y))
+		op.ColorScale = cs
+		op.ColorScale.ScaleAlpha(float32(opacity))
+		op.Blend = blend
+		dst.DrawImage(content, &op)
+	}
 	sharedPool.put(contentBase)
 }
 
@@ -562,8 +604,19 @@ func (r *renderer) renderLayer(dst *ebiten.Image, l *layerNode, f float64, root 
 // track mattes only ever remove coverage, never add it, so an offscreen
 // clipped to the layer's own content is correct for every matte mode
 // including the inverted ones. Erring outward therefore only costs area,
-// while erring inward would clip visible pixels.
+// while erring inward would clip visible pixels. Effects can push pixels
+// outward — a blur bleeds, a shadow offsets — so their reach pads the base.
 func (r *renderer) layerBounds(l *layerNode, f, lt float64, mat matrix) (image.Rectangle, bool) {
+	b, ok := r.layerBaseBounds(l, f, lt, mat)
+	if ok && len(l.effects) > 0 && !b.Empty() {
+		if pad := effectPad(l, lt, mat.meanScale()); pad > 0 {
+			b = b.Inset(-int(math.Ceil(pad)))
+		}
+	}
+	return b, ok
+}
+
+func (r *renderer) layerBaseBounds(l *layerNode, f, lt float64, mat matrix) (image.Rectangle, bool) {
 	switch l.typ {
 	case 4:
 		return r.shapeBounds(l, lt, mat)
@@ -709,7 +762,11 @@ func (r *renderer) renderBody(dst *ebiten.Image, l *layerNode, f, lt float64, ma
 		}
 		off, offBase := sharedPool.getExact(ow, oh)
 		var neutral ebiten.ColorScale
-		r.renderLayers(off, l.comp, lt, identityMatrix.scale(s, s), neutral, antialias)
+		ct := lt
+		if r.anim != nil {
+			ct = l.compTime(lt, r.anim.frameRate)
+		}
+		r.renderLayers(off, l.comp, ct, identityMatrix.scale(s, s), neutral, antialias)
 		var op ebiten.DrawImageOptions
 		op.GeoM = mat.scale(1/s, 1/s).toGeoM()
 		op.ColorScale = cs
@@ -746,27 +803,75 @@ func (r *renderer) applyMasks(content *ebiten.Image, masks []maskNode, lt float6
 }
 
 // renderCoverage fills the combined mask shapes into coverage, whose bounds
-// must be positioned so that mat lands the shapes inside it.
+// must be positioned so that mat lands the shapes inside it. Masks apply in
+// order to an accumulating coverage: add unions, subtract erases, intersect
+// keeps the overlap. When the first mask is not additive it operates on the
+// full layer, as in After Effects, so coverage then starts opaque.
 func (r *renderer) renderCoverage(coverage *ebiten.Image, masks []maskNode, lt float64, mat matrix, antialias bool) {
+	if len(masks) > 0 && masks[0].mode != 'a' {
+		coverage.Fill(color.White)
+	}
 	for i := range masks {
 		m := &masks[i]
 		alpha := clamp01(m.opacity.scalarAt(lt, 100) / 100)
-		if alpha <= 0 {
-			continue
+		if alpha <= 0 && m.mode != 'i' {
+			continue // adds or erases nothing; an opacity-0 intersect still clears
 		}
 		bez := m.shape.at(lt, &r.maskScratch)
+		if m.expansion != nil {
+			if exp := m.expansion.scalarAt(lt, 0); exp != 0 {
+				sc := &r.maskExpand
+				sc.V, sc.I, sc.O = sc.V[:0], sc.I[:0], sc.O[:0]
+				offsetContour(sc, &bez, exp)
+				bez = *sc
+			}
+		}
+		fill := &vector.FillOptions{FillRule: vector.FillRuleNonZero}
+		if !m.inverted && m.mode != 'i' {
+			// Add and subtract affect only the path's inside, so they can
+			// paint straight onto the coverage.
+			r.maskPath.Reset()
+			bez.appendToPath(&r.maskPath, mat)
+			var op vector.DrawPathOptions
+			op.AntiAlias = antialias
+			switch m.mode {
+			case 'a':
+				op.ColorScale.Scale(float32(alpha), float32(alpha), float32(alpha), float32(alpha))
+			case 's':
+				op.ColorScale.ScaleAlpha(float32(alpha))
+				op.Blend = ebiten.BlendDestinationOut
+			}
+			vector.FillPath(coverage, &r.maskPath, fill, &op)
+			continue
+		}
+		// Inverted and intersect masks change the whole region, not just the
+		// path's inside, so build the mask's alpha as its own image first and
+		// combine that.
+		b := coverage.Bounds()
+		tmp, tmpBase := sharedPool.get(b.Dx(), b.Dy())
+		shifted := identityMatrix.translate(-float64(b.Min.X), -float64(b.Min.Y)).mul(mat)
 		r.maskPath.Reset()
-		bez.appendToPath(&r.maskPath, mat)
+		bez.appendToPath(&r.maskPath, shifted)
 		var op vector.DrawPathOptions
 		op.AntiAlias = antialias
-		switch m.mode {
-		case 'a':
-			op.ColorScale.Scale(float32(alpha), float32(alpha), float32(alpha), float32(alpha))
-		case 's':
-			op.ColorScale.ScaleAlpha(float32(alpha))
+		if m.inverted {
+			a8 := uint8(math.Round(alpha * 255))
+			tmp.Fill(color.RGBA{R: a8, G: a8, B: a8, A: a8})
 			op.Blend = ebiten.BlendDestinationOut
+		} else {
+			op.ColorScale.Scale(float32(alpha), float32(alpha), float32(alpha), float32(alpha))
 		}
-		vector.FillPath(coverage, &r.maskPath, &vector.FillOptions{FillRule: vector.FillRuleNonZero}, &op)
+		vector.FillPath(tmp, &r.maskPath, fill, &op)
+		var cop ebiten.DrawImageOptions
+		cop.GeoM.Translate(float64(b.Min.X), float64(b.Min.Y))
+		switch m.mode {
+		case 's':
+			cop.Blend = ebiten.BlendDestinationOut
+		case 'i':
+			cop.Blend = ebiten.BlendDestinationIn
+		}
+		coverage.DrawImage(tmp, &cop)
+		sharedPool.put(tmpBase)
 	}
 }
 
@@ -850,6 +955,15 @@ func blendFor(bm int) ebiten.Blend {
 			BlendOperationRGB:           ebiten.BlendOperationAdd,
 			BlendOperationAlpha:         ebiten.BlendOperationAdd,
 		}
+	case 16: // add: src + dst, with source-over alpha
+		return ebiten.Blend{
+			BlendFactorSourceRGB:        ebiten.BlendFactorOne,
+			BlendFactorSourceAlpha:      ebiten.BlendFactorOne,
+			BlendFactorDestinationRGB:   ebiten.BlendFactorOne,
+			BlendFactorDestinationAlpha: ebiten.BlendFactorOneMinusSourceAlpha,
+			BlendOperationRGB:           ebiten.BlendOperationAdd,
+			BlendOperationAlpha:         ebiten.BlendOperationAdd,
+		}
 	default:
 		return ebiten.BlendSourceOver
 	}
@@ -918,6 +1032,14 @@ func (r *renderer) walkShapes(nodes []*shapeNode, f float64, mat matrix, opacity
 			r.applyTrim(n, f, groupStart)
 		case "rd":
 			r.applyRoundCorners(n, f, groupStart)
+		case "pb":
+			r.applyPuckerBloat(n, f, groupStart)
+		case "zz":
+			r.applyZigZag(n, f, groupStart)
+		case "op":
+			r.applyOffsetPath(n, f, groupStart)
+		case "mm":
+			r.applyMerge(n, groupStart)
 		case "rp":
 			r.applyRepeater(n, f, mat, groupStart, cmdStart)
 		}
@@ -953,6 +1075,13 @@ func (r *renderer) emitStyleRange(n *shapeNode, f float64, opacity float64, star
 		cmd.fillRule = vector.FillRuleNonZero
 		if n.fillRule == 2 {
 			cmd.fillRule = vector.FillRuleEvenOdd
+		}
+		// Exclude-intersections merges rely on the even-odd rule.
+		for i := start; i < end; i++ {
+			if r.geoms[i].xor {
+				cmd.fillRule = vector.FillRuleEvenOdd
+				break
+			}
 		}
 	case "st", "gs":
 		cmd.stroke = true

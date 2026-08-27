@@ -153,8 +153,17 @@ ends, with no game-side timer.
 Supported: `PlaybackState`, `GlobalState`, both transition kinds, all four
 guard and input types, `OnComplete` / `OnLoopComplete`, and the `Fire`,
 `Toggle`, `Increment`, `Decrement`, `SetFrame`, and `SetProgress` actions.
-Pointer interactions are not run — a game supplies its own input — and
-`OpenUrl` and `SetTheme` are out of scope.
+
+Pointer interactions run when the game feeds input through `PointerDown` /
+`PointerMove` / `PointerUp` (in composition coordinates; apply the inverse
+of your draw transform to the cursor first). `Click` needs press and
+release on the same target, and `PointerEnter` / `PointerExit` derive from
+how each target's hit state changes across moves. An interaction naming a
+layer hit-tests that layer's bounds on the current frame — also available
+directly as `Player.HitTest` — and one naming no layer reacts anywhere.
+
+What `OpenUrl` and `SetTheme` mean is the game's decision: register
+`OnAction` to receive them.
 `StateMachinePlayer.UnsupportedFeatures` reports whatever it skipped, and
 `Err` surfaces a state naming an animation the bundle lacks.
 
@@ -340,6 +349,34 @@ The gallery samples come from the public-domain (CC0) `data/` set of
 [LottieFiles/test-files](https://github.com/LottieFiles/test-files); see
 [examples/gallery/assets/README.md](examples/gallery/assets/README.md).
 
+## Character presets and AI customization
+
+`testdata/presets/` holds game-ready character templates: raster cutout
+rigs (part images moved by transform keyframes — no vector shapes, no
+expressions) with a full clip set and a wired state machine. The first is
+`chibi-male`, a 2.5-heads character with 20 clips from idle to death. The
+art is a deliberate placeholder — one flat color per part — because the
+value is the motion: replace the eleven part images at the same sizes and
+anchors and every clip plays with the new look.
+
+Presets are built for automated editing. Two commands close the loop:
+
+```bash
+# explode a bundle into clips / parts / machines, and rebuild it
+go run github.com/shibukawa/lottie-go/cmd/lottierepack -dump -dir work character.lottie
+go run github.com/shibukawa/lottie-go/cmd/lottierepack -dir work -out character.lottie
+
+# validate against the supported subset and render sample frames
+go run github.com/shibukawa/lottie-go/cmd/lottiecheck -render preview/ character.lottie
+```
+
+[skills/lottie-character-preset](skills/lottie-character-preset/SKILL.md)
+packages the whole workflow — rig contract, clip and state-machine
+conventions, the supported subset — as an agent skill: copy it into your
+project's `.claude/skills/` (or point your coding agent at it) and ask
+for "a samurai version of this character" or "a livelier walk". Presets
+regenerate from source with `cd editor && go run ./genpresets`.
+
 ## Collision plugins
 
 dotLottie says nothing about physics, so collision data rides in the
@@ -472,16 +509,27 @@ easing; legacy end-value (`e`) keyframes.
 
 **Shapes**: bezier paths, rectangles (incl. rounded), ellipses, polystars
 (stars & polygons incl. roundness), nested groups, trim paths (simultaneous
-& individual, incl. offset wrap), rounded-corner modifiers, repeaters
-(cumulative transform + opacity ramp), merge paths (merge mode).
+& individual, incl. offset wrap), rounded-corner, pucker-bloat, zig-zag and
+offset-path modifiers, repeaters (cumulative transform + opacity ramp),
+merge paths (merge, add, subtract and exclude-intersections via winding
+rules; intersect needs true path booleans and stays unsupported).
 
 **Styles**: solid fills (non-zero / even-odd), solid strokes (width, cap,
 join, miter), dash patterns (incl. offset), linear & radial gradient fills
 and strokes (Kage shader, alpha stops supported).
 
-**Compositing**: masks (add / subtract), track mattes (alpha, alpha
-inverted, luma, luma inverted — luma via Kage), blend modes (normal,
-multiply, screen).
+**Compositing**: masks (add / subtract / intersect, inverted variants,
+expansion), track mattes (alpha, alpha inverted, luma, luma inverted —
+luma via Kage),
+blend modes (normal, multiply, screen and add fixed-function; overlay,
+darken, lighten, color dodge, color burn, hard light, soft light,
+difference and exclusion via a backdrop-sampling Kage shader), time remap
+on precompositions.
+
+**Effects**: Gaussian blur, drop shadow, fill, tint, tritone. Blur and
+shadow softness run as separable Kage passes (large radii blur a
+downscaled copy); parameters may be animated. Other effect types are
+reported as unsupported and skipped.
 
 **Containers**: Lottie JSON (`.json`) and dotLottie (`.lottie`), both
 archive layouts — version 2 (`a/ i/ s/ t/ f/`) and version 1
@@ -497,13 +545,17 @@ anim.SetFontResolver(func(family, style string) *text.GoTextFaceSource {
 })
 ```
 
-Document text, size, fill color, justification, line height, and line
-breaks are supported; per-character animators are reported as unsupported.
+Document text, size, fill color, justification, line height, tracking, and
+line breaks are supported. Text animators run per glyph: position, scale,
+rotation, opacity, fill color, and tracking, driven by range selectors
+(percent or index units; characters, characters-excluding-spaces, words or
+lines; square, ramp, triangle, round and smooth shapes).
 
 Skipped-but-tolerated (reported via `anim.UnsupportedFeatures()`):
-expressions, effects, 3D layers, time remap, text animators, boolean merge
-modes, other blend and mask modes, zig-zag / offset-path / pucker-bloat
-modifiers. See `.knowledge/` for the full requirement catalog.
+expressions, 3D layers, the merge-paths intersect mode,
+hue / saturation / color / luminosity blend modes, difference / lighten /
+darken mask modes, effects other than the five above, and the twist
+modifier. See `.knowledge/` for the full requirement catalog.
 
 ## Design notes
 

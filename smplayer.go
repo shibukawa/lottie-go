@@ -43,8 +43,13 @@ type StateMachinePlayer struct {
 	completed     bool
 	loopCompleted bool
 
+	// Pointer interaction state, keyed by interaction index.
+	hover      map[int]bool // pointer currently over the target
+	clickArmed map[int]bool // press began on the target; release completes a Click
+
 	onStateChanged func(from, to string)
 	onMarker       func(state string, marker Marker)
+	onAction       func(Action)
 
 	unsupported map[string]struct{}
 	err         error
@@ -62,6 +67,8 @@ func (b *Bundle) NewStateMachinePlayer(id string) (*StateMachinePlayer, error) {
 		inputs:      map[string]json.RawMessage{},
 		pending:     map[string]bool{},
 		active:      map[string]bool{},
+		hover:       map[int]bool{},
+		clickArmed:  map[int]bool{},
 		unsupported: map[string]struct{}{},
 	}
 	if id == "" {
@@ -131,11 +138,10 @@ func (m *StateMachinePlayer) SetMachine(id string) error {
 	}
 	clear(m.pending)
 	clear(m.active)
+	clear(m.hover)
+	clear(m.clickArmed)
 	m.current, m.err = nil, nil
 	clear(m.unsupported)
-	for _, f := range sm.UnsupportedFeatures() {
-		m.unsupported[f] = struct{}{}
-	}
 
 	if !m.enter(sm.Initial) {
 		return m.err
@@ -192,17 +198,36 @@ func (m *StateMachinePlayer) OnMarker(f func(state string, marker Marker)) {
 	m.onMarker = f
 }
 
+// OnAction registers a function to receive the actions a game runtime must
+// apply itself: OpenUrl and SetTheme. What opening a URL or switching a
+// theme means is the game's decision, so the document's intent is handed
+// over rather than acted on. It runs during whatever call triggered the
+// action — Update or a Pointer method.
+func (m *StateMachinePlayer) OnAction(f func(Action)) { m.onAction = f }
+
 // Err returns the first error hit while running, such as a state naming an
 // animation the bundle does not hold. Playback continues past it with
 // whatever was already on screen.
 func (m *StateMachinePlayer) Err() error { return m.err }
 
 // UnsupportedFeatures lists parts of the document this player does not act
-// on, such as the pointer interactions a game supplies itself, plus problems
-// found while running.
+// on, plus problems found while running. Registering OnAction removes the
+// OpenUrl and SetTheme notes, since the game then receives those actions.
 func (m *StateMachinePlayer) UnsupportedFeatures() []string {
-	out := make([]string, 0, len(m.unsupported))
+	found := map[string]struct{}{}
 	for f := range m.unsupported {
+		found[f] = struct{}{}
+	}
+	if m.sm != nil {
+		for _, f := range m.sm.UnsupportedFeatures() {
+			if m.onAction != nil && (f == "action "+string(ActionOpenURL) || f == "action "+string(ActionSetTheme)) {
+				continue
+			}
+			found[f] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(found))
+	for f := range found {
 		out = append(out, f)
 	}
 	sort.Strings(out)
@@ -478,13 +503,98 @@ func (m *StateMachinePlayer) runInteractions(t InteractionType) {
 	}
 }
 
+// PointerDown feeds a press into the machine's pointer interactions. The
+// coordinates are in the animation's composition space — the space Draw's
+// GeoM maps to the screen — so a game applies the inverse of that transform
+// to the cursor first. An interaction naming a layer reacts when the point
+// is inside that layer's bounds on the current frame; one naming no layer
+// reacts anywhere.
+//
+// Events fired by pointer actions become visible to the next Update, the
+// same way Fire works, so calling this anywhere in a frame is safe.
+func (m *StateMachinePlayer) PointerDown(x, y float64) {
+	m.pointer(InteractionPointerDown, x, y)
+}
+
+// PointerUp feeds a release into the machine's pointer interactions. A
+// release over a target whose press also landed on it completes a Click.
+func (m *StateMachinePlayer) PointerUp(x, y float64) {
+	m.pointer(InteractionPointerUp, x, y)
+}
+
+// PointerMove feeds cursor movement into the machine's pointer
+// interactions, deriving PointerEnter and PointerExit from how each
+// target's hit state changes.
+func (m *StateMachinePlayer) PointerMove(x, y float64) {
+	m.pointer(InteractionPointerMove, x, y)
+}
+
+func (m *StateMachinePlayer) pointer(t InteractionType, x, y float64) {
+	if m.sm == nil {
+		return
+	}
+	for i := range m.sm.Interactions {
+		in := &m.sm.Interactions[i]
+		hit := m.pointerHit(in.LayerName, x, y)
+		switch in.Type {
+		case t:
+			if hit {
+				m.runActionsInto(in.Actions, m.pending)
+			}
+		case InteractionClick:
+			switch t {
+			case InteractionPointerDown:
+				m.clickArmed[i] = hit
+			case InteractionPointerUp:
+				if hit && m.clickArmed[i] {
+					m.runActionsInto(in.Actions, m.pending)
+				}
+				delete(m.clickArmed, i)
+			}
+		case InteractionPointerEnter:
+			if t == InteractionPointerMove {
+				if hit && !m.hover[i] {
+					m.runActionsInto(in.Actions, m.pending)
+				}
+				m.hover[i] = hit
+			}
+		case InteractionPointerExit:
+			if t == InteractionPointerMove {
+				if !hit && m.hover[i] {
+					m.runActionsInto(in.Actions, m.pending)
+				}
+				m.hover[i] = hit
+			}
+		}
+	}
+}
+
+// pointerHit resolves one interaction's target: no layer name means the
+// whole animation.
+func (m *StateMachinePlayer) pointerHit(layerName string, x, y float64) bool {
+	if layerName == "" {
+		return true
+	}
+	if m.player == nil {
+		return false
+	}
+	return m.player.HitTest(layerName, x, y)
+}
+
 // runActions applies a list of actions. An event an action fires is visible
 // immediately, unlike one the game fires with Fire.
 func (m *StateMachinePlayer) runActions(actions []Action) {
+	m.runActionsInto(actions, m.active)
+}
+
+// runActionsInto applies a list of actions, firing events into the given
+// set: m.active for actions run during Update, m.pending for those run by
+// pointer input between updates.
+func (m *StateMachinePlayer) runActionsInto(actions []Action, events map[string]bool) {
 	for _, a := range actions {
 		switch a.Type {
 		case ActionFire:
-			m.active[a.InputName] = true
+			events[a.InputName] = true
 		case ActionToggle:
 			v, _ := BoolValue(m.inputs[a.InputName])
 			m.inputs[a.InputName] = JSONValue(!v)
@@ -499,6 +609,14 @@ func (m *StateMachinePlayer) runActions(actions []Action) {
 		case ActionSetProgress:
 			if v, ok := NumberValue(a.Value); ok && m.player != nil {
 				m.player.SetProgress(v)
+			}
+		case ActionSetTheme, ActionOpenURL:
+			// Applying a theme or opening a URL is the game's decision;
+			// hand the action over when a handler is registered.
+			if m.onAction != nil {
+				m.onAction(a)
+			} else {
+				m.note(fmt.Sprintf("action %s", a.Type))
 			}
 		default:
 			m.note(fmt.Sprintf("action %s", a.Type))

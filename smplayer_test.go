@@ -532,7 +532,7 @@ func TestTransitionCycleIsBounded(t *testing.T) {
 	}
 }
 
-func TestPointerInteractionsAreReportedNotRun(t *testing.T) {
+func TestPointerInteractionsRunOnInput(t *testing.T) {
 	m := newMachine(t, map[string]int{"idle": 10, "hover": 10}, `{
 	  "initial":"idle","states":[
 	  {"name":"idle","type":"PlaybackState","animation":"idle","loop":true,"autoplay":true,
@@ -540,14 +540,71 @@ func TestPointerInteractionsAreReportedNotRun(t *testing.T) {
 	  {"name":"hover","type":"PlaybackState","animation":"hover","loop":true,"autoplay":true}],
 	  "inputs":[{"type":"Event","name":"enter"}],
 	  "interactions":[{"type":"PointerEnter","actions":[{"type":"Fire","inputName":"enter"}]}]}`)
+	// Without pointer input nothing happens, and nothing is reported as
+	// unsupported: the game just has not supplied input yet.
 	for range 5 {
 		m.Update()
 	}
 	if m.State() != "idle" {
-		t.Errorf("a pointer interaction ran; state = %q", m.State())
+		t.Fatalf("state = %q before any pointer input", m.State())
 	}
-	if got := m.UnsupportedFeatures(); !slices.Contains(got, "interaction PointerEnter") {
-		t.Errorf("UnsupportedFeatures() = %v; want interaction PointerEnter", got)
+	if got := m.UnsupportedFeatures(); slices.Contains(got, "interaction PointerEnter") {
+		t.Errorf("pointer interaction reported unsupported: %v", got)
+	}
+	// The first move enters the (whole-animation) target and fires the
+	// event, visible to the next Update.
+	m.PointerMove(50, 50)
+	m.Update()
+	if m.State() != "hover" {
+		t.Errorf("state = %q after PointerMove; want hover", m.State())
+	}
+}
+
+func TestPointerClickNeedsPressAndRelease(t *testing.T) {
+	doc := `{
+	  "initial":"idle","states":[
+	  {"name":"idle","type":"PlaybackState","animation":"idle","loop":true,"autoplay":true,
+	   "transitions":[{"type":"Transition","toState":"done","guards":[{"type":"Event","inputName":"tap"}]}]},
+	  {"name":"done","type":"PlaybackState","animation":"idle","loop":true,"autoplay":true}],
+	  "inputs":[{"type":"Event","name":"tap"}],
+	  "interactions":[{"type":"Click","actions":[{"type":"Fire","inputName":"tap"}]}]}`
+	// A release without a press does not click.
+	m := newMachine(t, map[string]int{"idle": 10}, doc)
+	m.PointerUp(50, 50)
+	m.Update()
+	if m.State() != "idle" {
+		t.Errorf("state = %q after a release-only; want idle", m.State())
+	}
+	// Press then release does.
+	m.PointerDown(50, 50)
+	m.PointerUp(50, 50)
+	m.Update()
+	if m.State() != "done" {
+		t.Errorf("state = %q after press+release; want done", m.State())
+	}
+}
+
+func TestOnActionReceivesOpenURL(t *testing.T) {
+	m := newMachine(t, map[string]int{"idle": 10}, `{
+	  "initial":"idle","states":[
+	  {"name":"idle","type":"PlaybackState","animation":"idle","loop":true,"autoplay":true,
+	   "entryActions":[{"type":"OpenUrl","url":"https://example.com"}]}]}`)
+	// Entry ran during construction with no handler: reported.
+	if got := m.UnsupportedFeatures(); !slices.Contains(got, "action OpenUrl") {
+		t.Errorf("UnsupportedFeatures() = %v; want action OpenUrl", got)
+	}
+	var got Action
+	m.OnAction(func(a Action) { got = a })
+	// Restarting the machine re-enters the state; the handler now receives
+	// the action and the unsupported note disappears.
+	if err := m.SetMachine(m.MachineID()); err != nil {
+		t.Fatal(err)
+	}
+	if got.Type != ActionOpenURL || got.URL != "https://example.com" {
+		t.Errorf("OnAction got %+v; want the OpenUrl action", got)
+	}
+	if u := m.UnsupportedFeatures(); slices.Contains(u, "action OpenUrl") {
+		t.Errorf("note remains with a handler registered: %v", u)
 	}
 }
 
