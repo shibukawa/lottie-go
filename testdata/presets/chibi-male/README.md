@@ -64,15 +64,22 @@ still reads. The keyframes never change.
 Loops: idle, walk, run, fall-loop, guard. Everything else is one-shot and
 returns by itself through the machine.
 
-- idle / walk / run / dash / slide — ground movement; dash is the burst
-  that settles into run.
-- idle-turn / walk-turn / run-turn — facing-flip bridges: the body
-  squashes to a sliver at the midpoint, which is where the game flips its
-  mirror flag.
+- idle / walk / run / slide — ground movement. There is no dash clip: a
+  dash is run played faster (per-state speed or `SetSpeed`).
+- idle-turn / walk-turn / run-turn — the character actually turns: the
+  shoulders swing around and at the midpoint the limb chains trade sides
+  while the head and shoes mirror, an instant swap on hold keyframes.
+  The clip ends facing the other way, so the game flips its Mirrored
+  flag when the turn completes; the mirrored idle then matches the end
+  pose.
 - run-to-idle — braking stop.
 - jump -> fall -> fall-loop — the air chain; each hands over on complete.
 - punch -> punch-2 — firing punch during punch chains the follow-up.
-- kick, jump-kick — ground and air kicks.
+  Strikes lead with the far-side limb (the one on the leading edge, so
+  it reaches the enemy in front); the combo follow-up swings the
+  trailing limb through.
+- kick, jump-kick — ground and air kicks: chambered (knee folded) until
+  the strike frame, then the knee snaps straight on impact.
 - guard / guard-hit — hold stance while the guarding boolean is true; a
   hurt event while guarding plays guard-hit instead of hurt.
 - hurt, death — reachable from anywhere via the global state. death holds
@@ -81,7 +88,7 @@ returns by itself through the machine.
 
 ## Machine verbs
 
-Events: walk, run, dash, stop, turn, jump, slide, punch, kick, hurt, die.
+Events: walk, run, stop, turn, jump, slide, punch, kick, hurt, die.
 Booleans: grounded (jump needs it true; fall-loop exits to idle when it
 turns true), guarding (idle enters guard while true).
 clipDone is internal: the OnComplete interaction fires it so one-shot

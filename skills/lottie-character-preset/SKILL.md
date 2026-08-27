@@ -92,8 +92,9 @@ sm.Draw(screen, nil)
 ```
 
 Facing: clips are authored facing right; mirror at draw time for left
-(`DrawOptions` / `MirrorX`), and flip exactly at the midpoint of a
-`*-turn` clip, where the body squashes to a sliver.
+(`DrawOptions` / `MirrorX`). A `*-turn` clip ends facing the other way
+(limb sides and the face swap at its midpoint), so flip the Mirrored
+flag when the turn completes.
 
 ## Rules that keep files playable
 

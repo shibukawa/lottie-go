@@ -32,6 +32,8 @@ defense:                # all kinds
   - guard-hit           # oneshot: flinch while guarding, back to guard
 common:
   - attacks/guard-hit: oneshot; return to idle (fall-loop if airborne) on complete
+  - strike with the far-side limb (leading edge, reaches the enemy in front); combo follow-up swings the trailing (near) limb (user feedback 2026-08)
+  - kicks chamber (knee folded) until the strike frame, then snap the knee straight on impact
   - naming: `-anim` suffix like base set
 open:
   - whether combo follow-ups are separate clips or markers within one clip

@@ -9,10 +9,9 @@ Standard clip vocabulary every preset in requirement:animation-presets ships. Na
 ```yaml
 clips:
   - {name: idle,       kind: loop}
-  - {name: idle-turn,  kind: transition, note: face flip while standing}
+  - {name: idle-turn,  kind: transition}
   - {name: walk,       kind: loop}
   - {name: walk-turn,  kind: transition}
-  - {name: dash,       kind: oneshot, note: burst start; settles into run}
   - {name: run,        kind: loop}
   - {name: run-turn,   kind: transition}
   - {name: run-to-idle,kind: transition, note: braking stop}
@@ -23,6 +22,8 @@ clips:
   - {name: hurt,       kind: oneshot}
   - {name: death,      kind: oneshot, note: holds last frame}
 facing: authored facing right; left via runtime mirror (Mirrored/MirrorX), no *-left clips
+turns: real turns, not morphs - limb chains trade sides + head/shoes x-mirror on hold keys at midpoint; clip ENDS facing opposite, game flips Mirrored on completion (user feedback 2026-08)
+no-dash: dropped - dash is run played faster (state speed / SetSpeed); a separate clip duplicated run (user feedback 2026-08)
 attacks: per-kind sets in data:preset-combat-clips
 open:
   - land clip (fall-loop -> idle) absent; decide whether run-to-idle covers it

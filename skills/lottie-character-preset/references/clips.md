@@ -7,14 +7,30 @@ without rewiring. Loops repeat until an input; one-shots return by
 themselves; transitions bridge two loops.
 
 - Loops: `idle`, `walk`, `run`, `fall-loop`, `guard`
-- Bridges: `idle-turn`, `walk-turn`, `run-turn` (facing flips — the body
-  squashes to a sliver at the midpoint, where the game mirrors),
+- Bridges: `idle-turn`, `walk-turn`, `run-turn` (see below),
   `run-to-idle` (braking stop), `fall` (into fall-loop)
-- One-shots: `dash` (settles into run), `slide`, `jump` (chains to
-  fall), `hurt`, `death` (holds its last frame, terminal)
+- One-shots: `slide`, `jump` (chains to fall), `hurt`, `death` (holds
+  its last frame, terminal)
 - Attacks (unarmed set): `punch`, `punch-2` (combo follow-up), `kick`,
   `jump-kick`; defense: `guard` (loop while `guarding` is true),
   `guard-hit` (flinch, returns to guard)
+
+There is deliberately no dash clip: a dash is run played faster (a
+state's `speed` or the game's `SetSpeed`), so adding one would just
+duplicate run.
+
+Turn clips actually turn rather than morphing: at the midpoint the limb
+chains trade sides and the head and shoes x-mirror, switched instantly
+on hold keyframes (`"h": 1`). A turn clip therefore ENDS facing the
+other way — the game flips its Mirrored flag when the turn completes,
+and the mirrored idle matches the end pose. Follow the same pattern when
+authoring turns for new gaits: smooth rotations, hold-keyed side swap.
+
+Attacks lead with the far-side limb — the one attached on the leading
+(+x) edge, so a strike reaches the enemy in front instead of crossing
+the body; the combo follow-up swings the trailing (near) limb through.
+Kicks chamber first (knee fully folded) and snap the knee straight only
+on the strike frame.
 
 Clip ids end in `-anim`. Keep new clips in this style: a new attack is
 `spin-kick-anim`, its state `spin-kick-state`, its trigger `spinKick` or
