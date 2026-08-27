@@ -21,13 +21,17 @@ There is deliberately no dash clip: a dash is run played faster (a
 state's `speed` or the game's `SetSpeed`), so adding one would just
 duplicate run.
 
-Turn clips actually rotate rather than morphing: the head and torso cut
-through their side-view drawings (`head-side`, `body-side`) on hold
-keyframes (`"h": 1`), and at the midpoint the limb chains trade sides.
-A turn clip therefore ENDS facing the other way — the game flips its
-Mirrored flag when the turn completes, and the mirrored idle matches
-the end pose. Follow the same pattern when authoring turns for new
-gaits: smooth rotations, hold-keyed view cuts and side swap.
+Turn clips actually rotate rather than morphing, in one of two ways.
+idle-turn and run-turn go through the REAR: head and torso cut through
+their side-view drawings (`head-side`, `body-side`) on hold keyframes
+(`"h": 1`) and the limb chains trade sides at the midpoint. walk-turn
+goes through the CAMERA side: the front drawings stay up the whole
+way, scale up slightly while passing the viewer, and mirror at the
+midpoint on a left/right symmetric pose — the geometry holds still
+while near/far identities trade, and the clip runs from the gait's
+contact pose to its mirror so the reversed gait connects seamlessly.
+Either way a turn clip ENDS facing the other way — the game flips its
+Mirrored flag when the turn completes.
 
 Attacks lead with the far-side limb — the one attached on the leading
 (+x) edge, so a strike reaches the enemy in front instead of crossing

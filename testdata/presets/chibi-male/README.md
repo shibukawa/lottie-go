@@ -70,13 +70,20 @@ returns by itself through the machine.
 
 - idle / walk / run / slide — ground movement. There is no dash clip: a
   dash is run played faster (per-state speed or `SetSpeed`).
-- idle-turn / walk-turn / run-turn — the character actually rotates:
-  head and torso step through their side drawings (head-side shows the
-  back of the head with one eye, body-side is the thinned torso), the
-  limb chains trade sides at the midpoint, and the views cut on hold
-  keyframes — no morphing. The clip ends facing the other way, so the
-  game flips its Mirrored flag when the turn completes; the mirrored
-  idle then matches the end pose.
+- idle-turn / run-turn — the character rotates through its rear: head
+  and torso step through their side drawings (head-side shows the back
+  of the head with one eye, body-side is the thinned torso), the limb
+  chains trade sides at the midpoint, and the views cut on hold
+  keyframes — no morphing.
+- walk-turn — rotates through the CAMERA side instead: the front stays
+  visible the whole way, growing a touch as it passes the viewer, and
+  the drawing mirrors at the midpoint on a left/right symmetric pose —
+  the geometry holds still while the near/far identities trade (a
+  game-friendly lie), and the clip runs from the walk's contact pose
+  to its mirror so the reversed walk picks up seamlessly.
+  All turn clips end facing the other way, so the game flips its
+  Mirrored flag when the turn completes; the mirrored gait then
+  matches the end pose.
 - run-to-idle — braking stop.
 - jump -> fall -> fall-loop — the air chain; each hands over on complete.
 - punch -> punch-2 — firing punch during punch chains the follow-up,
