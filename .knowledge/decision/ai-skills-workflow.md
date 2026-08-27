@@ -24,6 +24,8 @@ rules:
   - no effects: emulate via duplicated shapes / opacity
   - blend modes normal/multiply/screen only; masks add/subtract only (decision:practical-subset)
 mcp: revisit only on demonstrated demand
+status:
+  - shipped: cmd/lottiecheck (validate + render sample frames), cmd/lottierepack (dump/rebuild bundles), skills/lottie-character-preset (SKILL.md + rig/clips/subset references)
 ```
 
 Self-verification loop is the critical piece: agent edits JSON, runs CLI, inspects rendered PNG, corrects. `UnsupportedFeatures()` turns subset violations into machine-checkable errors.

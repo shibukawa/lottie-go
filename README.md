@@ -236,6 +236,34 @@ The gallery samples come from the public-domain (CC0) `data/` set of
 [LottieFiles/test-files](https://github.com/LottieFiles/test-files); see
 [examples/gallery/assets/README.md](examples/gallery/assets/README.md).
 
+## Character presets and AI customization
+
+`testdata/presets/` holds game-ready character templates: raster cutout
+rigs (part images moved by transform keyframes — no vector shapes, no
+expressions) with a full clip set and a wired state machine. The first is
+`chibi-male`, a 2.5-heads character with 20 clips from idle to death. The
+art is a deliberate placeholder — one flat color per part — because the
+value is the motion: replace the eleven part images at the same sizes and
+anchors and every clip plays with the new look.
+
+Presets are built for automated editing. Two commands close the loop:
+
+```bash
+# explode a bundle into clips / parts / machines, and rebuild it
+go run github.com/shibukawa/lottie-go/cmd/lottierepack -dump -dir work character.lottie
+go run github.com/shibukawa/lottie-go/cmd/lottierepack -dir work -out character.lottie
+
+# validate against the supported subset and render sample frames
+go run github.com/shibukawa/lottie-go/cmd/lottiecheck -render preview/ character.lottie
+```
+
+[skills/lottie-character-preset](skills/lottie-character-preset/SKILL.md)
+packages the whole workflow — rig contract, clip and state-machine
+conventions, the supported subset — as an agent skill: copy it into your
+project's `.claude/skills/` (or point your coding agent at it) and ask
+for "a samurai version of this character" or "a livelier walk". Presets
+regenerate from source with `cd editor && go run ./genpresets`.
+
 ## Collision plugins
 
 dotLottie says nothing about physics, so collision data rides in the
