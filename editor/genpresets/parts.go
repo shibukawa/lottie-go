@@ -62,6 +62,9 @@ var headArt = []string{
 	"........................",
 }
 
+// The base torso stays undecorated on purpose: collars, plackets and
+// buckles belong to customized variants, not the template. Front-ness is
+// carried by the limb layout instead (see the near/far attach points).
 var bodyArt = []string{
 	"...OOOOOOOOOO...",
 	"..OGGGGGGGGGGO..",
@@ -219,14 +222,18 @@ const (
 )
 
 var (
-	headPart     = part{name: "head", art: headArt, anchor: [2]float64{36, 56}, pos: [2]float64{24, 3}}
-	bodyPart     = part{name: "body", art: bodyArt, anchor: [2]float64{24, 45}, pos: [2]float64{restX, restY}}
-	upperArmN    = part{name: "upper-arm-near", art: upperArmArt, anchor: [2]float64{7, 4}, pos: [2]float64{45, 8}}
-	upperArmF    = part{name: "upper-arm-far", art: upperArmArt, dark: true, anchor: [2]float64{7, 4}, pos: [2]float64{3, 8}}
+	headPart = part{name: "head", art: headArt, anchor: [2]float64{36, 56}, pos: [2]float64{24, 3}}
+	bodyPart = part{name: "body", art: bodyArt, anchor: [2]float64{24, 45}, pos: [2]float64{restX, restY}}
+	// Facing right in three-quarter view, the camera-side (near) limbs are
+	// the character's left side, which trails on screen (-x); the far limbs
+	// lead (+x) and peek out from behind the torso. Getting this backwards
+	// reads as a back view.
+	upperArmN    = part{name: "upper-arm-near", art: upperArmArt, anchor: [2]float64{7, 4}, pos: [2]float64{3, 8}}
+	upperArmF    = part{name: "upper-arm-far", art: upperArmArt, dark: true, anchor: [2]float64{7, 4}, pos: [2]float64{45, 8}}
 	forearmN     = part{name: "forearm-near", art: forearmArt, anchor: [2]float64{7, 4}, pos: [2]float64{7, 23}}
 	forearmF     = part{name: "forearm-far", art: forearmArt, dark: true, anchor: [2]float64{7, 4}, pos: [2]float64{7, 23}}
-	thighN       = part{name: "thigh-near", art: thighArt, anchor: [2]float64{9, 4}, pos: [2]float64{32, 45}}
-	thighF       = part{name: "thigh-far", art: thighArt, dark: true, anchor: [2]float64{9, 4}, pos: [2]float64{16, 45}}
+	thighN       = part{name: "thigh-near", art: thighArt, anchor: [2]float64{9, 4}, pos: [2]float64{16, 45}}
+	thighF       = part{name: "thigh-far", art: thighArt, dark: true, anchor: [2]float64{9, 4}, pos: [2]float64{32, 45}}
 	shinNearPart = part{name: "shin-near", art: shinArt, anchor: [2]float64{9, 4}, pos: [2]float64{9, 29}}
 	shinFarPart  = part{name: "shin-far", art: shinArt, dark: true, anchor: [2]float64{9, 4}, pos: [2]float64{9, 29}}
 	shadowPart   = part{name: "shadow", art: shadowArt, anchor: [2]float64{42, 7}, pos: [2]float64{restX, groundY}}

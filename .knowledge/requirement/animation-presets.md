@@ -21,8 +21,9 @@ rig:
   - three-quarter view, not profile: both eyes show, both limb chains flank the torso (game-like read)
   - two-segment limb chains: upper-arm->forearm (elbow), thigh->shin (knee), parented through body
   - slots: head, body, upper-arm/forearm-near/far, thigh/shin-near/far, weapon, shadow (near/far not l/r: mirror swaps sides)
+  - facing right, near (camera-side) limbs = character's left = trailing (-x) attach; far limbs lead (+x) behind torso. Swapped, the pose reads as a back view (user-caught bug 2026-08)
   - part spec per slot: canvas size + anchor point, fixed; the contract art swaps must honor
-  - template art is a deliberate placeholder: one flat color per slot; gender/character lives in motion + swapped art, not the template drawing
+  - template art is a deliberate placeholder: one flat color per slot, NO decorations (collar/placket/buckle etc.) - decoration belongs to customized variants; gender/character lives in motion + swapped art
 status:
   - chibi-male shipped: testdata/presets/chibi-male, generator editor/genpresets, pose-sequence authoring, preview.png contact sheet, regression tests in editor/presets_test.go
   - Lottie has no mesh warp; "morphing" = transform animation + opacity/time swaps between part variants

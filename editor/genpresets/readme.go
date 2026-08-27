@@ -29,8 +29,12 @@ cd editor && go run ./genpresets
 The character leads right; a left-facing character is the runtime mirror
 (` + "`Mirrored` / `MirrorX`" + `), so there are no *-left clips. Limbs are
 named by depth (near/far), not left/right, because the mirror swaps which
-body-side is near. Arms and legs are two-segment chains: the forearm is
-parented to the upper arm (elbow), the shin to the thigh (knee).
+body-side is near. Facing right, the near (camera-side) limbs are the
+character's left side and attach on the trailing (-x) edge; the far limbs
+attach on the leading (+x) edge and show from behind the torso — swap
+those and the pose reads as a back view. Arms and legs are two-segment
+chains: the forearm is parented to the upper arm (elbow), the shin to the
+thigh (knee).
 
 Parts live in the bundle under ` + "`i/`" + ` and as loose files under
 ` + "`parts/`" + `. Each is referenced by every clip with a fixed anchor
@@ -40,13 +44,13 @@ Parts live in the bundle under ` + "`i/`" + ` and as loose files under
 |----------------|-------|---------|----------------|-----------|
 | head           | 72x60 | (36,56) | body           | (24,3)    |
 | body           | 48x48 | (24,45) | -              | (128,179) |
-| upper-arm-near | 15x27 | (7,4)   | body           | (45,8)    |
+| upper-arm-near | 15x27 | (7,4)   | body           | (3,8)     |
 | forearm-near   | 15x30 | (7,4)   | upper-arm-near | (7,23)    |
-| upper-arm-far  | 15x27 | (7,4)   | body           | (3,8)     |
+| upper-arm-far  | 15x27 | (7,4)   | body           | (45,8)    |
 | forearm-far    | 15x30 | (7,4)   | upper-arm-far  | (7,23)    |
-| thigh-near     | 18x33 | (9,4)   | body           | (32,45)   |
+| thigh-near     | 18x33 | (9,4)   | body           | (16,45)   |
 | shin-near      | 21x36 | (9,4)   | thigh-near     | (9,29)    |
-| thigh-far      | 18x33 | (9,4)   | body           | (16,45)   |
+| thigh-far      | 18x33 | (9,4)   | body           | (32,45)   |
 | shin-far       | 21x36 | (9,4)   | thigh-far      | (9,29)    |
 | shadow         | 84x15 | (42,7)  | -              | (128,236) |
 
