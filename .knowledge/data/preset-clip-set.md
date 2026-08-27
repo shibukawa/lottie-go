@@ -22,7 +22,7 @@ clips:
   - {name: hurt,       kind: oneshot}
   - {name: death,      kind: oneshot, note: holds last frame}
 facing: authored facing right; left via runtime mirror (Mirrored/MirrorX), no *-left clips
-turns: real turns, not morphs - limb chains trade sides + head/shoes x-mirror on hold keys at midpoint; clip ENDS facing opposite, game flips Mirrored on completion (user feedback 2026-08)
+turns: real rotations, not mirrors/morphs - head+torso cut through side-view drawings (head-side: rear-quarter one-eye; body-side: thinned torso) on hold keys, limb chains trade sides at midpoint; clip ENDS facing opposite, game flips Mirrored on completion (user feedback 2026-08)
 no-dash: dropped - dash is run played faster (state speed / SetSpeed); a separate clip duplicated run (user feedback 2026-08)
 air: airborne poses (jump/fall/jump-kick) lead with the far-side arms AND legs; near side trails (user feedback 2026-08)
 attacks: per-kind sets in data:preset-combat-clips

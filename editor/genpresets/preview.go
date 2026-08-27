@@ -62,10 +62,11 @@ func poseAt(keys []kf, t float64) pose {
 			a, b := keys[i-1], keys[i]
 			f := (t - a.t) / (b.t - a.t)
 			p := lerpPose(a.p, b.p, f)
-			// flip is a hold: it switches only when the next key is reached.
-			p.flip = a.p.flip
+			// flip and back are holds: they switch only when the next
+			// key is reached.
+			p.flip, p.swap, p.view = a.p.flip, a.p.swap, a.p.view
 			if f >= 1 {
-				p.flip = b.p.flip
+				p.flip, p.swap, p.view = b.p.flip, b.p.swap, b.p.view
 			}
 			return p
 		}
@@ -125,6 +126,25 @@ func drawPart(dst *image.NRGBA, src *image.NRGBA, world mat, opacity float64) {
 	}
 }
 
+// headOf and bodyOf pick the drawing for the pose's view, matching the
+// clips' opacity switches.
+func headOf(p pose) part {
+	switch p.view {
+	case viewSide:
+		return headSidePart
+	case viewBack:
+		return headBackPart
+	}
+	return headPart
+}
+
+func bodyOf(p pose) part {
+	if p.view == viewSide {
+		return bodySidePart
+	}
+	return bodyPart
+}
+
 // renderPose draws the whole character into a canvas-sized frame,
 // back to front.
 func renderPose(p pose) *image.NRGBA {
@@ -150,7 +170,7 @@ func renderPose(p pose) *image.NRGBA {
 	// matching the clip builder's flipTrack.
 	root := func(pt part, deg float64) mat {
 		pos := pt.pos
-		if p.flip {
+		if sidesSwapped(p) {
 			pos = bodyMirrorX(pos)
 		}
 		return body.mul(nodeTransform(pos, pt.anchor, deg, 100, 100))
@@ -161,6 +181,12 @@ func renderPose(p pose) *image.NRGBA {
 	}
 	mirrored := func(parent mat, pt part, deg float64) mat {
 		return parent.mul(nodeTransform(pt.pos, pt.anchor, deg, msx, 100))
+	}
+	bodyView := func(p pose, body mat) mat {
+		if p.view != viewSide {
+			return body
+		}
+		return body.mul(nodeTransform(bodySidePart.pos, bodySidePart.anchor, 0, msx, 100))
 	}
 	uArmN := root(upperArmN, p.armN)
 	uArmF := root(upperArmF, p.armF)
@@ -179,10 +205,10 @@ func renderPose(p pose) *image.NRGBA {
 		{upperArmF, uArmF, p.alpha},
 		{shinFarPart, mirrored(thF, shinFarPart, p.kneeF), p.alpha},
 		{thighF, thF, p.alpha},
-		{bodyPart, body, p.alpha},
+		{bodyOf(p), bodyView(p, body), p.alpha},
 		{thighN, thN, p.alpha},
 		{shinNearPart, mirrored(thN, shinNearPart, p.kneeN), p.alpha},
-		{headPart, mirrored(body, headPart, p.head), p.alpha},
+		{headOf(p), mirrored(body, headPart, p.head), p.alpha},
 		{upperArmN, uArmN, p.alpha},
 		{forearmN, seg(uArmN, forearmN, p.elbowN), p.alpha},
 	} {

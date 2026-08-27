@@ -11,18 +11,32 @@ package main
 import "slices"
 
 type pose struct {
-	bx, by         float64 // body offset from rest (px, +y down)
-	rot            float64 // body lean
-	sx, sy         float64 // body scale % (squash and stretch)
-	head           float64 // head rotation on the neck
-	armN, armF     float64 // shoulder rotation
-	elbowN, elbowF float64 // forearm rotation relative to the upper arm
-	legN, legF     float64 // hip rotation
-	kneeN, kneeF   float64 // shin rotation relative to the thigh
-	alpha          float64 // whole-character opacity % (hurt flash)
-	shadow         float64 // ground shadow scale % (reads as height)
-	flip           bool    // turned: limb attach sides swap, head/shins x-mirror
+	bx, by         float64  // body offset from rest (px, +y down)
+	rot            float64  // body lean
+	sx, sy         float64  // body scale % (squash and stretch)
+	head           float64  // head rotation on the neck
+	armN, armF     float64  // shoulder rotation
+	elbowN, elbowF float64  // forearm rotation relative to the upper arm
+	legN, legF     float64  // hip rotation
+	kneeN, kneeF   float64  // shin rotation relative to the thigh
+	alpha          float64  // whole-character opacity % (hurt flash)
+	shadow         float64  // ground shadow scale % (reads as height)
+	flip           bool     // turned: limb attach sides swap, head/shins x-mirror
+	swap           bool     // limb attach sides swap only (a wrapped-around shoulder)
+	view           viewKind // which head/body drawing shows: front, side, back
 }
+
+// viewKind picks the drawing set for the head and torso, so a rotation
+// is shown by stepping through views instead of mirroring in place: a
+// turn passes through the rear-quarter side view (one eye, thin torso),
+// punch-2's windup goes all the way to the back view.
+type viewKind int
+
+const (
+	viewFront viewKind = iota
+	viewSide
+	viewBack
+)
 
 func base() pose { return pose{sx: 100, sy: 100, alpha: 100, shadow: 100} }
 
@@ -37,6 +51,9 @@ func (p pose) knees(near, far float64) pose  { p.kneeN, p.kneeF = near, far; ret
 func (p pose) fade(a float64) pose           { p.alpha = a; return p }
 func (p pose) shade(s float64) pose          { p.shadow = s; return p }
 func (p pose) turned() pose                  { p.flip = true; return p }
+func (p pose) away() pose                    { p.view = viewBack; return p }
+func (p pose) aside() pose                   { p.view = viewSide; return p }
+func (p pose) swapped() pose                 { p.swap = true; return p }
 
 type kf struct {
 	t    float64
@@ -86,20 +103,20 @@ func scalar(get func(pose) float64) func(pose) []float64 {
 	return func(p pose) []float64 { return []float64{get(p)} }
 }
 
-// flipTrack is a two-state property driven by pose.flip: off / on values
-// with hold keyframes, so the switch is instant — a turn shows no
+// flipTrack is a two-state property driven by a pose predicate: off / on
+// values with hold keyframes, so the switch is instant — a turn shows no
 // morphing in between, the sides just trade places at the midpoint.
-func flipTrack(keys []kf, off, on []float64) obj {
+func flipTrack(keys []kf, off, on []float64, pred func(pose) bool) obj {
 	animated := false
 	for _, kf := range keys[1:] {
-		if kf.p.flip != keys[0].p.flip {
+		if pred(kf.p) != pred(keys[0].p) {
 			animated = true
 			break
 		}
 	}
 	if !animated {
 		v := off
-		if keys[0].p.flip {
+		if pred(keys[0].p) {
 			v = on
 		}
 		return static(v)
@@ -107,7 +124,7 @@ func flipTrack(keys []kf, off, on []float64) obj {
 	ks := make([]obj, len(keys))
 	for i, kf := range keys {
 		v := off
-		if kf.p.flip {
+		if pred(kf.p) {
 			v = on
 		}
 		ks[i] = holdKey(kf.t, v)
@@ -115,9 +132,41 @@ func flipTrack(keys []kf, off, on []float64) obj {
 	return anim(ks...)
 }
 
+// sidesSwapped says whether limb roots sit on their traded sides: a full
+// turn does it, and so does a wrapped-around shoulder mid-haymaker.
+func sidesSwapped(p pose) bool { return p.flip || p.swap }
+
+// imageMirrored says whether the head and shoes x-mirror: only a real
+// turn does — a shoulder swap keeps the character facing forward.
+func imageMirrored(p pose) bool { return p.flip }
+
 // bodyMirrorX reflects an attach point across the body's vertical center.
 func bodyMirrorX(pos [2]float64) [2]float64 {
 	return [2]float64{48 - pos[0], pos[1]}
+}
+
+// holdTrack is like track but switches instantly at every key — for the
+// head / back-head opacity swap, which must cut, not crossfade.
+func holdTrack(keys []kf, get func(pose) []float64) obj {
+	first := get(keys[0].p)
+	animated := false
+	for _, kf := range keys[1:] {
+		if !slices.Equal(get(kf.p), first) {
+			animated = true
+			break
+		}
+	}
+	if !animated {
+		if len(first) == 1 {
+			return static(first[0])
+		}
+		return static(first)
+	}
+	ks := make([]obj, len(keys))
+	for i, kf := range keys {
+		ks[i] = holdKey(kf.t, get(kf.p))
+	}
+	return anim(ks...)
 }
 
 // clip assembles the rig into a document. Limbs are two-segment chains
@@ -142,11 +191,11 @@ func clip(name string, frames float64, keys []kf) obj {
 		pos := obj(static([]float64{p.pos[0], p.pos[1]}))
 		if swapSides {
 			m := bodyMirrorX(p.pos)
-			pos = flipTrack(keys, []float64{p.pos[0], p.pos[1]}, []float64{m[0], m[1]})
+			pos = flipTrack(keys, []float64{p.pos[0], p.pos[1]}, []float64{m[0], m[1]}, sidesSwapped)
 		}
 		scale := obj(static([]float64{100, 100}))
 		if mirror {
-			scale = flipTrack(keys, []float64{100, 100}, []float64{-100, 100})
+			scale = flipTrack(keys, []float64{100, 100}, []float64{-100, 100}, imageMirrored)
 		}
 		return transform(
 			static([]float64{p.anchor[0], p.anchor[1]}),
@@ -156,12 +205,54 @@ func clip(name string, frames float64, keys []kf) obj {
 			track(keys, scalar(func(p pose) float64 { return p.alpha })),
 		)
 	}
+	// The head is three layers (front, side, back) and the torso two
+	// (front, side); exactly one of each set is visible per pose. The
+	// switches are cuts on hold keys when the clip rotates through views,
+	// and plain alpha tracks otherwise so the hurt flash still eases.
+	viewVaries := false
+	for _, kf := range keys[1:] {
+		if kf.p.view != keys[0].p.view {
+			viewVaries = true
+			break
+		}
+	}
+	viewOp := func(visible func(viewKind) bool) obj {
+		get := func(p pose) []float64 {
+			if visible(p.view) {
+				return []float64{p.alpha}
+			}
+			return []float64{0}
+		}
+		if viewVaries {
+			return holdTrack(keys, get)
+		}
+		return track(keys, get)
+	}
+	headLayer := func(name string, ind int, visible func(viewKind) bool) obj {
+		tr := transform(
+			static([]float64{headPart.anchor[0], headPart.anchor[1]}),
+			static([]float64{headPart.pos[0], headPart.pos[1]}),
+			flipTrack(keys, []float64{100, 100}, []float64{-100, 100}, imageMirrored),
+			track(keys, scalar(func(p pose) float64 { return p.head })),
+			viewOp(visible),
+		)
+		return imgLayer(name, ind, bodyInd, frames, name, tr)
+	}
+	bodySideLayer := imgLayer("body-side", 13, bodyInd, frames, "body-side", transform(
+		static([]float64{bodySidePart.anchor[0], bodySidePart.anchor[1]}),
+		static([]float64{bodySidePart.pos[0], bodySidePart.pos[1]}),
+		flipTrack(keys, []float64{100, 100}, []float64{-100, 100}, imageMirrored),
+		static(0.0),
+		viewOp(func(v viewKind) bool { return v == viewSide }),
+	))
 	bodyTr := transform(
 		static([]float64{bodyPart.anchor[0], bodyPart.anchor[1]}),
 		track(keys, func(p pose) []float64 { return []float64{restX + p.bx, restY + p.by} }),
 		track(keys, func(p pose) []float64 { return []float64{p.sx, p.sy} }),
 		track(keys, scalar(func(p pose) float64 { return p.rot })),
-		track(keys, scalar(func(p pose) float64 { return p.alpha })),
+		// A parent's opacity does not cascade in Lottie, so hiding the
+		// front torso during the side view leaves the children alone.
+		viewOp(func(v viewKind) bool { return v != viewSide }),
 	)
 	shadowTr := transform(
 		static([]float64{shadowPart.anchor[0], shadowPart.anchor[1]}),
@@ -173,9 +264,12 @@ func clip(name string, frames float64, keys []kf) obj {
 	return doc(name, frames, []obj{
 		imgLayer("forearm-near", 1, upperArmNInd, frames, "forearm-near", seg(forearmN, false, false, func(p pose) float64 { return p.elbowN })),
 		imgLayer("upper-arm-near", upperArmNInd, bodyInd, frames, "upper-arm-near", seg(upperArmN, true, false, func(p pose) float64 { return p.armN })),
-		imgLayer("head", 3, bodyInd, frames, "head", seg(headPart, false, true, func(p pose) float64 { return p.head })),
+		headLayer("head", 3, func(v viewKind) bool { return v == viewFront }),
+		headLayer("head-side", 12, func(v viewKind) bool { return v == viewSide }),
+		headLayer("head-back", 14, func(v viewKind) bool { return v == viewBack }),
 		imgLayer("shin-near", 4, thighNInd, frames, "shin-near", seg(shinNearPart, false, true, func(p pose) float64 { return p.kneeN })),
 		imgLayer("thigh-near", thighNInd, bodyInd, frames, "thigh-near", seg(thighN, true, false, func(p pose) float64 { return p.legN })),
+		bodySideLayer,
 		imgLayer("body", bodyInd, 0, frames, "body", bodyTr),
 		imgLayer("thigh-far", thighFInd, bodyInd, frames, "thigh-far", seg(thighF, true, false, func(p pose) float64 { return p.legF })),
 		imgLayer("shin-far", 8, thighFInd, frames, "shin-far", seg(shinFarPart, false, true, func(p pose) float64 { return p.kneeF })),
@@ -205,10 +299,12 @@ func idleClip() clipDef {
 // when the turn completes, and the mirrored idle matches the end pose.
 func idleTurnClip() clipDef {
 	rest := base().elbows(-8, -8).knees(3, 3)
-	windup := base().lean(-6).arms(25, -25).elbows(-18, -18).legs(-8, 8).knees(8, 8).nod(-4).at(0, -2)
-	swapped := base().lean(6).arms(-25, 25).elbows(-18, -18).legs(8, -8).knees(8, 8).at(0, -2).turned()
+	windup := base().lean(-4).arms(20, -20).elbows(-16, -16).legs(-6, 6).knees(6, 6).at(0, -1).aside()
+	swapped := base().lean(4).arms(-20, 20).elbows(-16, -16).legs(6, -6).knees(6, 6).at(0, -1).aside().turned()
+	settle := base().arms(-10, 10).elbows(-12, -12).legs(3, -3).knees(4, 4).turned()
 	return def("idle-turn-anim", 20,
-		k(0, rest, true), k(8, windup, true), k(10, swapped, true), k(20, rest.turned(), true))
+		k(0, rest, true), k(6, windup, true), k(10, swapped, true),
+		k(14, settle, true), k(20, rest.turned(), true))
 }
 
 func walkClip() clipDef {
@@ -223,11 +319,13 @@ func walkClip() clipDef {
 
 func walkTurnClip() clipDef {
 	from := base().legs(-22, 22).knees(8, 20).arms(18, -18).elbows(-14, -14).lean(4)
-	gather := base().legs(-8, 8).knees(16, 16).arms(24, -24).elbows(-16, -16).lean(-5).at(0, -3)
-	swapped := base().legs(8, -8).knees(16, 16).arms(-24, 24).elbows(-16, -16).lean(5).at(0, -3).turned()
+	gather := base().legs(-8, 8).knees(16, 16).arms(24, -24).elbows(-16, -16).lean(-4).at(0, -2).aside()
+	swapped := base().legs(8, -8).knees(16, 16).arms(-24, 24).elbows(-16, -16).lean(4).at(0, -2).aside().turned()
 	out := base().legs(22, -22).knees(20, 8).arms(-18, 18).elbows(-14, -14).lean(4).turned()
 	return def("walk-turn-anim", 20,
-		k(0, from, true), k(8, gather, true), k(10, swapped, true), k(20, out, true))
+		k(0, from, true), k(6, gather, true), k(10, swapped, true),
+		k(14, base().legs(14, -14).knees(16, 10).arms(-20, 20).elbows(-14, -14).lean(4).turned(), true),
+		k(20, out, true))
 }
 
 func runClip() clipDef {
@@ -241,11 +339,13 @@ func runClip() clipDef {
 
 func runTurnClip() clipDef {
 	from := base().legs(-45, 45).knees(15, 55).arms(35, -35).elbows(-40, -40).lean(12)
-	brake := base().legs(-15, 15).knees(30, 30).arms(20, -20).elbows(-30, -30).lean(-8).at(2, -2)
-	swapped := base().legs(15, -15).knees(30, 30).arms(-20, 20).elbows(-30, -30).lean(8).at(-2, -2).turned()
+	brake := base().legs(-15, 15).knees(30, 30).arms(20, -20).elbows(-30, -30).lean(-6).at(2, -2).aside()
+	swapped := base().legs(15, -15).knees(30, 30).arms(-20, 20).elbows(-30, -30).lean(6).at(-2, -2).aside().turned()
 	out := base().legs(45, -45).knees(55, 15).arms(-35, 35).elbows(-40, -40).lean(12).turned()
 	return def("run-turn-anim", 16,
-		k(0, from, true), k(6, brake, true), k(8, swapped, true), k(16, out, true))
+		k(0, from, true), k(5, brake, true), k(8, swapped, true),
+		k(11, base().legs(30, -30).knees(40, 20).arms(-28, 28).elbows(-34, -34).lean(10).turned(), true),
+		k(16, out, true))
 }
 
 func runToIdleClip() clipDef {
@@ -344,15 +444,26 @@ func punchClip() clipDef {
 		k(12, hold, true), k(20, rest, true))
 }
 
+// punch2Clip is the haymaker: the character turns AWAY — back of the
+// head shows, the shoulders trade sides on the same hold-key swap the
+// turns use — winds the punching arm up behind, then snaps back around
+// and swings it through a huge arc. Reachable as the punch follow-up
+// and directly via the punch2 event.
 func punch2Clip() clipDef {
 	from := base().at(4, 0).lean(8).arms(20, -40).elbows(-40, -15).legs(-12, 12).knees(8, 12)
-	windup := base().lean(-2).arms(35, -20).elbows(-75, -20).legs(-12, 12).knees(8, 12)
-	strike := base().at(8, 0).lean(16).squash(102, 98).arms(-100, 15).elbows(-3, -25).legs(-16, 14).knees(6, 14)
-	hold := base().at(6, 0).lean(14).arms(-92, 12).elbows(-6, -25).legs(-16, 14).knees(6, 14)
+	wind := base().at(-2, 0).lean(-8).arms(70, -20).elbows(-30, -20).legs(10, -10).knees(10, 10).nod(-4).away().turned()
+	windDeep := base().at(-3, 1).lean(-10).arms(95, -22).elbows(-25, -20).legs(10, -10).knees(10, 10).nod(-5).away().turned()
+	// The shoulders stay traded through the swing — the arm wrapped
+	// around, so the punching shoulder now leads — which is also what
+	// puts the fist well past the body's leading edge.
+	sweep := base().at(2, 0).lean(2).arms(30, 5).elbows(-20, -20).legs(-8, 8).knees(8, 10).swapped()
+	strike := base().at(9, 0).lean(18).squash(103, 97).arms(-100, 25).elbows(-3, -25).legs(-16, 14).knees(6, 14).swapped()
+	hold := base().at(7, 0).lean(15).arms(-92, 20).elbows(-6, -25).legs(-16, 14).knees(6, 14).swapped()
 	rest := base().elbows(-8, -8).knees(3, 3)
-	return def("punch-2-anim", 24,
-		k(0, from, true), k(5, windup, true), k(9, strike, false),
-		k(14, hold, true), k(24, rest, true))
+	return def("punch-2-anim", 28,
+		k(0, from, true), k(4, wind, true), k(8, windDeep, true),
+		k(10, sweep, false), k(12, strike, false),
+		k(17, hold, true), k(28, rest, true))
 }
 
 // kickClip chambers first — hip raised, knee fully folded — and only

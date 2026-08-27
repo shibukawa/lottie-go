@@ -10,7 +10,7 @@ Attack clips layered on data:preset-clip-set, varying per preset kind (requireme
 per_kind:
   unarmed:              # male-gait / female-gait
     - punch
-    - punch-2           # combo follow-up
+    - punch-2           # haymaker: winds up turned away (head-back view, shoulders traded), also fires directly via punch2 event
     - kick
     - jump-kick
   one-hand-sword:
@@ -28,7 +28,7 @@ per_kind:
     - claw
     - pounce            # closes distance; ends in landing pose
 defense:                # all kinds
-  - guard               # loop: hold stance while input held
+  - guard               # loop: the guard event toggles it on and off (was a boolean; user wanted an event 2026-08)
   - guard-hit           # oneshot: flinch while guarding, back to guard
 common:
   - attacks/guard-hit: oneshot; return to idle (fall-loop if airborne) on complete

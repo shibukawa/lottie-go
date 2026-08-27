@@ -65,19 +65,20 @@ func TestChibiMalePreset(t *testing.T) {
 	fire(t, m, "jump", "jump-state", 10)
 	settle(t, sm, "idle-state", 200)
 
-	// Punch fired during punch chains the follow-up.
+	// Punch fired during punch chains the follow-up, and the haymaker is
+	// also reachable directly.
 	fire(t, m, "punch", "punch-state", 10)
 	fire(t, m, "punch", "punch-2-state", 10)
 	settle(t, sm, "idle-state", 80)
+	fire(t, m, "punch2", "punch-2-state", 10)
+	settle(t, sm, "idle-state", 80)
 
-	// A guarded hit plays guard-hit, not hurt, and releasing the boolean
-	// stands the character down.
-	sm.Set("guarding", true)
-	settle(t, sm, "guard-state", 10)
+	// Guard toggles on the guard event; a hit while guarding plays
+	// guard-hit, not hurt.
+	fire(t, m, "guard", "guard-state", 10)
 	fire(t, m, "hurt", "guard-hit-state", 10)
 	settle(t, sm, "guard-state", 60)
-	sm.Set("guarding", false)
-	settle(t, sm, "idle-state", 10)
+	fire(t, m, "guard", "idle-state", 10)
 
 	// Death is terminal.
 	fire(t, m, "die", "death-state", 10)
