@@ -60,9 +60,10 @@ a blank-imported WebP decoder handle: PNG and WebP are both fine).
   The head leads +x like everything else.
 - **Rotation is shown by view swaps, not mirroring.** head-side is the
   rear-quarter head (back of the head, one eye at the leading edge) and
-  body-side the thinned torso — turn clips cut through them; head-back
-  and body-back (the darker rear torso) are the full-back pair the
-  punch-2 spin uses. A restyled character needs all of them drawn, same
+  body-side the thinned torso — turn clips cut through them; body-back
+  (the darker rear torso) is what the spin attacks show, under the
+  one-eyed head-side — the eyes keep watching the opponent — while
+  head-back is the fully faceless head for motions that need it. A restyled character needs all of them drawn, same
   sizes and anchors as their front versions.
 - **Outline everything.** A 1px dark outline is what keeps flat-color
   parts readable against any game background; keep an equivalent edge

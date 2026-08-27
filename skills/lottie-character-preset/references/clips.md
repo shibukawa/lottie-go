@@ -31,12 +31,12 @@ gaits: smooth rotations, hold-keyed view cuts and side swap.
 
 Attacks lead with the far-side limb — the one attached on the leading
 (+x) edge, so a strike reaches the enemy in front instead of crossing
-the body. punch-2 is the spinning haymaker: the windup stays face-on
-and upright with the arm cocked behind, then the swing spins the body
-past front — from the strike to the clip's end the back shows (the
-faceless `head-back` and darker `body-back` cut in on hold keys) with
-the shoulders traded and hips planted, carrying the fist past the
-leading edge. Kicks chamber first (knee fully folded)
+the body. punch-2 and kick-2 are the spin attacks: the windup stays
+face-on and chambers by folding a joint, then the swing spins the body
+past front — from the strike to the clip's end the darker `body-back`
+shows with the striking side traded. The head turns only halfway: the
+one-eyed `head-side` stays up through the spin, because the eyes never
+leave the opponent even when the body has turned past them. Kicks chamber first (knee fully folded)
 and snap the knee straight only on the strike frame.
 
 Clip ids end in `-anim`. Keep new clips in this style: a new attack is
