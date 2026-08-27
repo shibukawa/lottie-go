@@ -168,9 +168,9 @@ func renderPose(p pose) *image.NRGBA {
 	}
 	// On flip, limb roots trade sides and the head and shins x-mirror,
 	// matching the clip builder's flipTrack.
-	root := func(pt part, deg float64) mat {
+	root := func(pt part, deg float64, swapped func(pose) bool) mat {
 		pos := pt.pos
-		if sidesSwapped(p) {
+		if swapped(p) {
 			pos = bodyMirrorX(pos)
 		}
 		return body.mul(nodeTransform(pos, pt.anchor, deg, 100, 100))
@@ -188,10 +188,10 @@ func renderPose(p pose) *image.NRGBA {
 		}
 		return body.mul(nodeTransform(bodySidePart.pos, bodySidePart.anchor, 0, msx, 100))
 	}
-	uArmN := root(upperArmN, p.armN)
-	uArmF := root(upperArmF, p.armF)
-	thN := root(thighN, p.legN)
-	thF := root(thighF, p.legF)
+	uArmN := root(upperArmN, p.armN, armsSwapped)
+	uArmF := root(upperArmF, p.armF, armsSwapped)
+	thN := root(thighN, p.legN, legsSwapped)
+	thF := root(thighF, p.legF, legsSwapped)
 	shadow := nodeTransform(shadowPart.pos, shadowPart.anchor, 0, p.shadow, p.shadow)
 	type draw struct {
 		pt      part

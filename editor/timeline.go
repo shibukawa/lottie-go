@@ -23,6 +23,15 @@ type timelineView struct {
 	readout basicwidget.Text
 	labels  guigui.WidgetSlice[*basicwidget.Text]
 
+	// The same transport the hitbox chart has, so firing an event and
+	// stepping through the result frame by frame works from the Segment
+	// tab too.
+	playBtn basicwidget.Button
+	backBtn basicwidget.Button
+	fwdBtn  basicwidget.Button
+	autoChk basicwidget.Checkbox
+	autoLbl basicwidget.Text
+
 	dragging bool
 }
 
@@ -41,6 +50,32 @@ func (t *timelineView) Build(context *guigui.Context, adder *guigui.ChildAdder) 
 		return nil
 	}
 	adder.AddWidget(&t.readout)
+	adder.AddWidget(&t.playBtn)
+	adder.AddWidget(&t.backBtn)
+	adder.AddWidget(&t.fwdBtn)
+
+	if m.PreviewPlaying() {
+		t.playBtn.SetText("❚❚")
+	} else {
+		t.playBtn.SetText("▶")
+	}
+	t.playBtn.OnDown(func(context *guigui.Context) { m.TogglePreviewPlaying() })
+	t.backBtn.SetText("−1")
+	t.backBtn.OnDown(func(context *guigui.Context) { m.StepPreviewFrame(-1) })
+	t.fwdBtn.SetText("+1")
+	t.fwdBtn.OnDown(func(context *guigui.Context) { m.StepPreviewFrame(1) })
+	stepEnabled := m.PreviewPlayer() != nil
+	for _, w := range []guigui.Widget{&t.playBtn, &t.backBtn, &t.fwdBtn} {
+		context.SetEnabled(w, stepEnabled)
+	}
+	adder.AddWidget(&t.autoChk)
+	adder.AddWidget(&t.autoLbl)
+	t.autoChk.SetValue(m.AutoPlay())
+	t.autoChk.OnValueChanged(func(context *guigui.Context, v bool) { m.SetAutoPlay(v) })
+	t.autoLbl.SetValue("autoplay")
+	t.autoLbl.SetScale(0.75)
+	t.autoLbl.SetVerticalAlign(basicwidget.VerticalAlignMiddle)
+	context.SetPassthrough(&t.autoLbl, true)
 
 	markers := m.PreviewMarkers()
 	t.labels.SetLen(len(markers))
@@ -160,6 +195,16 @@ func (t *timelineView) Layout(context *guigui.Context, widgetBounds *guigui.Widg
 	b := widgetBounds.Bounds()
 	layouter.LayoutWidget(&t.readout, image.Rect(b.Min.X, b.Max.Y-u, b.Max.X-u/2, b.Max.Y))
 
+	// Transport buttons live in the gutter left of the track, the same
+	// column the chart uses.
+	btnW := (chartGutter(u) - u/4) / 3
+	for i, w := range []guigui.Widget{&t.playBtn, &t.backBtn, &t.fwdBtn} {
+		x := b.Min.X + i*(btnW+u/16)
+		layouter.LayoutWidget(w, image.Rect(x, b.Min.Y+u/4, x+btnW, b.Min.Y+u))
+	}
+	layouter.LayoutWidget(&t.autoChk, image.Rect(b.Min.X, b.Max.Y-u, b.Min.X+u, b.Max.Y))
+	layouter.LayoutWidget(&t.autoLbl, image.Rect(b.Min.X+u, b.Max.Y-u, b.Min.X+4*u, b.Max.Y))
+
 	lo, hi, ok := t.docRange(m)
 	if !ok {
 		return
@@ -193,6 +238,8 @@ func (t *timelineView) WriteStateKey(context *guigui.Context, w *guigui.StateKey
 		return
 	}
 	w.WriteInt(m.Generation())
+	w.WriteBool(m.PreviewPlaying())
+	w.WriteBool(m.AutoPlay())
 	w.WriteString(m.PreviewClip().Anim + "/" + m.PreviewClip().Segment)
 	w.WriteString(m.ActiveState())
 }

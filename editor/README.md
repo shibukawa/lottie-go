@@ -15,6 +15,12 @@ The path argument is optional; **Open…**, **Save As…**, and **Import…** op
 native file dialogs through [zenity](https://github.com/ncruces/zenity),
 which is pure Go and needs no cgo.
 
+The Segment tab carries the same transport as the collision chart —
+play/pause, −1, +1 — plus an **autoplay** toggle (on by default). With
+autoplay off, every clip that reaches the stage arrives paused on its
+first frame: firing an event still transitions, so an attack can be
+inspected from the exact frame it started, one +1 at a time.
+
 `-viewer` starts **viewer mode**: the editor watches every file the
 document was loaded from — the `.lottie` bundle (whose images travel
 inside it), or a loose clip `.json` plus anything imported after — and

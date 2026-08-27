@@ -60,6 +60,12 @@ type Model struct {
 	// saving is disabled, and edits only last until the next reload.
 	viewer bool
 
+	// autoPlay starts clips playing the moment they appear on stage — a
+	// selected clip, the machine's initial state, every transition. Off,
+	// they arrive paused on their first frame so an animation can be
+	// inspected from the instant an event fired, one +1 at a time.
+	autoPlay bool
+
 	selectedState string
 	selectedTrans int
 
@@ -131,6 +137,7 @@ func NewModel() *Model {
 		trackCache:    map[string]*lottieresolv.Track{},
 		dialog:        make(chan dialogResult, 1),
 	}
+	m.autoPlay = true
 	m.status = "New bundle. Import a clip to begin."
 	return m
 }
@@ -450,6 +457,16 @@ func (m *Model) CPEnabled() bool {
 }
 
 // ---- transport ----
+
+// AutoPlay reports whether the stage starts clips playing by itself.
+func (m *Model) AutoPlay() bool { return m.autoPlay }
+
+// SetAutoPlay switches automatic playback; it only affects what enters
+// the stage from now on, so pausing mid-clip stays where it is.
+func (m *Model) SetAutoPlay(v bool) {
+	m.autoPlay = v
+	m.generation++
+}
 
 // PreviewPlaying reports whether the stage is advancing.
 func (m *Model) PreviewPlaying() bool {
@@ -1175,6 +1192,9 @@ func (m *Model) ShowClip(c clipRef) {
 		return
 	}
 	p.Rewind()
+	if !m.autoPlay {
+		p.Pause()
+	}
 	p.OnMarker(func(mk lottie.Marker) { m.noteMarker(c.Anim, mk) })
 	// The counts describe what is on the stage, so switching clips starts
 	// them over rather than carrying the last clip's tally forward.
@@ -1345,6 +1365,21 @@ func (m *Model) restartPreview() {
 	p.OnMarker(func(state string, mk lottie.Marker) {
 		m.noteMarker(m.animForState(state), mk)
 	})
+	// With auto-play off, every state's clip arrives paused on its first
+	// frame — transitions still take (guards need no playback), so firing
+	// an event lands the new clip ready to be stepped through.
+	p.OnStateChanged(func(from, to string) {
+		if !m.autoPlay {
+			if pl := p.Player(); pl != nil {
+				pl.Pause()
+			}
+		}
+	})
+	if !m.autoPlay {
+		if pl := p.Player(); pl != nil {
+			pl.Pause()
+		}
+	}
 	m.preview = p
 	m.previewGen = m.docGen
 }
