@@ -89,6 +89,7 @@ func chibiMachine() *lottie.StateMachine {
 				to("jump-state", event("jump"), grounded),
 				to("run-state", event("run")),
 				to("walk-state", event("walk")),
+				to("slide-state", event("slide")),
 				to("punch-state", event("punch")),
 				to("kick-state", event("kick")),
 				to("idle-turn-state", event("turn")),
@@ -100,6 +101,7 @@ func chibiMachine() *lottie.StateMachine {
 			at(loopState("walk-state", "walk-anim", []lottie.Transition{
 				to("jump-state", event("jump"), grounded),
 				to("run-state", event("run")),
+				to("slide-state", event("slide")),
 				to("idle-state", event("stop")),
 				to("walk-turn-state", event("turn")),
 			}), 260, 40),
@@ -120,7 +122,7 @@ func chibiMachine() *lottie.StateMachine {
 				to("idle-state", done),
 			}), 700, 170),
 			at(onceState("slide-state", "slide-anim", []lottie.Transition{
-				to("run-state", done),
+				to("idle-state", done),
 			}), 700, 300),
 			// Column 2: air.
 			at(onceState("jump-state", "jump-anim", []lottie.Transition{

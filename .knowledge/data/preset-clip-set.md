@@ -8,7 +8,7 @@ Standard clip vocabulary every preset in requirement:animation-presets ships. Na
 
 ```yaml
 clips:
-  - {name: idle,       kind: loop}
+  - {name: idle,       kind: loop, note: breathe downward via knee flex with feet planted; an upward bob reads as floating}
   - {name: idle-turn,  kind: transition}
   - {name: walk,       kind: loop}
   - {name: walk-turn,  kind: transition}
@@ -24,6 +24,7 @@ clips:
 facing: authored facing right; left via runtime mirror (Mirrored/MirrorX), no *-left clips
 turns: real turns, not morphs - limb chains trade sides + head/shoes x-mirror on hold keys at midpoint; clip ENDS facing opposite, game flips Mirrored on completion (user feedback 2026-08)
 no-dash: dropped - dash is run played faster (state speed / SetSpeed); a separate clip duplicated run (user feedback 2026-08)
+air: airborne poses (jump/fall/jump-kick) lead with the far-side arms AND legs; near side trails (user feedback 2026-08)
 attacks: per-kind sets in data:preset-combat-clips
 open:
   - land clip (fall-loop -> idle) absent; decide whether run-to-idle covers it

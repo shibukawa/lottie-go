@@ -187,11 +187,15 @@ func clip(name string, frames float64, keys []kf) obj {
 
 // --- Locomotion ---
 
+// idleClip breathes downward: the feet stay planted and the knees flex,
+// dropping the hip a touch — never upward, which reads as floating.
+// The 2px hip drop matches what the bent knees shorten the leg column
+// by, so the shoes stay on the ground line.
 func idleClip() clipDef {
 	rest := base().elbows(-8, -8).knees(3, 3)
-	up := rest.at(0, -5).nod(-3).arms(4, -4).elbows(-12, -12)
+	sink := base().at(0, 2).legs(-9, -9).knees(24, 24).nod(3).arms(5, -5).elbows(-14, -14)
 	return def("idle-anim", 96,
-		k(0, rest, true), k(48, up, true), k(96, rest, true))
+		k(0, rest, true), k(48, sink, true), k(96, rest, true))
 }
 
 // Turn clips actually turn: the shoulders swing around, and at the
@@ -259,35 +263,38 @@ func runToIdleClip() clipDef {
 // so what animates is the drop, the held low pose, and the recovery.
 func slideClip() clipDef {
 	from := base().legs(-50, 50).knees(15, 70).arms(40, -40).elbows(-40, -40).lean(12)
-	drop := base().at(-2, 16).lean(-38).legs(-52, -30).knees(45, 12).arms(50, 25).elbows(-25, -15).nod(14).squash(102, 98)
-	low := base().at(-4, 26).lean(-62).legs(-45, -22).knees(55, 8).arms(62, 30).elbows(-30, -12).nod(24).squash(104, 96)
-	up := base().lean(-10).legs(-28, 28).knees(12, 20).arms(10, -10).elbows(-15, -15)
+	drop := base().at(4, 16).lean(-38).legs(-52, -30).knees(45, 12).arms(50, 25).elbows(-25, -15).nod(14).squash(102, 98).shade(112)
+	low := base().at(10, 26).lean(-62).legs(-45, -22).knees(55, 8).arms(62, 30).elbows(-30, -12).nod(24).squash(104, 96).shade(124)
+	slid := low.at(14, 26)
+	up := base().at(4, 0).lean(-10).legs(-28, 28).knees(12, 20).arms(10, -10).elbows(-15, -15)
 	return def("slide-anim", 28,
-		k(0, from, true), k(4, drop, false), k(7, low, true), k(20, low, true), k(28, up, true))
+		k(0, from, true), k(4, drop, false), k(7, low, true), k(20, slid, true), k(28, up, true))
 }
 
 // --- Air ---
 
+// Air poses lead with the far-side limbs, like the attacks: the leading
+// arm and leg reach forward-up, the near side trails behind.
 func jumpClip() clipDef {
 	crouch := base().at(0, 10).squash(110, 88).lean(4).legs(-14, 14).knees(25, 25).arms(18, -18).elbows(-20, -20)
-	launch := base().at(0, -60).squash(94, 106).legs(-30, 25).knees(15, 45).arms(-70, 70).elbows(-25, -25).shade(58)
-	apex := base().at(0, -72).legs(-15, 15).knees(30, 45).arms(-80, 80).elbows(-20, -20).shade(48)
-	out := base().at(0, -62).legs(-18, 24).knees(25, 40).arms(-80, 80).elbows(-20, -20).shade(52)
+	launch := base().at(0, -60).squash(94, 106).legs(25, -30).knees(45, 15).arms(70, -70).elbows(-25, -25).shade(58)
+	apex := base().at(0, -72).legs(15, -15).knees(45, 30).arms(80, -80).elbows(-20, -20).shade(48)
+	out := base().at(0, -62).legs(24, -18).knees(40, 25).arms(80, -80).elbows(-20, -20).shade(52)
 	return def("jump-anim", 32,
 		k(0, base().elbows(-8, -8).knees(3, 3), true), k(5, crouch, true), k(12, launch, true),
 		k(22, apex, true), k(32, out, true))
 }
 
 func fallClip() clipDef {
-	from := base().at(0, -62).arms(-80, 80).elbows(-20, -20).legs(-20, 32).knees(20, 35).shade(52)
-	settle := base().at(0, -38).arms(-70, 70).elbows(-25, -25).legs(-15, 26).knees(25, 30).shade(58).nod(5)
+	from := base().at(0, -62).arms(80, -80).elbows(-20, -20).legs(32, -20).knees(35, 20).shade(52)
+	settle := base().at(0, -38).arms(70, -70).elbows(-25, -25).legs(26, -15).knees(30, 25).shade(58).nod(5)
 	return def("fall-anim", 16,
 		k(0, from, true), k(16, settle, true))
 }
 
 func fallLoopClip() clipDef {
-	a := base().at(0, -38).arms(-70, 70).elbows(-25, -25).legs(-15, 26).knees(25, 30).shade(58).nod(5)
-	b := base().at(0, -44).arms(-80, 80).elbows(-18, -18).legs(-25, 16).knees(32, 24).shade(54).nod(8)
+	a := base().at(0, -38).arms(70, -70).elbows(-25, -25).legs(26, -15).knees(30, 25).shade(58).nod(5)
+	b := base().at(0, -44).arms(80, -80).elbows(-18, -18).legs(16, -25).knees(24, 32).shade(54).nod(8)
 	return def("fall-loop-anim", 32,
 		k(0, a, true), k(16, b, true), k(32, a, true))
 }
@@ -356,10 +363,10 @@ func kickClip() clipDef {
 }
 
 func jumpKickClip() clipDef {
-	air := base().at(0, -48).arms(-60, 60).elbows(-25, -25).legs(-15, 22).knees(25, 28).shade(55)
-	tuck := base().at(0, -45).lean(8).legs(25, -45).knees(40, 80).arms(-40, 40).elbows(-30, -30).shade(55)
+	air := base().at(0, -48).arms(60, -60).elbows(-25, -25).legs(22, -15).knees(28, 25).shade(55)
+	tuck := base().at(0, -45).lean(8).legs(25, -45).knees(40, 80).arms(40, -40).elbows(-30, -30).shade(55)
 	strike := base().at(3, -42).lean(12).legs(30, -72).knees(45, 5).arms(45, -50).elbows(-25, -25).shade(55)
-	out := base().at(0, -40).arms(-60, 60).elbows(-25, -25).legs(-18, 26).knees(28, 30).shade(57)
+	out := base().at(0, -40).arms(60, -60).elbows(-25, -25).legs(26, -18).knees(30, 28).shade(57)
 	return def("jump-kick-anim", 28,
 		k(0, air, true), k(6, tuck, true), k(10, strike, false),
 		k(20, strike, true), k(28, out, true))
