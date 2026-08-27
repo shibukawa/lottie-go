@@ -10,19 +10,23 @@ anchor and limbs detach or orbit the wrong point.
 Three-quarter view, leading right (+x). Limbs are two-segment chains
 parented through the body: `upper-arm -> forearm` (elbow), `thigh ->
 shin` (knee). `near`/`far` mean depth (viewer side / other side), not
-left/right — the runtime mirror swaps which body side is near.
+left/right — the runtime mirror swaps which body side is near. Facing
+right, the near limbs are the character's left side and attach on the
+trailing (-x) edge; the far limbs attach on the leading (+x) edge and
+peek out from behind the torso. Swapping that placement makes the pose
+read as a back view under a forward-looking face.
 
 | slot           | size  | anchor  | parent         | attach    |
 |----------------|-------|---------|----------------|-----------|
 | head           | 72x60 | (36,56) | body           | (24,3)    |
 | body           | 48x48 | (24,45) | -              | (128,179) |
-| upper-arm-near | 15x27 | (7,4)   | body           | (45,8)    |
+| upper-arm-near | 15x27 | (7,4)   | body           | (3,8)     |
 | forearm-near   | 15x30 | (7,4)   | upper-arm-near | (7,23)    |
-| upper-arm-far  | 15x27 | (7,4)   | body           | (3,8)     |
+| upper-arm-far  | 15x27 | (7,4)   | body           | (45,8)    |
 | forearm-far    | 15x30 | (7,4)   | upper-arm-far  | (7,23)    |
-| thigh-near     | 18x33 | (9,4)   | body           | (32,45)   |
+| thigh-near     | 18x33 | (9,4)   | body           | (16,45)   |
 | shin-near      | 21x36 | (9,4)   | thigh-near     | (9,29)    |
-| thigh-far      | 18x33 | (9,4)   | body           | (16,45)   |
+| thigh-far      | 18x33 | (9,4)   | body           | (32,45)   |
 | shin-far       | 21x36 | (9,4)   | thigh-far      | (9,29)    |
 | shadow         | 84x15 | (42,7)  | -              | (128,236) |
 
