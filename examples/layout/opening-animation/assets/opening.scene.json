@@ -1,0 +1,195 @@
+{
+  "name": "opening",
+  "size": {
+    "w": 1280,
+    "h": 720
+  },
+  "bundles": [
+    {
+      "alias": "backdrop",
+      "path": "backdrop.lottie"
+    },
+    {
+      "alias": "sky",
+      "path": "sky.lottie"
+    },
+    {
+      "alias": "logo",
+      "path": "logo.lottie"
+    },
+    {
+      "alias": "ocean",
+      "path": "ocean.lottie"
+    },
+    {
+      "alias": "title",
+      "path": "title.lottie"
+    }
+  ],
+  "fonts": [
+    {
+      "alias": "display",
+      "path": "../../../stopwatch/assets/LuckiestGuy-Regular.ttf"
+    }
+  ],
+  "phases": [
+    {
+      "name": "logo",
+      "duration": 2,
+      "next": "opening"
+    },
+    {
+      "name": "opening"
+    }
+  ],
+  "nodes": [
+    {
+      "name": "backdrop-dark",
+      "kind": "animation",
+      "source": {
+        "bundle": "backdrop",
+        "id": "bg-dark-anim"
+      },
+      "playback": {
+        "loop": true,
+        "autoplay": true
+      },
+      "phase": "logo"
+    },
+    {
+      "name": "corp-logo",
+      "kind": "animation",
+      "source": {
+        "bundle": "logo",
+        "id": "corp-logo-anim"
+      },
+      "transform": {
+        "x": 440,
+        "y": 160
+      },
+      "playback": {
+        "autoplay": true
+      },
+      "phase": "logo",
+      "focus": {
+        "focusable": true
+      },
+      "bindings": [
+        {
+          "on": "activate",
+          "do": "phase",
+          "arg": "opening"
+        }
+      ]
+    },
+    {
+      "name": "sky",
+      "kind": "animation",
+      "source": {
+        "bundle": "sky",
+        "id": "bg-sky-anim"
+      },
+      "playback": {
+        "loop": true,
+        "autoplay": true
+      },
+      "phase": "opening"
+    },
+    {
+      "name": "ocean",
+      "kind": "animation",
+      "source": {
+        "bundle": "ocean",
+        "id": "ocean-anim"
+      },
+      "playback": {
+        "segment": "wave-seg",
+        "autoplay": true,
+        "then": [
+          {
+            "segment": "sea-seg",
+            "loop": true
+          }
+        ]
+      },
+      "phase": "opening"
+    },
+    {
+      "name": "title-badge",
+      "kind": "animation",
+      "source": {
+        "bundle": "title",
+        "id": "title-anim"
+      },
+      "transform": {
+        "x": 290,
+        "y": 60
+      },
+      "playback": {
+        "segment": "in-seg",
+        "autoplay": true,
+        "then": [
+          {
+            "segment": "idle-seg",
+            "loop": true
+          }
+        ]
+      },
+      "start": 3,
+      "phase": "opening"
+    },
+    {
+      "name": "game-title",
+      "kind": "text",
+      "source": {},
+      "transform": {
+        "x": 640,
+        "y": 238
+      },
+      "start": 3.3,
+      "phase": "opening",
+      "text": {
+        "value": "WAVE QUEST",
+        "font": "display",
+        "size": 84,
+        "align": "center",
+        "anchorX": "center",
+        "anchorY": "middle",
+        "color": "#fff3d6"
+      }
+    },
+    {
+      "name": "press-start",
+      "kind": "text",
+      "source": {},
+      "transform": {
+        "x": 640,
+        "y": 636
+      },
+      "start": 4.6,
+      "phase": "opening",
+      "text": {
+        "value": "PRESS START",
+        "font": "display",
+        "size": 44,
+        "align": "center",
+        "anchorX": "center",
+        "anchorY": "middle",
+        "color": "#1c3a5f"
+      },
+      "focus": {
+        "focusable": true
+      },
+      "bindings": [
+        {
+          "on": "activate",
+          "do": "callback",
+          "arg": "start-game"
+        }
+      ]
+    }
+  ],
+  "options": {
+    "initialFocus": "corp-logo"
+  }
+}
