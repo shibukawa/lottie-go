@@ -31,9 +31,10 @@ gaits: smooth rotations, hold-keyed view cuts and side swap.
 Attacks lead with the far-side limb — the one attached on the leading
 (+x) edge, so a strike reaches the enemy in front instead of crossing
 the body. punch-2 winds up by turning away: the faceless `head-back`
-image cuts in on hold keys and the shoulders trade sides, then the arm
-snaps around into the swing with the shoulders still traded, carrying
-the fist past the leading edge. Kicks chamber first (knee fully folded)
+image cuts in on hold keys and the shoulders trade sides while the hips
+stay planted (a waist twist — the legs never swap), then the arm snaps
+around into the swing with the shoulders still traded, carrying the
+fist past the leading edge. Kicks chamber first (knee fully folded)
 and snap the knee straight only on the strike frame.
 
 Clip ids end in `-anim`. Keep new clips in this style: a new attack is

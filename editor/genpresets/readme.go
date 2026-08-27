@@ -88,9 +88,10 @@ returns by itself through the machine.
   with the far-side limb (the one on the leading edge, so it reaches
   the enemy in front). punch-2 is the big one: the character turns
   away — the faceless head-back image shows and the shoulders trade
-  sides on hold keys — winds the arm up behind, then snaps around and
-  swings it through; the shoulders stay traded through the hit, which
-  is what carries the fist past the leading edge.
+  sides on hold keys, while the hips stay planted (a waist twist, so
+  the legs never move) — winds the arm up behind, then snaps around
+  and swings it through; the shoulders stay traded through the hit,
+  which is what carries the fist past the leading edge.
 - kick, jump-kick — ground and air kicks: chambered (knee folded) until
   the strike frame, then the knee snaps straight on impact.
 - guard / guard-hit — the guard event toggles the stance on and off; a

@@ -132,9 +132,13 @@ func flipTrack(keys []kf, off, on []float64, pred func(pose) bool) obj {
 	return anim(ks...)
 }
 
-// sidesSwapped says whether limb roots sit on their traded sides: a full
-// turn does it, and so does a wrapped-around shoulder mid-haymaker.
-func sidesSwapped(p pose) bool { return p.flip || p.swap }
+// armsSwapped says whether the shoulders sit on their traded sides: a
+// full turn does it, and so does the waist-twist of the haymaker — the
+// hips stay planted there, so only the arms trade.
+func armsSwapped(p pose) bool { return p.flip || p.swap }
+
+// legsSwapped says whether the hips trade sides: only a full turn.
+func legsSwapped(p pose) bool { return p.flip }
 
 // imageMirrored says whether the head and shoes x-mirror: only a real
 // turn does — a shoulder swap keeps the character facing forward.
@@ -187,11 +191,11 @@ func clip(name string, frames float64, keys []kf) obj {
 	// left; shins keep the shoe toe pointing the way the character now
 	// faces). Chain children (forearms, shins) follow their parent, so
 	// their attach never moves.
-	seg := func(p part, swapSides, mirror bool, get func(pose) float64) obj {
+	seg := func(p part, swapSides func(pose) bool, mirror bool, get func(pose) float64) obj {
 		pos := obj(static([]float64{p.pos[0], p.pos[1]}))
-		if swapSides {
+		if swapSides != nil {
 			m := bodyMirrorX(p.pos)
-			pos = flipTrack(keys, []float64{p.pos[0], p.pos[1]}, []float64{m[0], m[1]}, sidesSwapped)
+			pos = flipTrack(keys, []float64{p.pos[0], p.pos[1]}, []float64{m[0], m[1]}, swapSides)
 		}
 		scale := obj(static([]float64{100, 100}))
 		if mirror {
@@ -262,19 +266,19 @@ func clip(name string, frames float64, keys []kf) obj {
 		static(28.0),
 	)
 	return doc(name, frames, []obj{
-		imgLayer("forearm-near", 1, upperArmNInd, frames, "forearm-near", seg(forearmN, false, false, func(p pose) float64 { return p.elbowN })),
-		imgLayer("upper-arm-near", upperArmNInd, bodyInd, frames, "upper-arm-near", seg(upperArmN, true, false, func(p pose) float64 { return p.armN })),
+		imgLayer("forearm-near", 1, upperArmNInd, frames, "forearm-near", seg(forearmN, nil, false, func(p pose) float64 { return p.elbowN })),
+		imgLayer("upper-arm-near", upperArmNInd, bodyInd, frames, "upper-arm-near", seg(upperArmN, armsSwapped, false, func(p pose) float64 { return p.armN })),
 		headLayer("head", 3, func(v viewKind) bool { return v == viewFront }),
 		headLayer("head-side", 12, func(v viewKind) bool { return v == viewSide }),
 		headLayer("head-back", 14, func(v viewKind) bool { return v == viewBack }),
-		imgLayer("shin-near", 4, thighNInd, frames, "shin-near", seg(shinNearPart, false, true, func(p pose) float64 { return p.kneeN })),
-		imgLayer("thigh-near", thighNInd, bodyInd, frames, "thigh-near", seg(thighN, true, false, func(p pose) float64 { return p.legN })),
+		imgLayer("shin-near", 4, thighNInd, frames, "shin-near", seg(shinNearPart, nil, true, func(p pose) float64 { return p.kneeN })),
+		imgLayer("thigh-near", thighNInd, bodyInd, frames, "thigh-near", seg(thighN, legsSwapped, false, func(p pose) float64 { return p.legN })),
 		bodySideLayer,
 		imgLayer("body", bodyInd, 0, frames, "body", bodyTr),
-		imgLayer("thigh-far", thighFInd, bodyInd, frames, "thigh-far", seg(thighF, true, false, func(p pose) float64 { return p.legF })),
-		imgLayer("shin-far", 8, thighFInd, frames, "shin-far", seg(shinFarPart, false, true, func(p pose) float64 { return p.kneeF })),
-		imgLayer("upper-arm-far", upperArmFInd, bodyInd, frames, "upper-arm-far", seg(upperArmF, true, false, func(p pose) float64 { return p.armF })),
-		imgLayer("forearm-far", 10, upperArmFInd, frames, "forearm-far", seg(forearmF, false, false, func(p pose) float64 { return p.elbowF })),
+		imgLayer("thigh-far", thighFInd, bodyInd, frames, "thigh-far", seg(thighF, legsSwapped, false, func(p pose) float64 { return p.legF })),
+		imgLayer("shin-far", 8, thighFInd, frames, "shin-far", seg(shinFarPart, nil, true, func(p pose) float64 { return p.kneeF })),
+		imgLayer("upper-arm-far", upperArmFInd, bodyInd, frames, "upper-arm-far", seg(upperArmF, armsSwapped, false, func(p pose) float64 { return p.armF })),
+		imgLayer("forearm-far", 10, upperArmFInd, frames, "forearm-far", seg(forearmF, nil, false, func(p pose) float64 { return p.elbowF })),
 		imgLayer("shadow", 11, 0, frames, "shadow", shadowTr),
 	})
 }
@@ -451,8 +455,8 @@ func punchClip() clipDef {
 // and directly via the punch2 event.
 func punch2Clip() clipDef {
 	from := base().at(4, 0).lean(8).arms(20, -40).elbows(-40, -15).legs(-12, 12).knees(8, 12)
-	wind := base().at(-2, 0).lean(-8).arms(70, -20).elbows(-30, -20).legs(10, -10).knees(10, 10).nod(-4).away().turned()
-	windDeep := base().at(-3, 1).lean(-10).arms(95, -22).elbows(-25, -20).legs(10, -10).knees(10, 10).nod(-5).away().turned()
+	wind := base().at(-2, 0).lean(-8).arms(70, -20).elbows(-30, -20).legs(10, -10).knees(10, 10).nod(-4).away().swapped()
+	windDeep := base().at(-3, 1).lean(-10).arms(95, -22).elbows(-25, -20).legs(10, -10).knees(10, 10).nod(-5).away().swapped()
 	// The shoulders stay traded through the swing — the arm wrapped
 	// around, so the punching shoulder now leads — which is also what
 	// puts the fist well past the body's leading edge.

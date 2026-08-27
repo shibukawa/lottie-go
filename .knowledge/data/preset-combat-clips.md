@@ -10,7 +10,7 @@ Attack clips layered on data:preset-clip-set, varying per preset kind (requireme
 per_kind:
   unarmed:              # male-gait / female-gait
     - punch
-    - punch-2           # haymaker: winds up turned away (head-back view, shoulders traded), also fires directly via punch2 event
+    - punch-2           # haymaker: waist twist - turns away (head-back view), only the SHOULDERS trade sides, hips/legs planted; fires directly via punch2 event too
     - kick
     - jump-kick
   one-hand-sword:

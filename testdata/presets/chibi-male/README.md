@@ -1,6 +1,6 @@
 # chibi-male preset
 
-A 2.5-heads-tall character as a raster cutout rig: twelve PNG part images
+A 2.5-heads-tall character as a raster cutout rig: fourteen PNG part images
 moved by transforms and nothing else — no vector shapes, no expressions,
 no effects — so every clip decodes with zero unsupported features in
 lottie-go and plays in any Lottie player. The drawing is a deliberate
@@ -38,8 +38,10 @@ Parts live in the bundle under `i/` and as loose files under
 | slot           | size  | anchor  | parent         | attach    |
 |----------------|-------|---------|----------------|-----------|
 | head           | 72x60 | (36,56) | body           | (24,3)    |
+| head-side      | 72x60 | (36,56) | body           | (24,3)    |
 | head-back      | 72x60 | (36,56) | body           | (24,3)    |
 | body           | 48x48 | (24,45) | -              | (128,179) |
+| body-side      | 48x48 | (24,45) | body           | (24,45)   |
 | upper-arm-near | 15x27 | (7,4)   | body           | (3,8)     |
 | forearm-near   | 15x30 | (7,4)   | upper-arm-near | (7,23)    |
 | upper-arm-far  | 15x27 | (7,4)   | body           | (45,8)    |
@@ -54,7 +56,7 @@ Files are chibi-male-<slot>.png. Canvas is 256x256, ground at y=236,
 60fps.
 
 **Design swaps replace the images and nothing else.** A new outfit or a
-new character (samurai, knight, robot) is twelve new images at the same
+new character (samurai, knight, robot) is fourteen new images at the same
 sizes with the same anchor meanings: head drawn with the neck at (36,56),
 limb segments hanging straight down from their joint, the shoe toe
 pointing +x. Keep the far-side copies darker than the near side so depth
@@ -67,12 +69,13 @@ returns by itself through the machine.
 
 - idle / walk / run / slide — ground movement. There is no dash clip: a
   dash is run played faster (per-state speed or `SetSpeed`).
-- idle-turn / walk-turn / run-turn — the character actually turns: the
-  shoulders swing around and at the midpoint the limb chains trade sides
-  while the head and shoes mirror, an instant swap on hold keyframes.
-  The clip ends facing the other way, so the game flips its Mirrored
-  flag when the turn completes; the mirrored idle then matches the end
-  pose.
+- idle-turn / walk-turn / run-turn — the character actually rotates:
+  head and torso step through their side drawings (head-side shows the
+  back of the head with one eye, body-side is the thinned torso), the
+  limb chains trade sides at the midpoint, and the views cut on hold
+  keyframes — no morphing. The clip ends facing the other way, so the
+  game flips its Mirrored flag when the turn completes; the mirrored
+  idle then matches the end pose.
 - run-to-idle — braking stop.
 - jump -> fall -> fall-loop — the air chain; each hands over on complete.
 - punch -> punch-2 — firing punch during punch chains the follow-up,
@@ -80,9 +83,10 @@ returns by itself through the machine.
   with the far-side limb (the one on the leading edge, so it reaches
   the enemy in front). punch-2 is the big one: the character turns
   away — the faceless head-back image shows and the shoulders trade
-  sides on hold keys — winds the arm up behind, then snaps around and
-  swings it through; the shoulders stay traded through the hit, which
-  is what carries the fist past the leading edge.
+  sides on hold keys, while the hips stay planted (a waist twist, so
+  the legs never move) — winds the arm up behind, then snaps around
+  and swings it through; the shoulders stay traded through the hit,
+  which is what carries the fist past the leading edge.
 - kick, jump-kick — ground and air kicks: chambered (knee folded) until
   the strike frame, then the knee snaps straight on impact.
 - guard / guard-hit — the guard event toggles the stance on and off; a
