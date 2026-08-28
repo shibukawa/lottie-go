@@ -77,10 +77,12 @@ returns by itself through the machine.
   keyframes — no morphing.
 - walk-turn — rotates through the CAMERA side instead: the front stays
   visible the whole way, growing a touch as it passes the viewer, and
-  the drawing mirrors at the midpoint on a left/right symmetric pose —
-  the geometry holds still while the near/far identities trade (a
-  game-friendly lie), and the clip runs from the walk's contact pose
-  to its mirror so the reversed walk picks up seamlessly.
+  the drawing mirrors at the midpoint on a self-mirror pose — limbs
+  near straight, joints at zero, since a bent joint carried across the
+  flip would kink the wrong way — so the geometry holds still while
+  the near/far identities trade (a game-friendly lie), and the clip
+  runs from the walk's contact pose to its mirror so the reversed walk
+  picks up seamlessly.
   All turn clips end facing the other way, so the game flips its
   Mirrored flag when the turn completes; the mirrored gait then
   matches the end pose.
