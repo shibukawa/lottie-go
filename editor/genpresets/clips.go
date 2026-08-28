@@ -356,9 +356,14 @@ func walkClip() clipDef {
 // contact pose and ends on its mirror, so the reversed walk picks up
 // seamlessly.
 func walkTurnClip() clipDef {
+	// The mirror must land on the MIRRORED geometry, so the swap-moment
+	// pose has to be its own mirror image: limbs near straight, joints
+	// at zero. A bent knee carried across the flip would kink the wrong
+	// way for the new facing; instead the bends ease out on the way in
+	// and regrow, correctly mirrored, on the way out.
 	from := base().legs(-30, 30).knees(8, 30).arms(25, -25).elbows(-12, -20).lean(4)
-	gatherA := base().at(0, -2).legs(-14, 14).knees(12, 12).arms(16, -16).elbows(-14, -14).squash(103, 103)
-	gatherB := base().at(0, -2).legs(14, -14).knees(12, 12).arms(-16, 16).elbows(-14, -14).squash(103, 103).turned()
+	gatherA := base().at(0, -2).legs(-12, 12).knees(2, 2).arms(14, -14).elbows(-4, -4).squash(103, 103)
+	gatherB := base().at(0, -2).legs(12, -12).knees(2, 2).arms(-14, 14).elbows(-4, -4).squash(103, 103).turned()
 	out := base().legs(30, -30).knees(30, 8).arms(-25, 25).elbows(-20, -12).lean(4).turned()
 	return def("walk-turn-anim", 20,
 		k(0, from, true), k(9, gatherA, true), k(11, gatherB, true), k(20, out, true))
