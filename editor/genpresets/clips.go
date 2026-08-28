@@ -502,12 +502,15 @@ func punchClip() clipDef {
 // shoulders traded, hips planted: a waist twist carried all the way
 // around. Reachable as the punch follow-up and via the punch2 event.
 func punch2Clip() clipDef {
-	from := base().at(4, 0).lean(6).arms(20, -40).elbows(-40, -15).legs(-12, 12).knees(8, 12)
+	// The non-punching far arm stays folded from the very first frame —
+	// elbow bent hard, fist pulled in — so nothing about it reads as a
+	// second punch.
+	from := base().at(4, 0).lean(6).arms(20, -12).elbows(-40, -75).legs(-12, 12).knees(8, 12)
 	// The windup cocks the fist by folding the elbow — the upper arm
 	// barely leaves the side, nothing pulls back — and extension only
 	// begins at the spin frame.
-	wind := base().lean(2).arms(10, -18).elbows(-105, -20).legs(-10, 10).knees(8, 10)
-	windDeep := base().at(-1, 1).lean(4).arms(18, -20).elbows(-120, -20).legs(-10, 10).knees(8, 10)
+	wind := base().lean(2).arms(10, -15).elbows(-105, -70).legs(-10, 10).knees(8, 10)
+	windDeep := base().at(-1, 1).lean(4).arms(18, -16).elbows(-120, -75).legs(-10, 10).knees(8, 10)
 	// The rear arm folds through the back view: elbow bent hard so the
 	// forearm tucks across the turned body — hidden behind the torso,
 	// only the elbow showing at the trailing edge.

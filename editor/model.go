@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -191,6 +192,59 @@ func (m *Model) touch() {
 	m.syncMachine()
 	m.docGen++
 	m.generation++
+}
+
+// CreateBundle materializes the New… choice at path and opens it in a
+// separate editor window, leaving this one untouched. A template is
+// written out first; an empty bundle cannot exist as a file (the format
+// requires at least one animation), so the new window starts blank and
+// remembers the path for its first save.
+func (m *Model) CreateBundle(template, path string) {
+	if template == newEmptyChoice {
+		if err := spawnEditor("-new", path); err != nil {
+			m.setStatus("cannot open new window: %v", err)
+		} else {
+			m.setStatus("new empty bundle in a new window; it will save to %s", filepath.Base(path))
+		}
+		m.generation++
+		return
+	}
+	data, err := templateBytes(template)
+	if err != nil {
+		m.setStatus("template %q: %v", template, err)
+		m.generation++
+		return
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		m.setStatus("cannot write %s: %v", path, err)
+		m.generation++
+		return
+	}
+	if err := spawnEditor(path); err != nil {
+		m.setStatus("wrote %s but cannot open new window: %v", path, err)
+	} else {
+		m.setStatus("created %s from %s in a new window", filepath.Base(path), template)
+	}
+	m.generation++
+}
+
+// StartNewAt begins an empty document whose first save goes to path,
+// which is how a window spawned by New… > Empty bundle starts.
+func (m *Model) StartNewAt(path string) {
+	m.path = path
+	m.sources = nil
+	m.setStatus("new bundle; Save writes %s", path)
+	m.generation++
+}
+
+// spawnEditor launches another instance of this editor.
+func spawnEditor(args ...string) error {
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(exe, args...)
+	return cmd.Start()
 }
 
 // Open loads a .lottie bundle, or a bare .json clip into a fresh bundle.

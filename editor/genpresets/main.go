@@ -107,6 +107,14 @@ func writePreset(dir, name string) error {
 	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte(readme), 0o644); err != nil {
 		return err
 	}
+	// The editor embeds the preset as a "New…" template, so keep its
+	// copy in sync with every regeneration.
+	if err := os.MkdirAll("templates", 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join("templates", name+".lottie"), buf.Bytes(), 0o644); err != nil {
+		return err
+	}
 	fmt.Printf("wrote %s (%d clips, %d parts, %d bytes)\n", path, len(clips), len(allParts), buf.Len())
 	return nil
 }
