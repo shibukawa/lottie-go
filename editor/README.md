@@ -11,9 +11,17 @@ Go module, so the `lottie-go` library itself never pulls in a GUI toolkit.
 cd editor && go run . ../testdata/editor/character/character.lottie
 ```
 
-The path argument is optional; **Open…**, **Save As…**, and **Import…** open
-native file dialogs through [zenity](https://github.com/ncruces/zenity),
-which is pure Go and needs no cgo.
+The path argument is optional; **New…**, **Open…**, **Save As…**, and
+**Import…** open native file dialogs through
+[zenity](https://github.com/ncruces/zenity), which is pure Go and needs no
+cgo. **New…** asks what to start from — an empty bundle, or one of the
+embedded preset templates (chibi-male today) — then where to put it, and
+opens the result in a NEW editor window, leaving the current one alone. A
+template is written to the chosen path immediately; an empty bundle
+cannot exist as a file (the format wants at least one animation), so that
+window starts blank and its first Save writes the chosen path. Templates
+are embedded at build time from `editor/templates/`, which
+`go run ./genpresets` keeps in sync with the presets.
 
 The Segment tab carries the same transport as the collision chart —
 play/pause, −1, +1 — plus an **autoplay** toggle (on by default). With

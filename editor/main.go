@@ -26,6 +26,7 @@ type Root struct {
 	background basicwidget.Background
 
 	pathLabel basicwidget.Text
+	newBtn    basicwidget.Button
 	openBtn   basicwidget.Button
 	saveBtn   basicwidget.Button
 	saveAsBtn basicwidget.Button
@@ -62,6 +63,7 @@ func (r *Root) Env(context *guigui.Context, key guigui.EnvKey, source *guigui.En
 func (r *Root) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 	adder.AddWidget(&r.background)
 	adder.AddWidget(&r.pathLabel)
+	adder.AddWidget(&r.newBtn)
 	adder.AddWidget(&r.openBtn)
 	adder.AddWidget(&r.saveBtn)
 	adder.AddWidget(&r.saveAsBtn)
@@ -86,6 +88,8 @@ func (r *Root) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 	r.pathLabel.SetValue(name)
 	r.pathLabel.SetVerticalAlign(basicwidget.VerticalAlignMiddle)
 
+	r.newBtn.SetText("New…")
+	r.newBtn.OnDown(func(context *guigui.Context) { m.BrowseNew() })
 	r.openBtn.SetText("Open…")
 	r.openBtn.OnDown(func(context *guigui.Context) { m.BrowseOpen() })
 	r.saveBtn.SetText("Save")
@@ -106,6 +110,7 @@ func (r *Root) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 	// the buttons so that is visible. Viewer mode also greys saving: the
 	// disk is the source of truth there, and saving over a file another
 	// tool is writing would fight it.
+	context.SetEnabled(&r.newBtn, !m.DialogOpen())
 	context.SetEnabled(&r.openBtn, !m.DialogOpen())
 	context.SetEnabled(&r.configBtn, !m.DialogOpen())
 	for _, w := range []guigui.Widget{&r.saveBtn, &r.saveAsBtn} {
@@ -155,6 +160,7 @@ func (r *Root) Layout(context *guigui.Context, widgetBounds *guigui.WidgetBounds
 	r.toolbarItems = slices.Delete(r.toolbarItems, 0, len(r.toolbarItems))
 	r.toolbarItems = append(r.toolbarItems,
 		guigui.LinearLayoutItem{Widget: &r.pathLabel, Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Widget: &r.newBtn, Size: guigui.FixedSize(3 * u)},
 		guigui.LinearLayoutItem{Widget: &r.openBtn, Size: guigui.FixedSize(4 * u)},
 		guigui.LinearLayoutItem{Widget: &r.saveBtn, Size: guigui.FixedSize(3 * u)},
 		guigui.LinearLayoutItem{Widget: &r.saveAsBtn, Size: guigui.FixedSize(4 * u)},
@@ -203,10 +209,15 @@ func (r *Root) Layout(context *guigui.Context, widgetBounds *guigui.WidgetBounds
 func main() {
 	viewer := flag.Bool("viewer", false,
 		"viewer mode: watch every loaded file (.lottie, .json, images) and auto-reload on change; saving is disabled")
+	newAt := flag.String("new", "",
+		"start with an empty bundle whose first save goes to this path (used by the New… dialog)")
 	flag.Parse()
 	root := &Root{model: NewModel()}
 	root.model.SetViewer(*viewer)
-	if flag.NArg() > 0 {
+	switch {
+	case *newAt != "":
+		root.model.StartNewAt(*newAt)
+	case flag.NArg() > 0:
 		root.model.Open(flag.Arg(0))
 	}
 	title := "Lottie State Machine Editor"

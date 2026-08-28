@@ -18,7 +18,11 @@ const (
 	dialogOpenBundle dialogKind = iota
 	dialogSaveBundle
 	dialogImportClips
+	dialogNewBundle
 )
+
+// newEmptyChoice heads the New… list; the other entries are templates.
+const newEmptyChoice = "Empty bundle"
 
 type dialogResult struct {
 	kind  dialogKind
@@ -52,6 +56,39 @@ func (m *Model) start(kind dialogKind, f func() ([]string, error)) {
 		paths, err := f()
 		ch <- dialogResult{kind: kind, paths: paths, err: err}
 	}()
+}
+
+// BrowseNew asks what a new bundle starts from — empty, or one of the
+// embedded templates — and where to put it. The result opens in a NEW
+// window; the current one is left alone.
+func (m *Model) BrowseNew() {
+	m.start(dialogNewBundle, func() ([]string, error) {
+		choice, err := zenity.List(
+			"Start the new bundle from:",
+			append([]string{newEmptyChoice}, templateNames()...),
+			zenity.Title("New bundle"),
+		)
+		if err != nil {
+			return nil, err
+		}
+		if choice == "" {
+			return nil, zenity.ErrCanceled
+		}
+		name := "character.lottie"
+		if choice != newEmptyChoice {
+			name = choice + ".lottie"
+		}
+		p, err := zenity.SelectFileSave(
+			zenity.Title("Create bundle"),
+			zenity.Filename(name),
+			zenity.ConfirmOverwrite(),
+			bundleFilters,
+		)
+		if err != nil {
+			return nil, err
+		}
+		return []string{choice, p}, nil
+	})
 }
 
 // BrowseOpen asks for a bundle or a bare clip to open.
@@ -123,6 +160,10 @@ func (m *Model) apply(r dialogResult) {
 	case dialogSaveBundle:
 		if p := firstPath(r.paths); p != "" {
 			m.Save(withLottieExt(p))
+		}
+	case dialogNewBundle:
+		if len(r.paths) == 2 && r.paths[1] != "" {
+			m.CreateBundle(r.paths[0], withLottieExt(r.paths[1]))
 		}
 	case dialogImportClips:
 		if len(r.paths) == 0 {
