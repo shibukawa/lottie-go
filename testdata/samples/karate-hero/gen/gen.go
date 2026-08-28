@@ -41,11 +41,11 @@ var palette = map[byte]color.NRGBA{
 // Three-quarter face: spiky hair on top, red headband above the eyes,
 // hair trailing down the back (-x) edge, band tails hanging behind.
 var headArt = []string{
-	"....O.....O.....O.......",
-	"...OKO...OKO...OKO......",
-	"..OKKKO.OKKKO.OKKKO.....",
-	".OKKKKKKKKKKKKKKKKKO....",
+	"...O...O...O...O...O....",
+	"..OKO.OKO.OKO.OKO.OKO...",
+	".OKKKOKKKOKKKOKKKOKKKO..",
 	".OKKKKKKKKKKKKKKKKKKKO..",
+	".OKKKKKKKKKKKKKKKKKKKKO.",
 	".ORRRRRRRRRRRRRRRRRRRRO.",
 	"OKKKPPPPPPPPPPPPPPPPPPPO",
 	"OKRKPPPPPPPPPPPPPPPPPPPO",
@@ -66,11 +66,11 @@ var headArt = []string{
 // Rear-quarter head for turns and spin attacks: back-of-head hair with
 // just the leading eye visible, band tails at the back center.
 var headSideArt = []string{
-	"....O.....O.....O.......",
-	"...OKO...OKO...OKO......",
-	"..OKKKO.OKKKO.OKKKO.....",
-	".OKKKKKKKKKKKKKKKKKO....",
+	"...O...O...O...O...O....",
+	"..OKO.OKO.OKO.OKO.OKO...",
+	".OKKKOKKKOKKKOKKKOKKKO..",
 	".OKKKKKKKKKKKKKKKKKKKO..",
+	".OKKKKKKKKKKKKKKKKKKKKO.",
 	".ORRRRRRRRRRRRRRRRRRRRO.",
 	"OKKKKKKKKKKKKKKKPPPPPPPO",
 	"OKKKKKKKKRRKKKKKPPPPPPPO",
@@ -90,11 +90,11 @@ var headSideArt = []string{
 
 // Fully turned-away head: all hair, band knot and tails at center back.
 var headBackArt = []string{
-	"....O.....O.....O.......",
-	"...OKO...OKO...OKO......",
-	"..OKKKO.OKKKO.OKKKO.....",
-	".OKKKKKKKKKKKKKKKKKO....",
+	"...O...O...O...O...O....",
+	"..OKO.OKO.OKO.OKO.OKO...",
+	".OKKKOKKKOKKKOKKKOKKKO..",
 	".OKKKKKKKKKKKKKKKKKKKO..",
+	".OKKKKKKKKKKKKKKKKKKKKO.",
 	".ORRRRRRRRRRRRRRRRRRRRO.",
 	"OKKKKKKKKKKrrKKKKKKKKKKO",
 	"OKKKKKKKKKKRRKKKKKKKKKKO",
