@@ -116,13 +116,14 @@ Its decisions generalize to any held prop:
   throughout, or move the layer back into the far chain for the clips
   where the arm swings — and decide that per clip, never per pose, since
   a hold-keyed depth flip mid-swing pops on screen.
-- **Bring the gripping limb's depth with it.** A far-side forearm that
-  folds across the front of the belly to reach a two-handed grip has to
-  be drawn ahead of the torso too, or it disappears behind it and the
-  character reads as one-handed with a stump for the other arm. Its
-  upper arm can stay behind: the elbow sits out at the torso's leading
-  edge, which is where an arm should cross from behind the silhouette
-  to in front of it.
+- **Bring the whole gripping limb's depth with it.** A far-side arm that
+  reaches across the front of the body for a two-handed grip has to be
+  drawn ahead of the torso, or its forearm disappears behind the body
+  and the character reads as one-handed with a stump for the other arm.
+  Move the upper arm too — moving only the forearm relocates the seam to
+  the shoulder rather than closing it. Keep the segments' order among
+  themselves: on the far side the upper arm draws over its own forearm,
+  the reverse of the near chain.
 - **Draw it hanging straight down from the grip and symmetric**, at full
   brightness. Symmetric means a turn (which mirrors head and shoes)
   needs no mirrored copy; full brightness keeps it from reading as
