@@ -330,11 +330,12 @@ func idleClip() clipDef {
 func idleTurnClip() clipDef {
 	rest := base().elbows(-8, -8).knees(3, 3)
 	windup := base().lean(-4).arms(20, -20).elbows(-16, -16).legs(-6, 6).knees(6, 6).at(0, -1).aside()
-	swapped := base().lean(4).arms(-20, 20).elbows(-16, -16).legs(6, -6).knees(6, 6).at(0, -1).aside().turned()
-	settle := base().arms(-10, 10).elbows(-12, -12).legs(3, -3).knees(4, 4).turned()
+	swapped := base().lean(4).arms(-20, 20).elbows(16, 16).legs(6, -6).knees(-6, -6).at(0, -1).aside().turned()
+	settle := base().arms(-10, 10).elbows(12, 12).legs(3, -3).knees(-4, -4).turned()
+	mirroredRest := base().elbows(8, 8).knees(-3, -3).turned()
 	return def("idle-turn-anim", 20,
 		k(0, rest, true), k(6, windup, true), k(10, swapped, true),
-		k(14, settle, true), k(20, rest.turned(), true))
+		k(14, settle, true), k(20, mirroredRest, true))
 }
 
 func walkClip() clipDef {
@@ -363,8 +364,13 @@ func walkTurnClip() clipDef {
 	// and regrow, correctly mirrored, on the way out.
 	from := base().legs(-30, 30).knees(8, 30).arms(25, -25).elbows(-12, -20).lean(4)
 	gatherA := base().at(0, -2).legs(-12, 12).knees(2, 2).arms(14, -14).elbows(-4, -4).squash(103, 103)
-	gatherB := base().at(0, -2).legs(12, -12).knees(2, 2).arms(-14, 14).elbows(-4, -4).squash(103, 103).turned()
-	out := base().legs(30, -30).knees(30, 8).arms(-25, 25).elbows(-20, -12).lean(4).turned()
+	// Mirrored poses negate every value in place — lean, nod, knees and
+	// elbows included. Near/far values are NOT exchanged: the flip
+	// already moves each limb to the mirrored attach, so its own value
+	// just flips sign. (Arms and legs being antisymmetric pairs hid
+	// this for a while; the knees, elbows and lean gave it away.)
+	gatherB := base().at(0, -2).legs(12, -12).knees(-2, -2).arms(-14, 14).elbows(4, 4).squash(103, 103).turned()
+	out := base().legs(30, -30).knees(-8, -30).arms(-25, 25).elbows(12, 20).lean(-4).turned()
 	return def("walk-turn-anim", 20,
 		k(0, from, true), k(9, gatherA, true), k(11, gatherB, true), k(20, out, true))
 }
@@ -381,11 +387,11 @@ func runClip() clipDef {
 func runTurnClip() clipDef {
 	from := base().legs(-45, 45).knees(15, 55).arms(35, -35).elbows(-40, -40).lean(12)
 	brake := base().legs(-15, 15).knees(30, 30).arms(20, -20).elbows(-30, -30).lean(-6).at(2, -2).aside()
-	swapped := base().legs(15, -15).knees(30, 30).arms(-20, 20).elbows(-30, -30).lean(6).at(-2, -2).aside().turned()
-	out := base().legs(45, -45).knees(55, 15).arms(-35, 35).elbows(-40, -40).lean(12).turned()
+	swapped := base().legs(15, -15).knees(-30, -30).arms(-20, 20).elbows(30, 30).lean(6).at(-2, -2).aside().turned()
+	out := base().legs(45, -45).knees(-15, -55).arms(-35, 35).elbows(40, 40).lean(-12).turned()
 	return def("run-turn-anim", 16,
 		k(0, from, true), k(5, brake, true), k(8, swapped, true),
-		k(11, base().legs(30, -30).knees(40, 20).arms(-28, 28).elbows(-34, -34).lean(10).turned(), true),
+		k(11, base().legs(30, -30).knees(-20, -45).arms(-28, 28).elbows(36, 36).lean(-8).turned(), true),
 		k(16, out, true))
 }
 
