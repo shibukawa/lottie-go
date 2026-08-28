@@ -119,6 +119,13 @@ meant, and both bite hardest in attack poses:
   blade meant to sweep forward points at the floor instead. Open the
   stance and the weapon by the lean as well, and drop the hips to put
   the feet back on the ground.
+- **A leaning character looks at the floor unless the neck gives the
+  lean back.** The head's angle is relative to the torso, so a neutral
+  neck on a 30-degree forward lean stares at the character's own feet —
+  and a hero staring at the ground reads as beaten, whatever the rest of
+  the pose is doing. Rather than fixing this pose by pose, make it a
+  rule: cap the head's *world* angle so the character never looks below
+  the horizon, and leave poses that deliberately look further up alone.
 - **A folded arm has two solutions and only one of them reads.**
   Reaching a hand to a fixed point (a hilt, a hip) can be done by
   swinging the upper arm back to horizontal and folding the elbow hard,

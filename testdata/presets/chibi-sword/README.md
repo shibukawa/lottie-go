@@ -92,6 +92,13 @@ ones that end up horizontal (slide) or flat on the floor (death) sweep
 it further back on the way down, and a turn sweeps it through vertical
 so the mirror has something symmetric to land on.
 
+Every sword pose also passes an eyes-up rule: head angle is relative to
+the torso, so a deep forward lean would drag the face down with it, and
+a hero staring at their own feet reads as beaten no matter what the rest
+of the pose is doing. The neck gives the lean back, keeping the head a
+little above the horizon; poses that deliberately look further up are
+left alone.
+
 The five weapon clips set the blade per pose instead.
 
 - slash -> slash-2 — firing slash during slash chains the follow-up, and
