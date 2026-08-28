@@ -96,11 +96,16 @@ The five weapon clips set the blade per pose instead.
 
 - slash -> slash-2 — firing slash during slash chains the follow-up, and
   slash2 also starts the overhead directly. slash is the diagonal
-  downward cut: the hands go up over the head first, then the blade
-  travels roughly 200 degrees in two frames, because a swing with no
-  windup and no linear travel reads as a wave, not a cut. slash-2 is the
-  heavy overhead chop — blade hauled fully vertical, a step into the
-  swing, the body squashing on impact.
+  downward cut, and its order matters: hands up over the head, then the
+  HIPS — the body is already thrown forward and the stance already open
+  a beat before the blade moves, because a swing whose torso and blade
+  start together has no weight behind it — and only then the blade,
+  travelling roughly 200 degrees in two linear frames, since a swing
+  with no windup and no linear travel reads as a wave, not a cut. It
+  finishes with the hilt up around face height rather than back down at
+  the waist: that is where most of the attack's reach comes from.
+  slash-2 is the same shape heavier — blade hauled fully vertical, a
+  bigger step, the body squashing on impact.
 - thrust — the lunging stab. The blade stays LEVEL while the hands push
   forward from the hip, and the distance comes from the lunge and the
   blade's own length: the arms cannot extend without tearing the second
