@@ -178,15 +178,13 @@ Three things about the weapon are deliberate:
   edge and reaches the enemy in front instead of crossing the body. The
   weapon follows the same rule, and swings with the arm it is parented
   to for free.
-- **Its depth follows what the character is doing, per clip.** While the
-  weapon is being used the blade is lifted out of the far chain and
-  drawn over the body (under the near hand, so the grip still reads),
-  because depth-correct layering would bury it inside the torso in the
-  middle of a cut. While the sword is merely carried it stays in the far
-  chain with the arm holding it — in a gait that arm swings BEHIND the
-  body half the time, and a blade pinned to the front there floats over
-  a torso its own hand is behind. Clips declare this with
-  ` + "`wielded()`" + `; a per-clip choice means no depth pops mid-swing.
+- **It always draws over the body**, just under the near hand so the
+  grip still reads, even though it hangs off the far arm. Depth-correct
+  layering would bury the blade inside the torso in the middle of a cut.
+  This is only safe because both hands are on the hilt in front of the
+  character in every single clip: the first attempt let the far arm
+  swing freely while carrying, and then the blade floated over a torso
+  its own hand was behind.
 - **The second hand is solved, not eyeballed.** Weapon poses are
   two-handed: the near arm is fitted to the handle by a two-link solve
   (the generator's ` + "`held`" + `), so the grip lands exactly and stays
@@ -208,16 +206,25 @@ full brightness keeps it from reading as background.
 Everything chibi-male has except kick-2 — a swordsman answers a second
 attack with the weapon, not a spin kick — plus slash, slash-2 and thrust.
 
-Away from the weapon the character carries the sword one-handed and the
-inherited clips were not re-posed: the wrist holds the blade at a fixed
-angle to the TORSO, so the sword tips with the body (it lies with the
-character in death, leans with the run) but stops flailing whenever the
-far arm swings. That is what the generator's ` + "`carry`" + ` helper
-does. Clips whose torso is already near horizontal — death, slide — get
-their own carry angle, because this blade is long enough to drag its
-point through the floor at the default one.
+Every clip is two-handed. The inherited ones are rewritten by the
+generator's ` + "`carry`" + ` helper into the hold anyone uses for a
+blade this size: hands together on the hilt at the waist, upper arms
+hanging, forearms angled in across the belly, the blade sweeping down
+and BEHIND. That costs the gaits their arm swing — the trade a
+greatsword makes anyway — and buys two things. The hands are in front of
+the body in every clip, so the weapon never has to change depth. And the
+carried silhouette, a long diagonal trailing back, is nothing like any
+attack, which all drive the blade forward: a glance says whether this
+character is swinging or not.
 
-The five weapon clips take both hands and set the blade per pose.
+` + "`carry`" + ` aims the blade in WORLD space, not relative to the
+torso, because that is what decides whether the point clears the ground
+however the body is pitched. Most clips hold one angle throughout; the
+ones that end up horizontal (slide) or flat on the floor (death) sweep
+it further back on the way down, and a turn sweeps it through vertical
+so the mirror has something symmetric to land on.
+
+The five weapon clips set the blade per pose instead.
 
 - slash -> slash-2 — firing slash during slash chains the follow-up, and
   slash2 also starts the overhead directly. slash is the diagonal
@@ -243,11 +250,11 @@ additionally chains into slash2 the way punch chained into punch2.
 
 ## Rules for editing
 
-Same as chibi-male, plus: the sword layer is parented to forearm-far,
-and where it sits in the layer array is the depth decision above —
-second (just under the near hand) in the weapon clips, second-to-last
-(with the far arm, just over the shadow) everywhere else. Moving it
-forward in a gait clip is what makes a blade float over the body while
+Same as chibi-male, plus: the sword layer is parented to forearm-far and
+listed second, just under the near hand. Keep it there — but only as
+long as every clip keeps both hands on the hilt in front of the body. A
+clip that lets the far arm swing free while carrying has to move the
+blade back into the far chain, or it will float over the torso while
 the hand holding it is behind.
 
 preview.png is a contact sheet of every clip sampled six times, rendered

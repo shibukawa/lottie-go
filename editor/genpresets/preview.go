@@ -154,7 +154,7 @@ func bodyOf(p pose) part {
 
 // renderPose draws the whole character into a canvas-sized frame,
 // back to front.
-func renderPose(p pose, bladeFront bool) *image.NRGBA {
+func renderPose(p pose) *image.NRGBA {
 	frame := image.NewNRGBA(image.Rect(0, 0, int(canvas), int(canvas)))
 	bg := color.NRGBA{58, 63, 84, 255}
 	for i := range frame.Pix {
@@ -205,9 +205,7 @@ func renderPose(p pose, bladeFront bool) *image.NRGBA {
 		world   mat
 		opacity float64
 	}
-	// Reverse of the clip's front-to-back layer order, sword included:
-	// carried it sits with its own arm in the far chain, wielded it
-	// comes forward to just under the near hand.
+	// Reverse of the clip's front-to-back layer order, sword included.
 	fArmF := seg(uArmF, forearmF, p.elbowF)
 	sword := draw{swordPart, seg(fArmF, swordPart, p.blade), p.alpha}
 	order := []draw{
@@ -224,11 +222,8 @@ func renderPose(p pose, bladeFront bool) *image.NRGBA {
 		{forearmN, seg(uArmN, forearmN, p.elbowN), p.alpha},
 	}
 	if swordRig {
-		at := 1 // behind the far arm, ahead of the shadow
-		if bladeFront {
-			at = len(order) - 1 // behind the near hand, ahead of the rest
-		}
-		order = slices.Insert(order, at, sword)
+		// Behind the near hand, ahead of everything else — like the clip.
+		order = slices.Insert(order, len(order)-1, sword)
 	}
 	for _, d := range order {
 		drawPart(frame, d.pt.render(), d.world, d.opacity)
@@ -244,7 +239,7 @@ func previewSheet(defs []clipDef, cols int) ([]byte, error) {
 	for row, d := range defs {
 		for col := range cols {
 			t := d.frames * float64(col) / float64(cols-1)
-			frame := renderPose(poseAt(d.keys, t), d.bladeFront)
+			frame := renderPose(poseAt(d.keys, t))
 			for y := range cell {
 				for x := range cell {
 					sheet.SetNRGBA(col*cell+x, row*cell+y, frame.NRGBAAt(x, y))

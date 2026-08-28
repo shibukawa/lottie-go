@@ -106,15 +106,16 @@ Its decisions generalize to any held prop:
 - **Parent it to the far (leading) forearm.** Strikes lead with the
   far-side limb, so a weapon there reaches the enemy in front, and it
   swings with the arm for free — no separate weapon keyframes.
-- **Choose its depth per clip, not once.** While the weapon is in use,
-  lift its layer out of the far chain and draw it over the body (just
-  under the near hand, so the grip still reads) — depth-correct order
-  puts the far chain behind the torso, which swallows a blade in the
-  middle of a cut. While it is merely carried, leave it in the far chain
-  with the arm holding it: in a gait that arm swings behind the body
-  half the time, and a prop pinned to the front there floats over a
-  torso its own hand is behind. Deciding per clip rather than per pose
-  keeps the switch off-screen — a hold-keyed depth flip mid-swing pops.
+- **Draw it over the body, and then make that true.** Depth-correct
+  order puts the far chain behind the torso, which swallows a blade in
+  the middle of a cut, so the layer goes near the front (just under the
+  near hand, so the grip still reads). That only holds up if the prop is
+  in front of the body in *every* clip: chibi-sword's first version let
+  the far arm swing freely while carrying, and the blade floated over a
+  torso its own hand was behind. Either keep both hands on it
+  throughout, or move the layer back into the far chain for the clips
+  where the arm swings — and decide that per clip, never per pose, since
+  a hold-keyed depth flip mid-swing pops on screen.
 - **Draw it hanging straight down from the grip and symmetric**, at full
   brightness. Symmetric means a turn (which mirrors head and shoes)
   needs no mirrored copy; full brightness keeps it from reading as
