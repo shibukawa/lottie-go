@@ -813,7 +813,7 @@ func slashClip() clipDef {
 	// lean 24 a hip at -26 stands the leg dead vertical on screen. These
 	// are opened far enough to still read as a wide stance after the lean,
 	// and the hips drop to keep both feet on the ground.
-	drive := highGrip(base().at(4, 5).lean(16).legs(8, -46).knees(0, 32).nod(2), 145, -8, 138)
+	drive := highGrip(base().at(4, 5).lean(16).legs(10, -50).knees(0, 34).nod(2), 145, -8, 138)
 	// Then the blade whips through, and every part of the pose is spent
 	// on reach: the body is thrown a long way forward, the near arm runs
 	// straight out from the shoulder beside the head down to the hilt
@@ -822,8 +822,8 @@ func slashClip() clipDef {
 	// with the blade hanging steeply off it wastes most of its length.
 	// The leading knee folds deep under all of it, which is where the
 	// weight reads from.
-	cut := lowGrip(base().at(20, 6).lean(30).squash(103, 97).legs(-5, -60).knees(0, 45).nod(10), -40, 116, -58)
-	follow := lowGrip(base().at(18, 7).lean(27).legs(-4, -54).knees(2, 40).nod(12), -34, 112, -66)
+	cut := lowGrip(base().at(24, 8).lean(30).squash(103, 97).legs(2, -70).knees(0, 50).nod(10), -37, 95, -65)
+	follow := lowGrip(base().at(22, 9).lean(28).legs(2, -64).knees(2, 46).nod(12), -32, 92, -72)
 	return def("slash-anim", 24,
 		k(0, ready, true), k(6, raise, true), k(9, raiseDeep, true),
 		k(11, drive, false), k(13, cut, false), k(17, follow, true),
@@ -839,9 +839,9 @@ func slash2Clip() clipDef {
 	liftDeep := highGrip(base().at(-4, -2).lean(-18).legs(-8, 12).knees(6, 12).nod(-10), 150, -6, 184)
 	// Same order as the first cut, further exaggerated: the step and the
 	// forward throw of the body land a beat before the blade does.
-	drive := highGrip(base().at(5, 6).lean(18).legs(6, -52).knees(0, 36).nod(2), 148, -8, 150)
-	chop := lowGrip(base().at(24, 7).lean(34).squash(104, 96).legs(-8, -66).knees(0, 50).nod(12), -44, 120, -55)
-	hold := lowGrip(base().at(22, 8).lean(32).legs(-6, -62).knees(2, 46).nod(14), -38, 116, -64)
+	drive := highGrip(base().at(5, 6).lean(18).legs(8, -56).knees(0, 38).nod(2), 148, -8, 150)
+	chop := lowGrip(base().at(28, 9).lean(34).squash(104, 96).legs(0, -76).knees(0, 54).nod(12), -40, 98, -62)
+	hold := lowGrip(base().at(26, 10).lean(32).legs(0, -70).knees(2, 50).nod(14), -34, 94, -70)
 	return def("slash-2-anim", 30,
 		k(0, from, true), k(7, lift, true), k(11, liftDeep, true),
 		k(13, drive, false), k(16, chop, false), k(22, hold, true),
