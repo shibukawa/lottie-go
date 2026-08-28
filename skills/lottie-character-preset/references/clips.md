@@ -22,10 +22,10 @@ state's `speed` or the game's `SetSpeed`), so adding one would just
 duplicate run.
 
 Turn clips actually rotate rather than morphing, in one of two ways.
-idle-turn and run-turn go through the REAR: head and torso cut through
-their side-view drawings (`head-side`, `body-side`) on hold keyframes
-(`"h": 1`) and the limb chains trade sides at the midpoint. walk-turn
-goes through the CAMERA side: the front drawings stay up the whole
+run-turn goes through the REAR: head and torso cut through their
+side-view drawings (`head-side`, `body-side`) on hold keyframes
+(`"h": 1`) and the limb chains trade sides at the midpoint. idle-turn
+and walk-turn go through the CAMERA side: the front drawings stay up the whole
 way, scale up slightly while passing the viewer, and mirror at the
 midpoint on a SELF-MIRROR pose — limbs near straight, knees and elbows
 at zero, because a bent joint carried across the flip kinks the wrong
