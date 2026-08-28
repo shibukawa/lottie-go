@@ -101,11 +101,16 @@ The five weapon clips set the blade per pose instead.
   a beat before the blade moves, because a swing whose torso and blade
   start together has no weight behind it — and only then the blade,
   travelling roughly 200 degrees in two linear frames, since a swing
-  with no windup and no linear travel reads as a wave, not a cut. It
-  finishes with the hilt up around face height rather than back down at
-  the waist: that is where most of the attack's reach comes from.
-  slash-2 is the same shape heavier — blade hauled fully vertical, a
-  bigger step, the body squashing on impact.
+  with no windup and no linear travel reads as a wave, not a cut. The
+  finish is where the reach lives, and every part of it is spent on
+  that: the body thrown a long way forward, the near arm running
+  straight out from the shoulder beside the head down to the hilt
+  instead of folding, the hilt itself forward of the chest, and the
+  blade carried nearer the horizontal — an arm folded back with the
+  blade hanging steeply off it wastes most of its length. The leading
+  knee folds deep under all of it, which is where the weight reads
+  from. slash-2 is the same shape heavier — blade hauled fully
+  vertical, a bigger step, the body squashing on impact.
 - thrust — the lunging stab. The blade stays LEVEL while the hands push
   forward from the hip, and the distance comes from the lunge and the
   blade's own length: the arms cannot extend without tearing the second
