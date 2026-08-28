@@ -19,15 +19,20 @@ dialog offers stays `testdata/presets/chibi-male`.
 | head / head-side / head-back | flat teal ball | skin face with fierce angled brows and a gritted mouth, spiky hair, red headband with tails on the back |
 | body / body-side / body-back | flat green + belt | white gi jacket, skin collar V, lapel line, red belt with knot; the back view is a dimmer gi so turns still read |
 | upper arms | flat pink | gi sleeves hemmed at the elbow |
-| forearms | flat pink | sleeve end, bare forearm, red wrist wrap, bare fist |
-| thighs / shins | flat blue + shoe | gi trousers, bare shin, bare foot |
+| forearms | flat pink | sleeve end, bare forearm, red wrist wrap, oversized fist |
+| thighs / shins | flat blue + shoe | gi trousers, bare shin, oversized bare foot |
 | shadow | unchanged | unchanged |
 
-Sizes, anchors, and file names all match the rig contract
-(`skills/lottie-character-preset/references/rig.md`); far-side parts keep
-the preset's x0.72 depth darkening. Part files keep their `chibi-male-*`
-slot names on purpose — clips address assets by those names, and the
-skill's rename rule is that only the bundle filename changes.
+Sizes, anchors, and file names follow the rig contract
+(`skills/lottie-character-preset/references/rig.md`), with one styled
+deviation: fists and feet are exaggerated, so the forearm canvas is
+21x30 (widened symmetrically, layer anchor moved to x=10 in every clip)
+and the shin canvas is 27x36 (extended toward the toe only, anchor
+untouched); the clip JSONs carry the matching asset sizes. Far-side
+parts keep the preset's x0.72 depth darkening. Part files keep their
+`chibi-male-*` slot names on purpose — clips address assets by those
+names, and the skill's rename rule is that only the bundle filename
+changes.
 
 ## Rebuilding
 
