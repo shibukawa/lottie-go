@@ -86,6 +86,8 @@ func lerpPose(a, b pose, f float64) pose {
 		elbowN: l(a.elbowN, b.elbowN), elbowF: l(a.elbowF, b.elbowF),
 		legN: l(a.legN, b.legN), legF: l(a.legF, b.legF),
 		kneeN: l(a.kneeN, b.kneeN), kneeF: l(a.kneeF, b.kneeF),
+		shNX: l(a.shNX, b.shNX), shNY: l(a.shNY, b.shNY),
+		shFX: l(a.shFX, b.shFX), shFY: l(a.shFY, b.shFY),
 		blade: l(a.blade, b.blade),
 		alpha: l(a.alpha, b.alpha), shadow: l(a.shadow, b.shadow),
 	}
@@ -195,8 +197,13 @@ func renderPose(p pose) *image.NRGBA {
 		}
 		return body.mul(nodeTransform(bodySidePart.pos, bodySidePart.anchor, 0, msx, 100))
 	}
-	uArmN := root(upperArmN, p.armN, armsSwapped)
-	uArmF := root(upperArmF, p.armF, armsSwapped)
+	// Shoulders go through armRoot, which folds in both the pose's own
+	// shoulder shift and the side swap.
+	arm := func(pt part, far bool, deg float64) mat {
+		return body.mul(nodeTransform(armRoot(far, p), pt.anchor, deg, 100, 100))
+	}
+	uArmN := arm(upperArmN, false, p.armN)
+	uArmF := arm(upperArmF, true, p.armF)
 	thN := root(thighN, p.legN, legsSwapped)
 	thF := root(thighF, p.legF, legsSwapped)
 	shadow := nodeTransform(shadowPart.pos, shadowPart.anchor, 0, p.shadow, p.shadow)

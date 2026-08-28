@@ -247,10 +247,14 @@ The five weapon clips set the blade per pose instead.
   straight out from the shoulder beside the head down to the hilt
   instead of folding, the hilt itself forward of the chest, and the
   blade carried nearer the horizontal — an arm folded back with the
-  blade hanging steeply off it wastes most of its length. The leading
-  knee folds deep under all of it, which is where the weight reads
-  from. slash-2 is the same shape heavier — blade hauled fully
-  vertical, a bigger step, the body squashing on impact.
+  blade hanging steeply off it wastes most of its length — and the near
+  shoulder itself driven forward under the head's base, with the far one
+  giving ground behind it. That last one is not decoration: once the arm
+  is straight, rotation has nothing left to give, and the root is the
+  only thing that can still travel. The leading knee folds deep under
+  all of it, which is where the weight reads from. slash-2 is the same
+  shape heavier — blade hauled fully vertical, a bigger step, the body
+  squashing on impact.
 - thrust — the lunging stab. The blade stays LEVEL while the hands push
   forward from the hip, and the distance comes from the lunge and the
   blade's own length: the arms cannot extend without tearing the second
