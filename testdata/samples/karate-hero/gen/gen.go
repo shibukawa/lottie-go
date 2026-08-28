@@ -28,6 +28,7 @@ var palette = map[byte]color.NRGBA{
 	'O': {38, 32, 43, 255},    // outline
 	'K': {46, 38, 38, 255},    // hair (near-black brown)
 	'P': {245, 205, 160, 255}, // skin
+	'p': {215, 170, 125, 255}, // skin shade (nose)
 	'e': {38, 32, 43, 255},    // eye / mouth
 	'W': {242, 240, 232, 255}, // gi white
 	'w': {206, 202, 190, 255}, // gi shade / lapel line
@@ -38,8 +39,9 @@ var palette = map[byte]color.NRGBA{
 	'D': {0, 0, 0, 255},       // shadow
 }
 
-// Three-quarter face: spiky hair on top, red headband above the eyes,
-// hair trailing down the back (-x) edge, band tails hanging behind.
+// Three-quarter face: spiky hair on top, red headband above thick angry
+// brows slanting toward the nose, gritted mouth, hair trailing down the
+// back (-x) edge, band tails hanging behind.
 var headArt = []string{
 	"...O...O...O...O...O....",
 	"..OKO.OKO.OKO.OKO.OKO...",
@@ -47,15 +49,15 @@ var headArt = []string{
 	".OKKKKKKKKKKKKKKKKKKKO..",
 	".OKKKKKKKKKKKKKKKKKKKKO.",
 	".ORRRRRRRRRRRRRRRRRRRRO.",
-	"OKKKPPPPPPPPPPPPPPPPPPPO",
-	"OKRKPPPPPPPPPPPPPPPPPPPO",
+	"OKKKPPPPPeePPPPPPPeePPPO",
+	"OKRKPPPPPPPeePPPeePPPPPO",
 	"OKRKPPPPPPeePPPPPeePPPPO",
 	"OKRKPPPPPPeePPPPPeePPPPO",
 	"OKKKPPPPPPeePPPPPeePPPPO",
 	"OKKKPPPPPPPPPPPPPPPPPPPO",
-	"OKKPPPPPPPPPPPPPPPPPPPPO",
+	"OKKPPPPPPPPPPPPPPPPppPPO",
 	".OKPPPPPPPPPPPPPPPPPPPO.",
-	".OPPPPPPPPPPPeePPPPPPPO.",
+	".OPPPPPPPPPPeeeePPPPPPO.",
 	"..OPPPPPPPPPPPPPPPPPPO..",
 	"...OPPPPPPPPPPPPPPPPO...",
 	"....OOPPPPPPPPPPPPOO....",
@@ -72,15 +74,15 @@ var headSideArt = []string{
 	".OKKKKKKKKKKKKKKKKKKKO..",
 	".OKKKKKKKKKKKKKKKKKKKKO.",
 	".ORRRRRRRRRRRRRRRRRRRRO.",
-	"OKKKKKKKKKKKKKKKPPPPPPPO",
-	"OKKKKKKKKRRKKKKKPPPPPPPO",
+	"OKKKKKKKKKKKKKKKPPPeePPO",
+	"OKKKKKKKKRRKKKKKPeePPPPO",
 	"OKKKKKKKKRRKKKKKPPeePPPO",
 	"OKKKKKKKKRRKKKKKPPeePPPO",
 	"OKKKKKKKKKKKKKKKPPeePPPO",
 	"OKKKKKKKKKKKKKKKPPPPPPPO",
 	"OKKKKKKKKKKKKKKKPPPPPPPO",
 	".OKKKKKKKKKKKKKKPPPPPPO.",
-	".OKKKKKKKKKKKKKKPPPPPPO.",
+	".OKKKKKKKKKKKKKKPPPPePO.",
 	"..OKKKKKKKKKKKKKPPPPPO..",
 	"...OKKKKKKKKKKKKKPPPO...",
 	"....OOKKKKKKKKKKPPOO....",
