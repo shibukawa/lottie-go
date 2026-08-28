@@ -117,11 +117,7 @@ func chibiMachine() *lottie.StateMachine {
 				to("slide-state", event("slide")),
 				to("walk-state", event("walk")),
 				to("run-to-idle-state", event("stop")),
-				to("run-turn-state", event("turn")),
 			}), 480, 40),
-			at(onceState("run-turn-state", "run-turn-anim", []lottie.Transition{
-				to("run-state", done),
-			}), 480, 170),
 			at(onceState("run-to-idle-state", "run-to-idle-anim", []lottie.Transition{
 				to("idle-state", done),
 			}), 700, 170),

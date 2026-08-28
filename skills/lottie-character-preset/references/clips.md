@@ -7,8 +7,8 @@ without rewiring. Loops repeat until an input; one-shots return by
 themselves; transitions bridge two loops.
 
 - Loops: `idle`, `walk`, `run`, `fall-loop`, `guard`
-- Bridges: `idle-turn`, `walk-turn`, `run-turn` (see below),
-  `run-to-idle` (braking stop), `fall` (into fall-loop)
+- Bridges: `idle-turn`, `walk-turn` (see below), `run-to-idle` (the
+  foot-brake skid), `fall` (into fall-loop)
 - One-shots: `slide`, `jump` (chains to fall), `hurt`, `death` (holds
   its last frame, terminal)
 - Attacks (unarmed set): `punch`, `punch-2` (the spinning haymaker:

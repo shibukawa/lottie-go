@@ -13,8 +13,7 @@ clips:
   - {name: walk,       kind: loop}
   - {name: walk-turn,  kind: transition}
   - {name: run,        kind: loop}
-  - {name: run-turn,   kind: transition}
-  - {name: run-to-idle,kind: transition, note: braking stop}
+  - {name: run-to-idle,kind: transition, note: foot-brake skid at standing height; run has NO turn - brake first, then game picks stand or mirrored run (user feedback 2026-08)}
   - {name: slide,      kind: oneshot}
   - {name: jump,       kind: oneshot, note: launch; chains to fall}
   - {name: fall,       kind: transition, note: entry into fall-loop}
@@ -22,7 +21,7 @@ clips:
   - {name: hurt,       kind: oneshot}
   - {name: death,      kind: oneshot, note: holds last frame}
 facing: authored facing right; left via runtime mirror (Mirrored/MirrorX), no *-left clips
-turns: two rotation styles, never morphs. run-turn rotates through the REAR: side-view drawings (head-side one-eye, body-side thinned) cut on hold keys, limbs trade sides at midpoint. idle/walk-turn rotate through the CAMERA side: front drawings only, slight scale-up passing the viewer, mirror at a SELF-MIRROR midpoint pose (limbs straight, joints ~0 - a bent joint carried across the flip kinks backwards for the new facing) so geometry holds while near/far identities trade; runs contact-pose -> mirrored contact for seamless reversed gait (user feedback 2026-08). Clips END facing opposite; game flips Mirrored on completion
+turns: rotate through the CAMERA side, never morph or mirror in place: front drawings only, slight scale-up passing the viewer, mirror at a SELF-MIRROR midpoint pose (limbs straight, joints ~0 - a bent joint carried across the flip kinks backwards for the new facing) so geometry holds while near/far identities trade; runs contact-pose -> mirrored contact for seamless reversed gait (user feedback 2026-08). Clips END facing opposite; game flips Mirrored on completion
 no-dash: dropped - dash is run played faster (state speed / SetSpeed); a separate clip duplicated run (user feedback 2026-08)
 air: airborne poses (jump/fall/jump-kick) lead with the far-side arms AND legs; near side trails (user feedback 2026-08)
 attacks: per-kind sets in data:preset-combat-clips

@@ -44,8 +44,8 @@ func TestChibiMalePreset(t *testing.T) {
 	if m.Preview() == nil {
 		t.Fatalf("preview did not start: %v", m.PreviewErr())
 	}
-	if got := len(m.AnimationIDs()); got != 20 {
-		t.Errorf("AnimationIDs() = %d clips; want 20", got)
+	if got := len(m.AnimationIDs()); got != 19 {
+		t.Errorf("AnimationIDs() = %d clips; want 19", got)
 	}
 
 	sm := m.Preview()
@@ -56,10 +56,10 @@ func TestChibiMalePreset(t *testing.T) {
 	// Locomotion round trip, including a turn bridge and the braking stop.
 	fire(t, m, "walk", "walk-state", 10)
 	fire(t, m, "run", "run-state", 10)
-	fire(t, m, "turn", "run-turn-state", 10)
-	settle(t, sm, "run-state", 40)
 	fire(t, m, "stop", "run-to-idle-state", 10)
 	settle(t, sm, "idle-state", 60)
+	fire(t, m, "turn", "idle-turn-state", 10)
+	settle(t, sm, "idle-state", 40)
 
 	// The jump chain hands over by itself and grounded=true brings it home.
 	fire(t, m, "jump", "jump-state", 10)

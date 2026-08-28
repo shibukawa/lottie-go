@@ -388,24 +388,21 @@ func runClip() clipDef {
 		k(18, passA, false), k(24, contactA, false))
 }
 
-func runTurnClip() clipDef {
-	from := base().legs(-45, 45).knees(15, 55).arms(35, -35).elbows(-40, -40).lean(12)
-	brake := base().legs(-15, 15).knees(30, 30).arms(20, -20).elbows(-30, -30).lean(-6).at(2, -2).aside()
-	swapped := base().legs(15, -15).knees(-30, -30).arms(-20, 20).elbows(30, 30).lean(6).at(-2, -2).aside().turned()
-	out := base().legs(45, -45).knees(-15, -55).arms(-35, 35).elbows(40, 40).lean(-12).turned()
-	return def("run-turn-anim", 16,
-		k(0, from, true), k(5, brake, true), k(8, swapped, true),
-		k(11, base().legs(30, -30).knees(-20, -45).arms(-28, 28).elbows(36, 36).lean(-8).turned(), true),
-		k(16, out, true))
-}
-
+// runToIdleClip is a foot-brake skid: the leading leg thrusts out and
+// slides on its sole, the trailing toe drags behind, the torso leans
+// back against the momentum — the hips dip only as far as the braced
+// leg forces them, nothing like the slide clip's squat. There is no
+// run-turn: a runner brakes with this, and the game then decides
+// whether to stand or to start the mirrored run.
 func runToIdleClip() clipDef {
 	from := base().legs(-50, 50).knees(15, 70).arms(40, -40).elbows(-40, -40).lean(12)
-	brake := base().at(3, 2).lean(-14).legs(-38, 22).knees(10, 25).arms(18, -12).elbows(-15, -15).nod(-5)
-	settle := base().lean(-4).legs(-12, 12).knees(6, 6).elbows(-10, -10)
+	plant := base().at(2, 7).lean(-10).legs(25, -25).knees(30, 8).arms(-25, 18).elbows(-20, -18).nod(-6).shade(112)
+	skid := base().at(3, 8).lean(-13).legs(20, -30).knees(28, 6).arms(-30, 22).elbows(-18, -16).nod(-8).shade(118)
+	ease := base().at(1, 2).lean(-4).legs(-10, 8).knees(8, 8).arms(-8, 6).elbows(-12, -12).shade(104)
 	rest := base().elbows(-8, -8).knees(3, 3)
-	return def("run-to-idle-anim", 24,
-		k(0, from, true), k(8, brake, true), k(16, settle, true), k(24, rest, true))
+	return def("run-to-idle-anim", 28,
+		k(0, from, true), k(5, plant, false), k(14, skid, true),
+		k(21, ease, true), k(28, rest, true))
 }
 
 // slideClip goes down before it goes back: a full squat first — hips
@@ -594,7 +591,7 @@ func guardHitClip() clipDef {
 func chibiMaleDefs() []clipDef {
 	return []clipDef{
 		idleClip(), idleTurnClip(), walkClip(), walkTurnClip(),
-		runClip(), runTurnClip(), runToIdleClip(),
+		runClip(), runToIdleClip(),
 		slideClip(), jumpClip(), fallClip(), fallLoopClip(),
 		hurtClip(), deathClip(), punchClip(), punch2Clip(),
 		kickClip(), kick2Clip(), jumpKickClip(), guardClip(), guardHitClip(),
