@@ -132,6 +132,15 @@ Order within a swing matters as much as the poses: throw the hips and
 open the stance a beat BEFORE the weapon moves. A swing whose torso and
 blade start on the same frame has no weight behind it.
 
+Reach at the finish is the sum of four things, and it is easy to spend
+only one of them: how far the body travels, whether the leading arm
+runs straight out from the shoulder or folds back, how far forward the
+grip itself sits, and how near the horizontal the weapon is carried. A
+long blade hanging steeply off a folded arm throws most of its own
+length away. Fold the leading knee deep under the pose while you are
+there — that is what makes the reach read as weight rather than as
+leaning.
+
 ## State machine JSON
 
 `work/machines/<id>.json` after a dump:
