@@ -92,16 +92,7 @@ type clipDef struct {
 	name   string
 	frames float64
 	keys   []kf
-	// bladeFront lifts the sword out of its depth-correct place in the
-	// far chain and draws it over the body. That is right only while the
-	// weapon is being used in front of the character: in a gait the far
-	// arm swings BEHIND the body half the time, and a blade pinned to the
-	// front there floats over a torso its own hand is behind.
-	bladeFront bool
 }
-
-// wielded marks a clip as using the weapon in front of the body.
-func (d clipDef) wielded() clipDef { d.bladeFront = true; return d }
 
 func def(name string, frames float64, keys ...kf) clipDef {
 	return clipDef{name: name, frames: frames, keys: keys}
@@ -211,7 +202,7 @@ func holdTrack(keys []kf, get func(pose) []float64) obj {
 // the body. Layer order is front to back: the near arm chain crosses in
 // front of the face on a punch, the near leg chain in front of the body,
 // far chains behind everything but the shadow.
-func clip(name string, frames float64, keys []kf, bladeFront bool) obj {
+func clip(name string, frames float64, keys []kf) obj {
 	const (
 		bodyInd      = 6
 		upperArmNInd = 2
@@ -331,15 +322,13 @@ func clip(name string, frames float64, keys []kf, bladeFront bool) obj {
 			track(keys, scalar(func(p pose) float64 { return p.blade })),
 			track(keys, scalar(func(p pose) float64 { return p.alpha })),
 		))
-		// Wielded, the blade goes just behind the near hand — over the
-		// body, under the fingers gripping it. Carried, it stays where its
-		// own arm is, in the far chain, so it passes behind the torso
-		// exactly when the hand holding it does.
-		at := len(layers) - 1 // behind the far arm, ahead of the shadow
-		if bladeFront {
-			at = 1 // behind the near hand, ahead of everything else
-		}
-		layers = slices.Insert(layers, at, sword)
+		// The blade sits just behind the near hand: over the body, under
+		// the fingers gripping it. It can stay there in every clip
+		// because both hands are always on the hilt in front of the
+		// character — depth-correct placement in the far chain would
+		// swallow it in the torso mid-cut, and a weapon that vanishes
+		// mid-swing is the worse lie.
+		layers = slices.Insert(layers, 1, sword)
 	}
 	return doc(name, frames, layers)
 }
@@ -634,40 +623,63 @@ func guardHitClip() clipDef {
 // unarmed strike leads with, so a weapon swing reaches the enemy in
 // front instead of crossing the body.
 
-// carry gives an inherited clip a plausible grip without re-authoring
-// its poses: the wrist holds the blade at a fixed angle to the TORSO,
-// so the sword tips with the body but stops swinging wildly whenever
-// the far arm swings. Sword attacks set p.blade themselves and never
-// pass through here.
-func carry(d clipDef, deg float64) clipDef {
-	keys := make([]kf, len(d.keys))
-	for i, key := range d.keys {
-		key.p.blade = deg - key.p.armF - key.p.elbowF
-		keys[i] = key
-	}
-	return clipDef{name: d.name, frames: d.frames, keys: keys, bladeFront: d.bladeFront}
-}
-
-// carryAngleFor is how far off the body's own axis the wrist holds the
-// blade in an inherited clip. The default keeps this long a tip clear of
-// the ground; a clip whose torso is already near horizontal needs its
-// own, or the point drags through the floor.
-func carryAngleFor(name string) float64 {
-	switch name {
-	case "death-anim":
-		return -20 // the body is flat: the blade lies pointing ahead
-	case "slide-anim":
-		return -56 // hips low and leaning back: hold the blade level
-	}
-	return -55
-}
-
+// carried rewrites an inherited clip so the character holds the sword
+// the way anyone carries a blade this size: both hands on the hilt at
+// the waist, upper arms hanging, forearms angled in across the belly,
+// the blade sweeping down and BEHIND. It costs the gaits their arm
+// swing, which is the trade a greatsword makes anyway, and it buys two
+// things. The hands are in front of the body in every clip, so the
+// weapon can simply be drawn in front and never has to change depth
+// mid-clip. And the carried silhouette — a long diagonal trailing back
+// — is nothing like any attack, which all drive the blade forward, so a
+// glance says whether this character is swinging or not.
 func carried(defs ...clipDef) []clipDef {
 	out := make([]clipDef, len(defs))
 	for i, d := range defs {
-		out[i] = carry(d, carryAngleFor(d.name))
+		out[i] = carry(d)
 	}
 	return out
+}
+
+// holdArc is the blade's angle in WORLD space at the start and end of a
+// carried clip — world, not body-relative, because that is what decides
+// whether the point clears the ground however the torso is pitched. The
+// default holds one angle throughout; the clips that end up horizontal
+// (slide) or flat on the floor (death) sweep the blade back on the way
+// down, and a turn sweeps it through vertical so the mirror has
+// something symmetric to land on.
+func holdArc(name string) (float64, float64) {
+	switch name {
+	case "idle-turn-anim", "walk-turn-anim":
+		return 45, -45
+	case "slide-anim":
+		return 45, 72
+	case "death-anim":
+		return 45, 82
+	}
+	return 45, 45
+}
+
+func carry(d clipDef) clipDef {
+	from, to := holdArc(d.name)
+	keys := make([]kf, len(d.keys))
+	for i, key := range d.keys {
+		p := key.p
+		// The hilt has to land on the body's centerline: it is the only
+		// place both hands reach. Hanging the upper arm and folding the
+		// forearm in gets it there without the shoulder swinging back
+		// behind the torso, which is what an arm-first solution does.
+		armF, elbowF := 2.0, 72.0
+		if p.flip {
+			armF, elbowF = -armF, -elbowF
+		}
+		world := from + (to-from)*key.t/d.frames
+		p.armF, p.elbowF = armF, elbowF
+		p.blade = world - p.rot - armF - elbowF
+		key.p = held(p)
+		keys[i] = key
+	}
+	return clipDef{name: d.name, frames: d.frames, keys: keys}
 }
 
 // --- The two-handed grip ---
@@ -690,11 +702,21 @@ func limbDir(deg float64) (float64, float64) {
 	return -math.Sin(r), math.Cos(r)
 }
 
-func handAt(root part, shoulder, elbow float64) (float64, float64) {
+// armRoot is where a shoulder actually sits for a pose: a turn trades
+// the two arms' attach points, and a grip solved against the unswapped
+// ones would come apart the moment the character mirrors.
+func armRoot(pt part, p pose) [2]float64 {
+	if armsSwapped(p) {
+		return bodyMirrorX(pt.pos)
+	}
+	return pt.pos
+}
+
+func handAt(root [2]float64, shoulder, elbow float64) (float64, float64) {
 	ux, uy := limbDir(shoulder)
 	fx, fy := limbDir(shoulder + elbow)
-	return root.pos[0] + upperArmLen*ux + forearmLen*fx,
-		root.pos[1] + upperArmLen*uy + forearmLen*fy
+	return root[0] + upperArmLen*ux + forearmLen*fx,
+		root[1] + upperArmLen*uy + forearmLen*fy
 }
 
 // held puts the near hand on the sword handle by solving the near arm as
@@ -708,10 +730,11 @@ func handAt(root part, shoulder, elbow float64) (float64, float64) {
 // sword is actually held. Out-of-reach poses stop the generator rather
 // than draw a hand grasping at air beside the hilt.
 func held(p pose) pose {
-	hx, hy := handAt(upperArmF, p.armF, p.elbowF)
+	near := armRoot(upperArmN, p)
+	hx, hy := handAt(armRoot(upperArmF, p), p.armF, p.elbowF)
 	bx, by := limbDir(p.armF + p.elbowF + p.blade)
 	tx, ty := hx-gripOffset*bx, hy-gripOffset*by
-	dx, dy := tx-upperArmN.pos[0], ty-upperArmN.pos[1]
+	dx, dy := tx-near[0], ty-near[1]
 	d := math.Hypot(dx, dy)
 	reach := upperArmLen + forearmLen
 	if d > reach || d < 1 {
@@ -736,7 +759,7 @@ func held(p pose) pose {
 }
 
 func reaches(p pose, tx, ty float64) bool {
-	x, y := handAt(upperArmN, p.armN, p.elbowN)
+	x, y := handAt(armRoot(upperArmN, p), p.armN, p.elbowN)
 	return math.Hypot(x-tx, y-ty) < 0.5
 }
 
@@ -843,8 +866,8 @@ func chibiSwordDefs() []clipDef {
 		kickClip(), jumpKickClip(),
 	)
 	return append(defs,
-		slashClip().wielded(), slash2Clip().wielded(), thrustClip().wielded(),
-		swordGuardClip().wielded(), swordGuardHitClip().wielded())
+		slashClip(), slash2Clip(), thrustClip(),
+		swordGuardClip(), swordGuardHitClip())
 }
 
 // chibiMaleDefs is every clip in the preset, in preview-sheet row order.
@@ -862,7 +885,7 @@ func chibiMaleDefs() []clipDef {
 func clipsOf(defs []clipDef) map[string]obj {
 	m := map[string]obj{}
 	for _, d := range defs {
-		m[d.name] = clip(d.name, d.frames, d.keys, d.bladeFront)
+		m[d.name] = clip(d.name, d.frames, d.keys)
 	}
 	return m
 }
