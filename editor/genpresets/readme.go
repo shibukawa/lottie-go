@@ -262,12 +262,17 @@ The five weapon clips set the blade per pose instead.
   all of it, which is where the weight reads from. slash-2 is the same
   shape heavier — blade hauled fully vertical, a bigger step, the body
   squashing on impact.
-- thrust — the lunging stab. The blade stays LEVEL while the hands push
-  forward from the hip, and the distance comes from the lunge and the
-  blade's own length: the arms cannot extend without tearing the second
-  hand off the hilt.
-- guard / guard-hit — block with the weapon: hands at the belly, blade
-  stood up in front, which covers torso and head at this blade length.
+- thrust — the lunging stab. The blade stays LEVEL throughout, and the
+  point goes out on the ARMS as much as the body: the near shoulder
+  drives forward, the far elbow tucks at the waist and its forearm
+  drives the hilt out past the chest, so the whole weapon ends up ahead
+  of the character rather than the blade alone. The body travels less
+  than it might, because the tip would otherwise run off the canvas.
+- guard / guard-hit — block with the weapon, held out in FRONT: a guard
+  whose hilt sits behind the body's own centerline covers nothing and
+  reads as flinching away rather than meeting the hit. The blade rises
+  forward rather than straight up, since a head this size is wide
+  enough that a vertical blade in front of it just crosses the face.
 - kick and jump-kick are inherited unchanged; there are no punches,
   since a two-handed swordsman never lets go of the hilt to throw one.
 

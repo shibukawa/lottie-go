@@ -938,8 +938,16 @@ func thrustClip() clipDef {
 	ready := carriedRest()
 	chamber := lowGrip(base().at(-4, 1).lean(-8).legs(-14, 12).knees(12, 14).nod(-3), 5, 80, -90)
 	coil := lowGrip(base().at(-6, 2).lean(-11).legs(-18, 14).knees(16, 16).nod(-4), 8, 84, -90)
-	lunge := lowGrip(base().at(18, 4).lean(10).legs(-36, 26).knees(14, 6), -5, 70, -88)
-	reach := lowGrip(base().at(21, 4).lean(11).legs(-38, 27).knees(13, 5), -8, 66, -87)
+	// The point goes out on the ARMS, not just on the body: the near
+	// shoulder drives forward, the far elbow tucks at the waist and the
+	// forearm drives the hilt out past the chest, so the whole weapon is
+	// ahead of the character instead of the blade alone. The body then
+	// travels less than it used to, because the tip would otherwise run
+	// off the canvas.
+	lunge := lowGrip(base().at(10, 7).lean(12).legs(-57, 16).knees(50, 0).
+		shoulders(16, 2, 2, -2), 17, -129, -90)
+	reach := lowGrip(base().at(12, 7).lean(13).legs(-59, 17).knees(48, 0).
+		shoulders(18, 2, 3, -2), 13, -126, -90)
 	return def("thrust-anim", 26,
 		k(0, ready, true), k(6, chamber, true), k(9, coil, true),
 		k(12, lunge, false), k(17, reach, true), k(26, ready, true))
@@ -948,9 +956,19 @@ func thrustClip() clipDef {
 // swordGuardStance blocks with the weapon: hands together at the belly,
 // blade stood up in front of the body, which covers torso and head at
 // this blade length.
+// swordGuardStance holds the blade out in FRONT of the character, not
+// tucked against the chest: a guard whose hilt sits behind the body's
+// own centerline is not covering anything, and reads as flinching away
+// rather than meeting the hit.
+// swordGuardStance holds the blade out in FRONT of the character, not
+// tucked against the chest: a guard whose hilt sits behind the body's
+// own centerline is not covering anything, and reads as flinching away
+// rather than meeting the hit. The blade rises forward rather than
+// straight up, since a head this size is wide enough that a vertical
+// blade in front of it just crosses the face.
 func swordGuardStance() pose {
-	return lowGrip(base().at(0, 3).lean(6).squash(103, 98).
-		legs(-12, 12).knees(10, 14), 8, 76, 170)
+	return lowGrip(base().at(6, 3).lean(10).squash(103, 98).
+		legs(-12, 12).knees(10, 14).shoulders(8, 2, 0, 0), -49, 124, 225)
 }
 
 func swordGuardClip() clipDef {
@@ -964,9 +982,9 @@ func swordGuardHitClip() clipDef {
 	stance := swordGuardStance()
 	// The hit drives the whole guard back and rocks the blade off
 	// vertical; the hands stay locked on the hilt.
-	pushed := lowGrip(base().at(-8, 3).lean(-2).squash(103, 98).
-		legs(-12, 12).knees(10, 14).fade(50), 12, 80, 160)
-	back := stance.at(-4, 3)
+	pushed := lowGrip(base().at(-4, 3).lean(0).squash(103, 98).
+		legs(-12, 12).knees(10, 14).shoulders(4, 2, 0, 0).fade(50), -42, 118, 212)
+	back := stance.at(2, 3)
 	return def("guard-hit-anim", 16,
 		k(0, stance, true), k(4, pushed, false), k(8, back, true), k(16, stance, true))
 }
