@@ -82,15 +82,14 @@ returns by itself through the machine.
   carried across the flip would kink the wrong way — so the geometry
   holds still while the near/far identities trade (a game-friendly
   lie). Each runs from its gait's rest/contact pose to that pose's
-  in-place negation, so the mirrored gait picks up seamlessly.
-- run-turn — rotates through its rear instead: head and torso step
-  through their side drawings (head-side shows the back of the head
-  with one eye, body-side is the thinned torso), the limb chains trade
-  sides at the midpoint, and the views cut on hold keyframes.
-  All turn clips end facing the other way, so the game flips its
-  Mirrored flag when the turn completes; the mirrored gait then
-  matches the end pose.
-- run-to-idle — braking stop.
+  in-place negation, so the mirrored gait picks up seamlessly. Turn
+  clips end facing the other way; the game flips its Mirrored flag
+  when the turn completes.
+- run-to-idle — the foot-brake skid, and the reason run has NO turn
+  clip: the leading leg thrusts out and slides on its sole, the
+  trailing toe drags, the torso leans back — hips stay near standing
+  height, nothing like slide's squat. A runner brakes with this and
+  the game then decides: stand, or start the mirrored run.
 - jump -> fall -> fall-loop — the air chain; each hands over on complete.
 - punch -> punch-2 — firing punch during punch chains the follow-up,
   and punch2 also starts the haymaker directly from idle. Strikes lead
