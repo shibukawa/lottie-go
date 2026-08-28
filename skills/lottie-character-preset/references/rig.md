@@ -92,6 +92,36 @@ sizes, anchors, and outlines by construction, which makes it the lowest
 risk design swap of all — prefer it when the request is "same character,
 different colors/team/rarity".
 
+## chibi-sword: the armed variant
+
+`chibi-sword` is the same fifteen slots plus one, and is the worked
+example to copy when a character carries anything:
+
+| slot  | size  | anchor  | parent      | attach |
+|-------|-------|---------|-------------|--------|
+| sword | 21x54 | (10,10) | forearm-far | (7,26) |
+
+Its three decisions generalize to any held prop:
+
+- **Parent it to the far (leading) forearm.** Strikes lead with the
+  far-side limb, so a weapon there reaches the enemy in front, and it
+  swings with the arm for free — no separate weapon keyframes.
+- **List its layer first (frontmost) anyway.** Depth-correct order puts
+  the far chain behind the torso, which swallows a blade in the middle
+  of a horizontal cut. A weapon that vanishes mid-swing is a worse lie
+  than one that is always visible.
+- **Draw it hanging straight down from the grip and symmetric**, at full
+  brightness. Symmetric means a turn (which mirrors head and shoes)
+  needs no mirrored copy; full brightness keeps it from reading as
+  background even though its arm chain is dimmed.
+
+The clips it inherits from chibi-male were not re-posed: the blade angle
+is derived per keyframe to hold a fixed angle to the *torso*, so the
+sword tips with the body but does not flail with every arm swing. Note
+that a blade's on-screen angle is `body lean + shoulder + elbow + blade`
+— a clip with a deep lean needs that compensated or the tip points at
+the floor.
+
 ## Adding or removing slots
 
 Slots can grow (a weapon, a cape) but that is a motion-side change too:

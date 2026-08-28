@@ -8,9 +8,14 @@ description: Customize and extend lottie-go character animation presets (the ras
 A preset is a complete, game-ready character: one `.lottie` bundle holding
 ~20 clips (idle/walk/run/jump/attacks/guard/hurt/death), the part images
 they share, and a wired state machine a game drives by verbs
-(`sm.Fire("jump")`). The first preset is `chibi-male` (2.5 heads); presets
-live in `testdata/presets/` of the lottie-go repository and are meant to be
-copied into a game and customized.
+(`sm.Fire("jump")`). Presets live in `testdata/presets/` of the lottie-go
+repository and are meant to be copied into a game and customized:
+
+- `chibi-male` — 2.5 heads, unarmed, 19 clips. The base rig.
+- `chibi-sword` — the same rig with a sword slot, 21 clips: the spinning
+  kick swapped for `slash` / `slash-2` / `thrust`. Start here for any
+  character that carries something; how the weapon is parented, layered
+  and drawn is in [references/rig.md](references/rig.md).
 
 The design that makes automated editing safe: characters are **raster
 cutout rigs**. Part images (head, torso, limb segments) are moved by

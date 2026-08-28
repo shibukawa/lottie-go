@@ -38,14 +38,47 @@ func run(out string) error {
 	if _, err := os.Stat(out); err != nil {
 		return fmt.Errorf("output directory %s not found: run from the editor directory (go run ./genpresets) or pass -out", out)
 	}
-	return writePreset(filepath.Join(out, "chibi-male"), "chibi-male")
+	for _, p := range presets() {
+		if err := writePreset(filepath.Join(out, p.name), p); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func writePreset(dir, name string) error {
+// preset is one character template: which rig slots it draws, which
+// clips it plays, and how the machine wires them.
+type preset struct {
+	name    string
+	parts   []part
+	sword   bool
+	defs    []clipDef
+	machine *lottie.StateMachine
+	readme  string
+}
+
+func presets() []preset {
+	return []preset{
+		{
+			name: "chibi-male", parts: baseParts,
+			defs: chibiMaleDefs(), machine: chibiMachine(false), readme: maleReadme,
+		},
+		{
+			name: "chibi-sword", parts: swordParts, sword: true,
+			defs: chibiSwordDefs(), machine: chibiMachine(true), readme: swordReadme,
+		},
+	}
+}
+
+func writePreset(dir string, p preset) error {
+	// Everything downstream — part file names, the asset table, whether
+	// clips carry a weapon layer — reads the active rig, so set it first.
+	partPrefix, allParts, swordRig = p.name, p.parts, p.sword
+	name := p.name
 	if err := os.MkdirAll(filepath.Join(dir, "parts"), 0o755); err != nil {
 		return err
 	}
-	clips := chibiMaleClips()
+	clips := clipsOf(p.defs)
 	if err := removeStaleClips(dir, clips); err != nil {
 		return err
 	}
@@ -79,7 +112,7 @@ func writePreset(dir, name string) error {
 			return fmt.Errorf("%s/%s: %w", name, id, err)
 		}
 	}
-	if err := b.SetStateMachine(name, chibiMachine()); err != nil {
+	if err := b.SetStateMachine(name, p.machine); err != nil {
 		return err
 	}
 	b.Manifest().Generator = "lottie-go/editor genpresets"
@@ -97,14 +130,14 @@ func writePreset(dir, name string) error {
 	if err := verify(buf.Bytes()); err != nil {
 		return fmt.Errorf("%s: %w", name, err)
 	}
-	sheet, err := previewSheet(chibiMaleDefs(), 6)
+	sheet, err := previewSheet(p.defs, 6)
 	if err != nil {
 		return err
 	}
 	if err := os.WriteFile(filepath.Join(dir, "preview.png"), sheet, 0o644); err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte(readme), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte(p.readme), 0o644); err != nil {
 		return err
 	}
 	// The editor embeds the preset as a "New…" template, so keep its

@@ -38,6 +38,10 @@ var palette = map[byte]color.NRGBA{
 	'S': {110, 147, 201, 255}, // shin light blue
 	'W': {58, 53, 80, 255},    // shoe
 	'D': {0, 0, 0, 255},       // shadow
+	'M': {214, 222, 232, 255}, // blade steel
+	'm': {158, 170, 188, 255}, // blade bevel
+	'H': {198, 156, 62, 255},  // guard and pommel
+	'h': {96, 62, 46, 255},    // grip
 }
 
 // Three-quarter head: round, both eyes visible, the near eye closer to
@@ -195,6 +199,31 @@ var shinArt = []string{
 	".OOOOO.",
 }
 
+// The sword hangs straight down from the grip like every other part, so
+// all of its swing lives in keyframes. It is drawn left/right symmetric
+// on purpose: a turn mirrors the head and shoes, and a symmetric blade
+// needs no mirrored copy to follow them.
+var swordArt = []string{
+	"...O...",
+	"..OHO..",
+	"..OhO..",
+	"..OhO..",
+	".OHHHO.",
+	"OHHHHHO",
+	".OMMmO.",
+	".OMMmO.",
+	".OMMmO.",
+	".OMMmO.",
+	".OMMmO.",
+	".OMMmO.",
+	".OMMmO.",
+	".OMMmO.",
+	".OMMmO.",
+	".OMMmO.",
+	"..OMO..",
+	"...O...",
+}
+
 var shadowArt = []string{
 	"........DDDDDDDDDDDD........",
 	"....DDDDDDDDDDDDDDDDDDDD....",
@@ -255,7 +284,7 @@ type part struct {
 func (p part) w() float64 { return float64(len(p.art[0]) * pxScale) }
 func (p part) h() float64 { return float64(len(p.art) * pxScale) }
 
-func (p part) file() string { return "chibi-male-" + p.name + ".png" }
+func (p part) file() string { return partPrefix + "-" + p.name + ".png" }
 
 func (p part) render() *image.NRGBA { return renderArt(p.art, p.dark) }
 
@@ -297,11 +326,29 @@ var (
 	shinNearPart = part{name: "shin-near", art: shinArt, anchor: [2]float64{9, 4}, pos: [2]float64{9, 29}}
 	shinFarPart  = part{name: "shin-far", art: shinArt, dark: true, anchor: [2]float64{9, 4}, pos: [2]float64{9, 29}}
 	shadowPart   = part{name: "shadow", art: shadowArt, anchor: [2]float64{42, 7}, pos: [2]float64{restX, groundY}}
+	// The sword rides in the leading (far) hand, gripped at the fist, so
+	// it swings with the same limb every other strike leads with. It is
+	// not dimmed like the rest of the far chain: a weapon that reads as
+	// background defeats the point of holding it.
+	swordPart = part{name: "sword", art: swordArt, anchor: [2]float64{10, 10}, pos: [2]float64{7, 26}}
 )
 
-var allParts = []part{
+// baseParts is the fifteen-slot rig every preset shares.
+var baseParts = []part{
 	headPart, headSidePart, headBackPart, bodyPart, bodySidePart, bodyBackPart,
 	upperArmN, forearmN, upperArmF, forearmF,
 	thighN, shinNearPart, thighF, shinFarPart,
 	shadowPart,
 }
+
+var swordParts = append(append([]part{}, baseParts...), swordPart)
+
+// The rig the generator is currently building. writePreset sets these
+// before anything is assembled: part file names carry the preset name,
+// the parts list is both the bundle's image set and every clip's asset
+// table, and swordRig decides whether clips carry the weapon layer.
+var (
+	partPrefix = "chibi-male"
+	allParts   = baseParts
+	swordRig   = false
+)

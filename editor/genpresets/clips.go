@@ -19,6 +19,7 @@ type pose struct {
 	elbowN, elbowF float64  // forearm rotation relative to the upper arm
 	legN, legF     float64  // hip rotation
 	kneeN, kneeF   float64  // shin rotation relative to the thigh
+	blade          float64  // sword rotation relative to the far forearm
 	alpha          float64  // whole-character opacity % (hurt flash)
 	shadow         float64  // ground shadow scale % (reads as height)
 	flip           bool     // turned: limb attach sides swap, head/shins x-mirror
@@ -51,6 +52,7 @@ func (p pose) arms(near, far float64) pose   { p.armN, p.armF = near, far; retur
 func (p pose) elbows(near, far float64) pose { p.elbowN, p.elbowF = near, far; return p }
 func (p pose) legs(near, far float64) pose   { p.legN, p.legF = near, far; return p }
 func (p pose) knees(near, far float64) pose  { p.kneeN, p.kneeF = near, far; return p }
+func (p pose) blades(deg float64) pose       { p.blade = deg; return p }
 func (p pose) fade(a float64) pose           { p.alpha = a; return p }
 func (p pose) shade(s float64) pose          { p.shadow = s; return p }
 func (p pose) turned() pose                  { p.flip = true; return p }
@@ -203,6 +205,7 @@ func clip(name string, frames float64, keys []kf) obj {
 		thighNInd    = 5
 		thighFInd    = 7
 		upperArmFInd = 9
+		forearmFInd  = 10
 	)
 	// swapSides: attach point trades sides on flip (limb roots).
 	// mirror: the image x-mirrors on flip (head keeps the face reading
@@ -290,7 +293,7 @@ func clip(name string, frames float64, keys []kf) obj {
 		static(0.0),
 		static(28.0),
 	)
-	return doc(name, frames, []obj{
+	layers := []obj{
 		imgLayer("forearm-near", 1, upperArmNInd, frames, "forearm-near", seg(forearmN, nil, false, func(p pose) float64 { return p.elbowN })),
 		imgLayer("upper-arm-near", upperArmNInd, bodyInd, frames, "upper-arm-near", seg(upperArmN, armsSwapped, false, func(p pose) float64 { return p.armN })),
 		headLayer("head", 3, func(v viewKind) bool { return v == viewFront }),
@@ -306,7 +309,20 @@ func clip(name string, frames float64, keys []kf) obj {
 		imgLayer("upper-arm-far", upperArmFInd, bodyInd, frames, "upper-arm-far", seg(upperArmF, armsSwapped, false, func(p pose) float64 { return p.armF })),
 		imgLayer("forearm-far", 10, upperArmFInd, frames, "forearm-far", seg(forearmF, nil, false, func(p pose) float64 { return p.elbowF })),
 		imgLayer("shadow", 11, 0, frames, "shadow", shadowTr),
-	})
+	}
+	if swordRig {
+		// The blade hangs off the far forearm but draws in front of
+		// everything: a weapon swallowed by the torso mid-swing is worse
+		// than the small depth lie of one that never is.
+		layers = append([]obj{imgLayer("sword", 16, forearmFInd, frames, "sword", transform(
+			static([]float64{swordPart.anchor[0], swordPart.anchor[1]}),
+			static([]float64{swordPart.pos[0], swordPart.pos[1]}),
+			static([]float64{100, 100}),
+			track(keys, scalar(func(p pose) float64 { return p.blade })),
+			track(keys, scalar(func(p pose) float64 { return p.alpha })),
+		))}, layers...)
+	}
+	return doc(name, frames, layers)
 }
 
 // --- Locomotion ---
@@ -593,6 +609,111 @@ func guardHitClip() clipDef {
 		k(0, stance, true), k(4, pushed, false), k(8, back, true), k(16, stance, true))
 }
 
+// --- Sword ---
+//
+// The blade is gripped by the far (leading) hand, the same limb every
+// unarmed strike leads with, so a weapon swing reaches the enemy in
+// front instead of crossing the body.
+
+// carry gives an inherited clip a plausible grip without re-authoring
+// its poses: the wrist holds the blade at a fixed angle to the TORSO,
+// so the sword tips with the body but stops swinging wildly whenever
+// the far arm swings. Sword attacks set p.blade themselves and never
+// pass through here.
+func carry(d clipDef, deg float64) clipDef {
+	keys := make([]kf, len(d.keys))
+	for i, key := range d.keys {
+		key.p.blade = deg - key.p.armF - key.p.elbowF
+		keys[i] = key
+	}
+	return clipDef{name: d.name, frames: d.frames, keys: keys}
+}
+
+// carried is the whole inherited clip set at the default carry angle:
+// tip forward and down, clear of the ground and of both legs.
+func carried(defs ...clipDef) []clipDef {
+	out := make([]clipDef, len(defs))
+	for i, d := range defs {
+		out[i] = carry(d, -20)
+	}
+	return out
+}
+
+// swordReady is the on-guard stance the three weapon attacks start and
+// end on: blade up and forward, elbow bent, weight back a touch.
+func swordReady() pose {
+	return base().lean(4).arms(18, 24).elbows(-20, -70).legs(-12, 12).knees(8, 12).blades(-14)
+}
+
+// slashClip is the diagonal downward cut. The blade goes up and behind
+// the head first — the windup is what makes a swing read as heavy — and
+// the cut itself is two frames of linear travel through roughly 200
+// degrees, so the arc never turns to mush.
+func slashClip() clipDef {
+	// The windup has to lift the HAND, not just the blade: an upper arm
+	// left horizontal parks the fist behind the hip and the sword reads
+	// as sticking out of the character's back.
+	ready := swordReady()
+	raise := base().lean(-6).arms(24, 132).elbows(-25, -42).legs(-10, 10).knees(8, 12).nod(-4).blades(58)
+	raiseDeep := base().at(-2, 0).lean(-10).arms(28, 144).elbows(-28, -40).legs(-8, 8).knees(8, 12).nod(-6).blades(52)
+	// The cut finishes with the hand forward at chest height and the blade
+	// still angled down past the target — an arm left low points the tip
+	// into the floor, which reads as dropping the sword, not swinging it.
+	cut := base().at(7, 0).lean(14).squash(103, 97).arms(-30, -75).elbows(-30, -12).legs(-16, 14).knees(6, 14).nod(6).blades(30)
+	follow := base().at(5, 1).lean(17).arms(-26, -62).elbows(-32, -18).legs(-16, 14).knees(6, 14).nod(8).blades(15)
+	return def("slash-anim", 24,
+		k(0, ready, true), k(6, raise, true), k(9, raiseDeep, true),
+		k(12, cut, false), k(16, follow, true), k(24, ready, true))
+}
+
+// slash2Clip is the heavy overhead chop that follows the first cut: the
+// blade is hauled all the way vertical, the character steps into it, and
+// the impact squashes the body. It is also reachable on its own.
+func slash2Clip() clipDef {
+	from := swordReady()
+	lift := base().at(-3, -1).lean(-12).arms(30, 150).elbows(-30, -25).legs(-8, 8).knees(8, 12).nod(-8).blades(55)
+	liftDeep := base().at(-4, -2).lean(-16).arms(34, 160).elbows(-32, -20).legs(-6, 6).knees(8, 12).nod(-10).blades(50)
+	// The deep lean of the chop rotates the blade with it, so the angles
+	// here are ~20 degrees further open than the cut's to land the tip in
+	// the same place on screen.
+	chop := base().at(9, 2).lean(22).squash(104, 96).arms(-34, -55).elbows(-34, -10).legs(-20, 16).knees(8, 18).nod(10).blades(3)
+	hold := base().at(8, 3).lean(24).arms(-30, -48).elbows(-36, -14).legs(-20, 16).knees(8, 18).nod(12).blades(-7)
+	return def("slash-2-anim", 30,
+		k(0, from, true), k(7, lift, true), k(11, liftDeep, true),
+		k(14, chop, false), k(20, hold, true), k(30, from, true))
+}
+
+// thrustClip is the lunging stab. The blade is chambered level at the
+// hip and stays level while the whole arm extends, so the point tracks
+// straight forward instead of arcing — the arm angles and the blade
+// angle are authored to cancel.
+func thrustClip() clipDef {
+	ready := swordReady()
+	chamber := base().at(-4, 1).lean(-8).arms(22, 22).elbows(-24, -104).legs(-14, 12).knees(12, 14).nod(-3).blades(-8)
+	coil := base().at(-6, 2).lean(-11).arms(26, 26).elbows(-26, -112).legs(-18, 14).knees(16, 16).nod(-4).blades(-4)
+	lunge := base().at(13, 4).lean(10).arms(38, -74).elbows(-30, -8).legs(-36, 26).knees(14, 6).nod(4).blades(-8)
+	reach := base().at(15, 4).lean(11).arms(40, -80).elbows(-30, -4).legs(-38, 27).knees(13, 5).nod(4).blades(-6)
+	return def("thrust-anim", 26,
+		k(0, ready, true), k(6, chamber, true), k(9, coil, true),
+		k(12, lunge, false), k(17, reach, true), k(26, ready, true))
+}
+
+// chibiSwordDefs is the sword preset: the same locomotion, air,
+// reaction, punch and guard vocabulary carried with a blade in hand,
+// the ground kick kept, its spinning follow-up dropped — a swordsman
+// answers a second attack with the weapon — and three weapon attacks
+// in its place.
+func chibiSwordDefs() []clipDef {
+	defs := carried(
+		idleClip(), idleTurnClip(), walkClip(), walkTurnClip(),
+		runClip(), runToIdleClip(),
+		slideClip(), jumpClip(), fallClip(), fallLoopClip(),
+		hurtClip(), deathClip(), punchClip(), punch2Clip(),
+		kickClip(), jumpKickClip(), guardClip(), guardHitClip(),
+	)
+	return append(defs, slashClip(), slash2Clip(), thrustClip())
+}
+
 // chibiMaleDefs is every clip in the preset, in preview-sheet row order.
 func chibiMaleDefs() []clipDef {
 	return []clipDef{
@@ -604,10 +725,10 @@ func chibiMaleDefs() []clipDef {
 	}
 }
 
-// chibiMaleClips renders the defs to documents, keyed by animation id.
-func chibiMaleClips() map[string]obj {
+// clipsOf renders the defs to documents, keyed by animation id.
+func clipsOf(defs []clipDef) map[string]obj {
 	m := map[string]obj{}
-	for _, d := range chibiMaleDefs() {
+	for _, d := range defs {
 		m[d.name] = clip(d.name, d.frames, d.keys)
 	}
 	return m

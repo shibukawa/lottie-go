@@ -85,6 +85,7 @@ func lerpPose(a, b pose, f float64) pose {
 		elbowN: l(a.elbowN, b.elbowN), elbowF: l(a.elbowF, b.elbowF),
 		legN: l(a.legN, b.legN), legF: l(a.legF, b.legF),
 		kneeN: l(a.kneeN, b.kneeN), kneeF: l(a.kneeF, b.kneeF),
+		blade: l(a.blade, b.blade),
 		alpha: l(a.alpha, b.alpha), shadow: l(a.shadow, b.shadow),
 	}
 }
@@ -204,7 +205,7 @@ func renderPose(p pose) *image.NRGBA {
 		opacity float64
 	}
 	// Reverse of the clip's front-to-back layer order.
-	for _, d := range []draw{
+	order := []draw{
 		{shadowPart, shadow, 28},
 		{forearmF, seg(uArmF, forearmF, p.elbowF), p.alpha},
 		{upperArmF, uArmF, p.alpha},
@@ -216,7 +217,13 @@ func renderPose(p pose) *image.NRGBA {
 		{headOf(p), mirrored(body, headPart, p.head), p.alpha},
 		{upperArmN, uArmN, p.alpha},
 		{forearmN, seg(uArmN, forearmN, p.elbowN), p.alpha},
-	} {
+	}
+	if swordRig {
+		// Gripped by the far forearm, drawn last: frontmost, like the clip.
+		fArmF := seg(uArmF, forearmF, p.elbowF)
+		order = append(order, draw{swordPart, seg(fArmF, swordPart, p.blade), p.alpha})
+	}
+	for _, d := range order {
 		drawPart(frame, d.pt.render(), d.world, d.opacity)
 	}
 	return frame
