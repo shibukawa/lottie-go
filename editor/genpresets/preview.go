@@ -210,7 +210,6 @@ func renderPose(p pose) *image.NRGBA {
 	sword := draw{swordPart, seg(fArmF, swordPart, p.blade), p.alpha}
 	order := []draw{
 		{shadowPart, shadow, 28},
-		{upperArmF, uArmF, p.alpha},
 		{shinFarPart, mirrored(thF, shinFarPart, p.kneeF), p.alpha},
 		{thighF, thF, p.alpha},
 		{bodyOf(p), bodyView(p, body), p.alpha},
@@ -220,14 +219,17 @@ func renderPose(p pose) *image.NRGBA {
 		{upperArmN, uArmN, p.alpha},
 		{forearmN, seg(uArmN, forearmN, p.elbowN), p.alpha},
 	}
-	// The far forearm comes in front of the torso for the sword rig, where
-	// it folds across the belly onto the hilt; the sword sits just behind
-	// the near hand. Both match the clip builder.
+	// The whole far arm comes in front of the torso for the sword rig,
+	// where it reaches across the body onto the hilt; the sword sits just
+	// behind the near hand. Both match the clip builder.
+	// Back to front, so the forearm goes down first: on the far side the
+	// upper arm covers it, the reverse of the near chain.
+	farArm := []draw{{forearmF, fArmF, p.alpha}, {upperArmF, uArmF, p.alpha}}
 	if swordRig {
-		order = slices.Insert(order, 5, draw{forearmF, fArmF, p.alpha})
+		order = slices.Insert(order, 4, farArm...)
 		order = slices.Insert(order, len(order)-1, sword)
 	} else {
-		order = slices.Insert(order, 1, draw{forearmF, fArmF, p.alpha})
+		order = slices.Insert(order, 1, farArm...)
 	}
 	for _, d := range order {
 		drawPart(frame, d.pt.render(), d.world, d.opacity)

@@ -298,6 +298,7 @@ func clip(name string, frames float64, keys []kf) obj {
 		static(28.0),
 	)
 	farForearm := imgLayer("forearm-far", 10, upperArmFInd, frames, "forearm-far", seg(forearmF, nil, false, func(p pose) float64 { return p.elbowF }))
+	farUpperArm := imgLayer("upper-arm-far", upperArmFInd, bodyInd, frames, "upper-arm-far", seg(upperArmF, armsSwapped, false, func(p pose) float64 { return p.armF }))
 	layers := []obj{
 		imgLayer("forearm-near", 1, upperArmNInd, frames, "forearm-near", seg(forearmN, nil, false, func(p pose) float64 { return p.elbowN })),
 		imgLayer("upper-arm-near", upperArmNInd, bodyInd, frames, "upper-arm-near", seg(upperArmN, armsSwapped, false, func(p pose) float64 { return p.armN })),
@@ -311,20 +312,18 @@ func clip(name string, frames float64, keys []kf) obj {
 		imgLayer("body", bodyInd, 0, frames, "body", bodyTr),
 		imgLayer("thigh-far", thighFInd, bodyInd, frames, "thigh-far", seg(thighF, legsSwapped, false, func(p pose) float64 { return p.legF })),
 		imgLayer("shin-far", 8, thighFInd, frames, "shin-far", seg(shinFarPart, nil, true, func(p pose) float64 { return p.kneeF })),
-		imgLayer("upper-arm-far", upperArmFInd, bodyInd, frames, "upper-arm-far", seg(upperArmF, armsSwapped, false, func(p pose) float64 { return p.armF })),
 		imgLayer("shadow", 11, 0, frames, "shadow", shadowTr),
 	}
 	if swordRig {
-		// The far forearm folds across the FRONT of the belly to reach the
-		// hilt, so it belongs in front of the torso — left in the far
-		// chain it disappears behind it and the character looks like it is
-		// holding the sword one-handed with a stump for the other arm. The
-		// far upper arm stays behind: its elbow sits out at the torso's
-		// leading edge, which is exactly where the arm should cross from
-		// behind the silhouette to in front of it.
-		layers = slices.Insert(layers, 7, farForearm)
+		// The whole far arm comes in front of the torso, because that is
+		// where it is: it reaches across the FRONT of the body to put its
+		// hand on the hilt. Left in the far chain the forearm vanishes
+		// behind the torso and the character reads as one-handed with a
+		// stump for the other arm; leaving the upper arm behind only moves
+		// the seam up to the shoulder.
+		layers = slices.Insert(layers, 7, farUpperArm, farForearm)
 	} else {
-		layers = slices.Insert(layers, len(layers)-1, farForearm)
+		layers = slices.Insert(layers, len(layers)-1, farUpperArm, farForearm)
 	}
 	if swordRig {
 		sword := imgLayer("sword", 16, forearmFInd, frames, "sword", transform(
