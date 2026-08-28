@@ -912,19 +912,24 @@ func slashClip() clipDef {
 // the impact squashes the body. It is also reachable on its own.
 func slash2Clip() clipDef {
 	from := carriedRest()
-	lift := highGrip(base().at(-3, -1).lean(-14).legs(-6, 8).knees(6, 10).nod(-8), 152, -12, 176)
-	liftDeep := highGrip(base().at(-4, -2).lean(-18).legs(-8, 12).knees(6, 12).nod(-10), 150, -6, 184)
-	// Same order as the first cut, further exaggerated: the step and the
-	// forward throw of the body land a beat before the blade does.
-	drive := highGrip(base().at(5, 6).lean(18).legs(8, -56).knees(0, 38).
-		shoulders(6, 1, -1, -1), 148, -8, 150)
-	chop := lowGrip(base().at(28, 9).lean(34).squash(104, 96).legs(0, -76).knees(0, 54).
-		shoulders(16, 4, -5, -2), 6, -52, -62)
-	hold := lowGrip(base().at(26, 10).lean(32).legs(0, -70).knees(2, 50).
-		shoulders(14, 4, -4, -2), 17, -65, -70)
+	// The windup goes the opposite way from the first cut's: the blade
+	// drops behind and swings back to horizontal while the knees fold,
+	// loading the legs underneath it.
+	sink := lowGrip(base().at(-4, 8).lean(-6).legs(-14, 10).knees(24, 18), 76, -65, 78)
+	sinkDeep := lowGrip(base().at(-6, 10).lean(-10).legs(-18, 12).knees(30, 22), 59, -35, 92)
+	// Hips and legs lead here too: they start unfolding while the blade is
+	// still down behind.
+	drive := lowGrip(base().at(4, 5).lean(6).legs(-30, 22).knees(16, 6), 84, -84, 55)
+	// Then the blade comes up through the front and keeps going. The far
+	// shoulder drops back out of the way so the near arm can run out
+	// along the rising line instead of jamming into its own shoulder.
+	rise := lowGrip(base().at(14, 2).lean(-4).squash(97, 104).legs(-20, 16).
+		shoulders(6, -2, -16, 4), -67, -98, -150)
+	top := lowGrip(base().at(12, 2).lean(-6).legs(-18, 14).
+		shoulders(8, -2, -16, 4), -84, -90, -165)
 	return def("slash-2-anim", 30,
-		k(0, from, true), k(7, lift, true), k(11, liftDeep, true),
-		k(13, drive, false), k(16, chop, false), k(22, hold, true),
+		k(0, from, true), k(6, sink, true), k(10, sinkDeep, true),
+		k(13, drive, false), k(16, rise, false), k(21, top, true),
 		k(30, from, true))
 }
 
@@ -938,16 +943,19 @@ func thrustClip() clipDef {
 	ready := carriedRest()
 	chamber := lowGrip(base().at(-4, 1).lean(-8).legs(-14, 12).knees(12, 14).nod(-3), 5, 80, -90)
 	coil := lowGrip(base().at(-6, 2).lean(-11).legs(-18, 14).knees(16, 16).nod(-4), 8, 84, -90)
-	// The point goes out on the ARMS, not just on the body: the near
-	// shoulder drives forward, the far elbow tucks at the waist and the
-	// forearm drives the hilt out past the chest, so the whole weapon is
-	// ahead of the character instead of the blade alone. The body then
-	// travels less than it used to, because the tip would otherwise run
-	// off the canvas.
-	lunge := lowGrip(base().at(10, 7).lean(12).legs(-57, 16).knees(50, 0).
-		shoulders(16, 2, 2, -2), 17, -129, -90)
-	reach := lowGrip(base().at(12, 7).lean(13).legs(-59, 17).knees(48, 0).
-		shoulders(18, 2, 3, -2), 13, -126, -90)
+	// Both arms run out straight, which the rig cannot do from the
+	// shoulders where they rest: two arms of equal length reaching from
+	// two points side by side can only meet straight up or straight down,
+	// never out in front. So the near shoulder slides across to sit just
+	// behind the far one, putting both roots on the line of the thrust —
+	// then both arms extend along it and the two hands land the width of
+	// the grip apart. The hips stay put and the front leg carries the
+	// lunge; the arms alone push the tip about as far as the canvas has
+	// room for.
+	lunge := lowGrip(base().at(0, 7).lean(10).legs(-57, 16).knees(50, 0).
+		shoulders(36, -1, 0, -2), -55, -82, -90)
+	reach := lowGrip(base().at(2, 7).lean(11).legs(-59, 17).knees(48, 0).
+		shoulders(36, -1, 0, -2), -56, -84, -90)
 	return def("thrust-anim", 26,
 		k(0, ready, true), k(6, chamber, true), k(9, coil, true),
 		k(12, lunge, false), k(17, reach, true), k(26, ready, true))
