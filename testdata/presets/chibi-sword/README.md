@@ -119,9 +119,12 @@ The five weapon clips set the blade per pose instead.
   giving ground behind it. That last one is not decoration: once the arm
   is straight, rotation has nothing left to give, and the root is the
   only thing that can still travel. The leading knee folds deep under
-  all of it, which is where the weight reads from. slash-2 is the same
-  shape heavier — blade hauled fully vertical, a bigger step, the body
-  squashing on impact.
+  all of it, which is where the weight reads from. slash-2 answers it
+  from the other direction: a rising cut. The blade drops behind to
+  horizontal while the knees fold under it, then comes up through the
+  front and finishes high and forward. Two downward cuts back to back
+  read as the same attack played twice, however different the numbers
+  are; up after down is a combo.
 - thrust — the lunging stab. The blade stays LEVEL throughout, and the
   point goes out on the ARMS as much as the body: the near shoulder
   drives forward, the far elbow tucks at the waist and its forearm
