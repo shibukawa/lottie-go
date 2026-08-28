@@ -12,6 +12,7 @@ import (
 	"image/color"
 	"image/png"
 	"math"
+	"slices"
 )
 
 // mat is a 2x3 affine matrix mapping (x,y) to (a*x+c*y+tx, b*x+d*y+ty).
@@ -153,7 +154,7 @@ func bodyOf(p pose) part {
 
 // renderPose draws the whole character into a canvas-sized frame,
 // back to front.
-func renderPose(p pose) *image.NRGBA {
+func renderPose(p pose, bladeFront bool) *image.NRGBA {
 	frame := image.NewNRGBA(image.Rect(0, 0, int(canvas), int(canvas)))
 	bg := color.NRGBA{58, 63, 84, 255}
 	for i := range frame.Pix {
@@ -204,10 +205,14 @@ func renderPose(p pose) *image.NRGBA {
 		world   mat
 		opacity float64
 	}
-	// Reverse of the clip's front-to-back layer order.
+	// Reverse of the clip's front-to-back layer order, sword included:
+	// carried it sits with its own arm in the far chain, wielded it
+	// comes forward to just under the near hand.
+	fArmF := seg(uArmF, forearmF, p.elbowF)
+	sword := draw{swordPart, seg(fArmF, swordPart, p.blade), p.alpha}
 	order := []draw{
 		{shadowPart, shadow, 28},
-		{forearmF, seg(uArmF, forearmF, p.elbowF), p.alpha},
+		{forearmF, fArmF, p.alpha},
 		{upperArmF, uArmF, p.alpha},
 		{shinFarPart, mirrored(thF, shinFarPart, p.kneeF), p.alpha},
 		{thighF, thF, p.alpha},
@@ -219,9 +224,11 @@ func renderPose(p pose) *image.NRGBA {
 		{forearmN, seg(uArmN, forearmN, p.elbowN), p.alpha},
 	}
 	if swordRig {
-		// Gripped by the far forearm, drawn last: frontmost, like the clip.
-		fArmF := seg(uArmF, forearmF, p.elbowF)
-		order = append(order, draw{swordPart, seg(fArmF, swordPart, p.blade), p.alpha})
+		at := 1 // behind the far arm, ahead of the shadow
+		if bladeFront {
+			at = len(order) - 1 // behind the near hand, ahead of the rest
+		}
+		order = slices.Insert(order, at, sword)
 	}
 	for _, d := range order {
 		drawPart(frame, d.pt.render(), d.world, d.opacity)
@@ -237,7 +244,7 @@ func previewSheet(defs []clipDef, cols int) ([]byte, error) {
 	for row, d := range defs {
 		for col := range cols {
 			t := d.frames * float64(col) / float64(cols-1)
-			frame := renderPose(poseAt(d.keys, t))
+			frame := renderPose(poseAt(d.keys, t), d.bladeFront)
 			for y := range cell {
 				for x := range cell {
 					sheet.SetNRGBA(col*cell+x, row*cell+y, frame.NRGBAAt(x, y))

@@ -106,10 +106,15 @@ Its decisions generalize to any held prop:
 - **Parent it to the far (leading) forearm.** Strikes lead with the
   far-side limb, so a weapon there reaches the enemy in front, and it
   swings with the arm for free — no separate weapon keyframes.
-- **List its layer first (frontmost) anyway.** Depth-correct order puts
-  the far chain behind the torso, which swallows a blade in the middle
-  of a horizontal cut. A weapon that vanishes mid-swing is a worse lie
-  than one that is always visible.
+- **Choose its depth per clip, not once.** While the weapon is in use,
+  lift its layer out of the far chain and draw it over the body (just
+  under the near hand, so the grip still reads) — depth-correct order
+  puts the far chain behind the torso, which swallows a blade in the
+  middle of a cut. While it is merely carried, leave it in the far chain
+  with the arm holding it: in a gait that arm swings behind the body
+  half the time, and a prop pinned to the front there floats over a
+  torso its own hand is behind. Deciding per clip rather than per pose
+  keeps the switch off-screen — a hold-keyed depth flip mid-swing pops.
 - **Draw it hanging straight down from the grip and symmetric**, at full
   brightness. Symmetric means a turn (which mirrors head and shoes)
   needs no mirrored copy; full brightness keeps it from reading as
