@@ -7,6 +7,7 @@ package main
 
 import (
 	"encoding/json"
+	"slices"
 
 	lottie "github.com/shibukawa/lottie-go"
 )
@@ -65,18 +66,14 @@ func to(state string, guards ...lottie.Guard) lottie.Transition {
 // editor's Restart pseudo-event (or a fresh player) leaves it, and the
 // game is expected to stop firing events.
 //
-// The sword variant keeps every verb but kick2 — a swordsman answers a
-// second attack with the weapon — and adds slash, slash2 and thrust,
-// wired like the punches: slash chains into slash2, and both slash2 and
-// thrust are also reachable straight from idle.
+// The sword variant drops the punches (both hands stay on the hilt) and
+// the spinning kick, and adds slash, slash2 and thrust: slash chains
+// into slash2 the way punch chained into punch2, and slash2 and thrust
+// are also reachable straight from idle.
 func chibiMachine(sword bool) *lottie.StateMachine {
 	grounded := boolIs("grounded", true)
 	done := event("clipDone")
-	attacks := []lottie.Transition{
-		to("punch-state", event("punch")),
-		to("punch-2-state", event("punch2")),
-		to("kick-state", event("kick")),
-	}
+	attacks := []lottie.Transition{}
 	inputs := []lottie.Input{
 		{Type: lottie.InputEvent, Name: "walk"},
 		{Type: lottie.InputEvent, Name: "run"},
@@ -84,10 +81,18 @@ func chibiMachine(sword bool) *lottie.StateMachine {
 		{Type: lottie.InputEvent, Name: "turn"},
 		{Type: lottie.InputEvent, Name: "jump"},
 		{Type: lottie.InputEvent, Name: "slide"},
-		{Type: lottie.InputEvent, Name: "punch"},
-		{Type: lottie.InputEvent, Name: "punch2"},
-		{Type: lottie.InputEvent, Name: "kick"},
 	}
+	// The armed character has no punches: both hands stay on the hilt.
+	if !sword {
+		attacks = append(attacks,
+			to("punch-state", event("punch")),
+			to("punch-2-state", event("punch2")))
+		inputs = append(inputs,
+			lottie.Input{Type: lottie.InputEvent, Name: "punch"},
+			lottie.Input{Type: lottie.InputEvent, Name: "punch2"})
+	}
+	attacks = append(attacks, to("kick-state", event("kick")))
+	inputs = append(inputs, lottie.Input{Type: lottie.InputEvent, Name: "kick"})
 	if sword {
 		attacks = append(attacks,
 			to("slash-state", event("slash")),
@@ -188,14 +193,17 @@ func chibiMachine(sword bool) *lottie.StateMachine {
 			to("fall-loop-state", done),
 		}), 480, 430),
 		// Column 3: attacks and defense.
-		at(onceState("punch-state", "punch-anim", []lottie.Transition{
-			to("punch-2-state", event("punch")),
-			to("idle-state", done),
-		}), 40, 430),
-		at(onceState("punch-2-state", "punch-2-anim", []lottie.Transition{
-			to("idle-state", done),
-		}), 40, 560),
 		at(onceState("kick-state", "kick-anim", kickTransitions), 260, 430),
+	}
+	if !sword {
+		states = slices.Insert(states, len(states)-1,
+			at(onceState("punch-state", "punch-anim", []lottie.Transition{
+				to("punch-2-state", event("punch")),
+				to("idle-state", done),
+			}), 40, 430),
+			at(onceState("punch-2-state", "punch-2-anim", []lottie.Transition{
+				to("idle-state", done),
+			}), 40, 560))
 	}
 	// The weapon (or the spin kick it replaces) sits with the rest of the
 	// attacks, so the graph reads the same in both presets.

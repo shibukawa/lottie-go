@@ -14,17 +14,20 @@ per_kind:
     - kick
     - kick-2            # spinning high kick, punch-2 pattern on the legs: face-on knee-fold chamber, spin to back view (body-back + one-eyed head-side), near leg whips up from leading edge; kick combo follow-up or direct kick2 event
     - jump-kick
-  one-hand-sword:       # built as chibi-sword: chibi-male rig + sword slot, kick-2 dropped
-    - slash             # diagonal downward cut; windup lifts the HAND (upper arm ~140deg), not just the blade, or the fist parks behind the hip and the sword reads as sticking out of the back; ~185deg of travel in 2 linear frames
+  two-hand-sword:       # built as chibi-sword: chibi-male rig + sword slot; punch/punch2/kick-2 dropped (both hands stay on the hilt)
+    - slash             # diagonal downward cut; windup lifts the HANDS over the head, not just the blade, or the hilt parks at the hip and the sword reads as sticking out of the back; ~200deg of travel in 2 linear frames
     - slash-2           # combo follow-up: overhead chop, blade hauled vertical, step in, squash on impact; also direct via slash2
-    - thrust            # lunging stab: blade stays LEVEL while the arm extends - arm and blade angles authored to cancel so the point tracks straight
+    - thrust            # lunging stab: blade stays LEVEL while the hands push from the hip; reach comes from the lunge + blade length, NOT from extending the arms
+    - guard/guard-hit   # blocks with the weapon: hands at the belly, blade stood up in front (covers torso+head at this length)
   sword_rig:
-    slot: {name: sword, size: 21x54, anchor: [10,10], parent: forearm-far, attach: [7,26]}
+    slot: {name: sword, size: 21x78, anchor: [10,10], parent: forearm-far, attach: [7,26]}
     hand: far (leading) - same limb every strike leads with, so the weapon swings with it for free
     depth: layer listed FIRST (frontmost) despite hanging off the far chain; depth-correct order buries the blade in the torso mid-cut
     art: hangs straight down from the grip, left/right symmetric (a turn mirrors head+shoes; symmetry needs no second drawing), NOT dimmed like the rest of the far chain
-    carry: inherited clips are not re-posed - blade angle is derived per key to hold a fixed angle to the TORSO (tips with the body, stops flailing with the arm swing); only weapon attacks author blade per pose
+    carry: inherited clips are not re-posed - blade angle is derived per key to hold a fixed angle to the TORSO (tips with the body, stops flailing with the arm swing); weapon clips author blade per pose
+    carry_per_clip: a long blade needs its own carry angle where the torso is already near horizontal (death, slide) or the point drags through the floor
     lean: blade world angle = body lean + arm + elbow + blade; a deep lean must be compensated or the tip points at the floor
+    two_handed: shoulders are 42px apart, an arm reaches 41px - the hands can NEVER meet at arm's length. Two-handed poses keep both hands near the body centerline and let blade length do the reaching (which is how a two-handed sword is really held). Solve the second arm as a two-link chain onto the handle (gripped ~6px toward the pommel from the leading hand) and make out-of-reach poses a generator error, not a clamp
   magic-staff:
     - cast              # quick projectile
     - cast-charge       # hold then release
