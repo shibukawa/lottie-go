@@ -210,7 +210,6 @@ func renderPose(p pose) *image.NRGBA {
 	sword := draw{swordPart, seg(fArmF, swordPart, p.blade), p.alpha}
 	order := []draw{
 		{shadowPart, shadow, 28},
-		{forearmF, fArmF, p.alpha},
 		{upperArmF, uArmF, p.alpha},
 		{shinFarPart, mirrored(thF, shinFarPart, p.kneeF), p.alpha},
 		{thighF, thF, p.alpha},
@@ -221,9 +220,14 @@ func renderPose(p pose) *image.NRGBA {
 		{upperArmN, uArmN, p.alpha},
 		{forearmN, seg(uArmN, forearmN, p.elbowN), p.alpha},
 	}
+	// The far forearm comes in front of the torso for the sword rig, where
+	// it folds across the belly onto the hilt; the sword sits just behind
+	// the near hand. Both match the clip builder.
 	if swordRig {
-		// Behind the near hand, ahead of everything else — like the clip.
+		order = slices.Insert(order, 5, draw{forearmF, fArmF, p.alpha})
 		order = slices.Insert(order, len(order)-1, sword)
+	} else {
+		order = slices.Insert(order, 1, draw{forearmF, fArmF, p.alpha})
 	}
 	for _, d := range order {
 		drawPart(frame, d.pt.render(), d.world, d.opacity)
