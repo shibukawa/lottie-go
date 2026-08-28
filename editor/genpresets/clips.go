@@ -328,14 +328,18 @@ func idleClip() clipDef {
 // therefore ENDS facing the other way; the game flips its Mirrored flag
 // when the turn completes, and the mirrored idle matches the end pose.
 func idleTurnClip() clipDef {
+	// Like walk-turn, the standing turn goes through the camera side:
+	// front views only, a slight scale-up passing the viewer, and the
+	// mirror lands on a self-mirror pose — limbs straight, joints at
+	// zero — so the geometry never jumps and nothing bends the wrong
+	// way. The end pose is the rest pose negated in place.
 	rest := base().elbows(-8, -8).knees(3, 3)
-	windup := base().lean(-4).arms(20, -20).elbows(-16, -16).legs(-6, 6).knees(6, 6).at(0, -1).aside()
-	swapped := base().lean(4).arms(-20, 20).elbows(16, 16).legs(6, -6).knees(-6, -6).at(0, -1).aside().turned()
-	settle := base().arms(-10, 10).elbows(12, 12).legs(3, -3).knees(-4, -4).turned()
+	gatherA := base().at(0, -1).arms(12, -12).elbows(-2, -2).legs(-4, 4).knees(1, 1).squash(103, 103)
+	gatherB := base().at(0, -1).arms(-12, 12).elbows(2, 2).legs(4, -4).knees(-1, -1).squash(103, 103).turned()
 	mirroredRest := base().elbows(8, 8).knees(-3, -3).turned()
 	return def("idle-turn-anim", 20,
-		k(0, rest, true), k(6, windup, true), k(10, swapped, true),
-		k(14, settle, true), k(20, mirroredRest, true))
+		k(0, rest, true), k(9, gatherA, true), k(11, gatherB, true),
+		k(20, mirroredRest, true))
 }
 
 func walkClip() clipDef {

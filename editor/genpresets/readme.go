@@ -75,19 +75,18 @@ returns by itself through the machine.
 
 - idle / walk / run / slide — ground movement. There is no dash clip: a
   dash is run played faster (per-state speed or ` + "`SetSpeed`" + `).
-- idle-turn / run-turn — the character rotates through its rear: head
-  and torso step through their side drawings (head-side shows the back
-  of the head with one eye, body-side is the thinned torso), the limb
-  chains trade sides at the midpoint, and the views cut on hold
-  keyframes — no morphing.
-- walk-turn — rotates through the CAMERA side instead: the front stays
-  visible the whole way, growing a touch as it passes the viewer, and
-  the drawing mirrors at the midpoint on a self-mirror pose — limbs
-  near straight, joints at zero, since a bent joint carried across the
-  flip would kink the wrong way — so the geometry holds still while
-  the near/far identities trade (a game-friendly lie), and the clip
-  runs from the walk's contact pose to its mirror so the reversed walk
-  picks up seamlessly.
+- idle-turn / walk-turn — rotate through the CAMERA side: the front
+  stays visible the whole way, growing a touch as it passes the
+  viewer, and the drawing mirrors at the midpoint on a self-mirror
+  pose — limbs near straight, joints at zero, since a bent joint
+  carried across the flip would kink the wrong way — so the geometry
+  holds still while the near/far identities trade (a game-friendly
+  lie). Each runs from its gait's rest/contact pose to that pose's
+  in-place negation, so the mirrored gait picks up seamlessly.
+- run-turn — rotates through its rear instead: head and torso step
+  through their side drawings (head-side shows the back of the head
+  with one eye, body-side is the thinned torso), the limb chains trade
+  sides at the midpoint, and the views cut on hold keyframes.
   All turn clips end facing the other way, so the game flips its
   Mirrored flag when the turn completes; the mirrored gait then
   matches the end pose.
