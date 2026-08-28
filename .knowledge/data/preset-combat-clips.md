@@ -22,7 +22,7 @@ per_kind:
   sword_rig:
     slot: {name: sword, size: 21x78, anchor: [10,10], parent: forearm-far, attach: [7,26]}
     hand: far (leading) - same limb every strike leads with, so the weapon swings with it for free
-    depth: layer listed FIRST (frontmost) despite hanging off the far chain; depth-correct order buries the blade in the torso mid-cut
+    depth: per CLIP, not global. Weapon clips lift the layer out of the far chain to just under the near hand (over the body) - depth-correct order buries the blade in the torso mid-cut. Carried clips leave it in the far chain with its own arm: in a gait the far arm swings behind the body half the time and a front-pinned blade floats over a torso its own hand is behind (user feedback 2026-08). Per-clip, not per-pose: a hold-keyed depth flip mid-swing pops
     art: hangs straight down from the grip, left/right symmetric (a turn mirrors head+shoes; symmetry needs no second drawing), NOT dimmed like the rest of the far chain
     carry: inherited clips are not re-posed - blade angle is derived per key to hold a fixed angle to the TORSO (tips with the body, stops flailing with the arm swing); weapon clips author blade per pose
     carry_per_clip: a long blade needs its own carry angle where the torso is already near horizontal (death, slide) or the point drags through the floor

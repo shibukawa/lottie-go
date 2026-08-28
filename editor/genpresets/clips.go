@@ -92,7 +92,16 @@ type clipDef struct {
 	name   string
 	frames float64
 	keys   []kf
+	// bladeFront lifts the sword out of its depth-correct place in the
+	// far chain and draws it over the body. That is right only while the
+	// weapon is being used in front of the character: in a gait the far
+	// arm swings BEHIND the body half the time, and a blade pinned to the
+	// front there floats over a torso its own hand is behind.
+	bladeFront bool
 }
+
+// wielded marks a clip as using the weapon in front of the body.
+func (d clipDef) wielded() clipDef { d.bladeFront = true; return d }
 
 func def(name string, frames float64, keys ...kf) clipDef {
 	return clipDef{name: name, frames: frames, keys: keys}
@@ -202,7 +211,7 @@ func holdTrack(keys []kf, get func(pose) []float64) obj {
 // the body. Layer order is front to back: the near arm chain crosses in
 // front of the face on a punch, the near leg chain in front of the body,
 // far chains behind everything but the shadow.
-func clip(name string, frames float64, keys []kf) obj {
+func clip(name string, frames float64, keys []kf, bladeFront bool) obj {
 	const (
 		bodyInd      = 6
 		upperArmNInd = 2
@@ -315,16 +324,22 @@ func clip(name string, frames float64, keys []kf) obj {
 		imgLayer("shadow", 11, 0, frames, "shadow", shadowTr),
 	}
 	if swordRig {
-		// The blade hangs off the far forearm but draws in front of
-		// everything: a weapon swallowed by the torso mid-swing is worse
-		// than the small depth lie of one that never is.
-		layers = append([]obj{imgLayer("sword", 16, forearmFInd, frames, "sword", transform(
+		sword := imgLayer("sword", 16, forearmFInd, frames, "sword", transform(
 			static([]float64{swordPart.anchor[0], swordPart.anchor[1]}),
 			static([]float64{swordPart.pos[0], swordPart.pos[1]}),
 			static([]float64{100, 100}),
 			track(keys, scalar(func(p pose) float64 { return p.blade })),
 			track(keys, scalar(func(p pose) float64 { return p.alpha })),
-		))}, layers...)
+		))
+		// Wielded, the blade goes just behind the near hand — over the
+		// body, under the fingers gripping it. Carried, it stays where its
+		// own arm is, in the far chain, so it passes behind the torso
+		// exactly when the hand holding it does.
+		at := len(layers) - 1 // behind the far arm, ahead of the shadow
+		if bladeFront {
+			at = 1 // behind the near hand, ahead of everything else
+		}
+		layers = slices.Insert(layers, at, sword)
 	}
 	return doc(name, frames, layers)
 }
@@ -630,7 +645,7 @@ func carry(d clipDef, deg float64) clipDef {
 		key.p.blade = deg - key.p.armF - key.p.elbowF
 		keys[i] = key
 	}
-	return clipDef{name: d.name, frames: d.frames, keys: keys}
+	return clipDef{name: d.name, frames: d.frames, keys: keys, bladeFront: d.bladeFront}
 }
 
 // carryAngleFor is how far off the body's own axis the wrist holds the
@@ -828,8 +843,8 @@ func chibiSwordDefs() []clipDef {
 		kickClip(), jumpKickClip(),
 	)
 	return append(defs,
-		slashClip(), slash2Clip(), thrustClip(),
-		swordGuardClip(), swordGuardHitClip())
+		slashClip().wielded(), slash2Clip().wielded(), thrustClip().wielded(),
+		swordGuardClip().wielded(), swordGuardHitClip().wielded())
 }
 
 // chibiMaleDefs is every clip in the preset, in preview-sheet row order.
@@ -847,7 +862,7 @@ func chibiMaleDefs() []clipDef {
 func clipsOf(defs []clipDef) map[string]obj {
 	m := map[string]obj{}
 	for _, d := range defs {
-		m[d.name] = clip(d.name, d.frames, d.keys)
+		m[d.name] = clip(d.name, d.frames, d.keys, d.bladeFront)
 	}
 	return m
 }

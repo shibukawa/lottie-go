@@ -38,10 +38,15 @@ Three things about the weapon are deliberate:
   edge and reaches the enemy in front instead of crossing the body. The
   weapon follows the same rule, and swings with the arm it is parented
   to for free.
-- **It draws in front of everything, though it hangs off the far arm.**
-  Depth-correct layering would bury the blade inside the torso in the
-  middle of a horizontal cut. A weapon that disappears mid-swing is a
-  worse lie than one that is always visible.
+- **Its depth follows what the character is doing, per clip.** While the
+  weapon is being used the blade is lifted out of the far chain and
+  drawn over the body (under the near hand, so the grip still reads),
+  because depth-correct layering would bury it inside the torso in the
+  middle of a cut. While the sword is merely carried it stays in the far
+  chain with the arm holding it — in a gait that arm swings BEHIND the
+  body half the time, and a blade pinned to the front there floats over
+  a torso its own hand is behind. Clips declare this with
+  `wielded()`; a per-clip choice means no depth pops mid-swing.
 - **The second hand is solved, not eyeballed.** Weapon poses are
   two-handed: the near arm is fitted to the handle by a two-link solve
   (the generator's `held`), so the grip lands exactly and stays
@@ -98,9 +103,12 @@ additionally chains into slash2 the way punch chained into punch2.
 
 ## Rules for editing
 
-Same as chibi-male, plus: the sword layer is parented to forearm-far and
-listed FIRST in the layer array. Keep it there — moving it later in the
-array is what makes a blade vanish behind the torso.
+Same as chibi-male, plus: the sword layer is parented to forearm-far,
+and where it sits in the layer array is the depth decision above —
+second (just under the near hand) in the weapon clips, second-to-last
+(with the far arm, just over the shadow) everywhere else. Moving it
+forward in a gait clip is what makes a blade float over the body while
+the hand holding it is behind.
 
 preview.png is a contact sheet of every clip sampled six times, rendered
 straight from the pose data by the generator.
