@@ -99,9 +99,9 @@ example to copy when a character carries anything:
 
 | slot  | size  | anchor  | parent      | attach |
 |-------|-------|---------|-------------|--------|
-| sword | 21x54 | (10,10) | forearm-far | (7,26) |
+| sword | 21x78 | (10,10) | forearm-far | (7,26) |
 
-Its three decisions generalize to any held prop:
+Its decisions generalize to any held prop:
 
 - **Parent it to the far (leading) forearm.** Strikes lead with the
   far-side limb, so a weapon there reaches the enemy in front, and it
@@ -120,7 +120,18 @@ is derived per keyframe to hold a fixed angle to the *torso*, so the
 sword tips with the body but does not flail with every arm swing. Note
 that a blade's on-screen angle is `body lean + shoulder + elbow + blade`
 — a clip with a deep lean needs that compensated or the tip points at
-the floor.
+the floor, and a long weapon needs its own carry angle in clips whose
+torso is already near horizontal (death, slide).
+
+**Two-handed poses are geometrically constrained.** The shoulders sit
+42px apart and an arm reaches 41px, so the two hands can never meet out
+at arm's length: a two-handed pose must keep them near the body's
+centerline and let the weapon's length do the reaching — which is how a
+two-handed sword is really held, and why the thrust travels with the
+body instead of extending the arms. Solve the second arm rather than
+eyeballing it (the generator fits it as a two-link chain onto the
+handle) and make an out-of-reach pose an error, or you get a hand
+grasping at air beside the hilt.
 
 ## Adding or removing slots
 

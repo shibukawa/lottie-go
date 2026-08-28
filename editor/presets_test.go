@@ -103,8 +103,8 @@ func TestChibiSwordPreset(t *testing.T) {
 	if probs := m.Problems(); len(probs) != 0 {
 		t.Fatalf("validation problems: %v", probs)
 	}
-	if got := len(m.AnimationIDs()); got != 21 {
-		t.Errorf("AnimationIDs() = %d clips; want 21", got)
+	if got := len(m.AnimationIDs()); got != 19 {
+		t.Errorf("AnimationIDs() = %d clips; want 19", got)
 	}
 
 	sm := m.Preview()
@@ -122,18 +122,19 @@ func TestChibiSwordPreset(t *testing.T) {
 	fire(t, m, "thrust", "thrust-state", 10)
 	settle(t, sm, "idle-state", 80)
 
-	// The unarmed vocabulary is intact, but the spin kick is gone: the
-	// swordsman answers a second attack with the weapon.
-	fire(t, m, "punch", "punch-state", 10)
-	fire(t, m, "punch", "punch-2-state", 10)
-	settle(t, sm, "idle-state", 80)
+	// The kick survives; the punches and the spin kick do not, because
+	// both hands stay on the hilt.
 	fire(t, m, "kick", "kick-state", 10)
 	settle(t, sm, "idle-state", 80)
-	if slices.Contains(m.AnimationIDs(), "kick-2-anim") {
-		t.Error("kick-2-anim is still in the sword preset")
+	for _, gone := range []string{"punch-anim", "punch-2-anim", "kick-2-anim"} {
+		if slices.Contains(m.AnimationIDs(), gone) {
+			t.Errorf("%s is still in the sword preset", gone)
+		}
 	}
-	if !slices.Contains(m.AnimationIDs(), "slash-anim") {
-		t.Error("slash-anim is missing from the sword preset")
+	for _, want := range []string{"slash-anim", "slash-2-anim", "thrust-anim"} {
+		if !slices.Contains(m.AnimationIDs(), want) {
+			t.Errorf("%s is missing from the sword preset", want)
+		}
 	}
 }
 

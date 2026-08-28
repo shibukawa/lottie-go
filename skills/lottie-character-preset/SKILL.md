@@ -12,10 +12,11 @@ they share, and a wired state machine a game drives by verbs
 repository and are meant to be copied into a game and customized:
 
 - `chibi-male` — 2.5 heads, unarmed, 19 clips. The base rig.
-- `chibi-sword` — the same rig with a sword slot, 21 clips: the spinning
-  kick swapped for `slash` / `slash-2` / `thrust`. Start here for any
-  character that carries something; how the weapon is parented, layered
-  and drawn is in [references/rig.md](references/rig.md).
+- `chibi-sword` — the same rig with a sword slot, 19 clips: a long
+  two-handed blade, no punches, and `slash` / `slash-2` / `thrust` plus
+  a weapon guard. Start here for any character that carries something;
+  how the weapon is parented, layered, drawn and gripped with two hands
+  is in [references/rig.md](references/rig.md).
 
 The design that makes automated editing safe: characters are **raster
 cutout rigs**. Part images (head, torso, limb segments) are moved by
