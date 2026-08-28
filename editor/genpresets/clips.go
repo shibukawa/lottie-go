@@ -671,26 +671,44 @@ func holdArc(name string) (float64, float64) {
 	return 45, 45
 }
 
+// lowGrip is the far arm folded onto the hilt at the body's centerline:
+// upper arm hanging at the side, forearm angled in across the belly.
+// This is the shape every low two-handed pose uses. The alternative the
+// solver offers — swinging the upper arm back to horizontal and folding
+// the elbow hard — reaches the same point, but parks the elbow up at
+// shoulder height where the head hides it, and the visible bend then
+// reads backwards.
+func lowGrip(p pose, armF, elbowF, world float64) pose {
+	if p.flip {
+		armF, elbowF = -armF, -elbowF
+	}
+	p.armF, p.elbowF = armF, elbowF
+	p.blade = world - p.rot - armF - elbowF
+	return held(p)
+}
+
+// highGrip is the same idea overhead: the arm goes up nearly straight,
+// because at full stretch the hilt is at the limit of what the near arm
+// can still reach.
+func highGrip(p pose, armF, elbowF, world float64) pose {
+	return lowGrip(p, armF, elbowF, world)
+}
+
 func carry(d clipDef) clipDef {
 	from, to := holdArc(d.name)
 	keys := make([]kf, len(d.keys))
 	for i, key := range d.keys {
-		p := key.p
-		// The hilt has to land on the body's centerline: it is the only
-		// place both hands reach. Hanging the upper arm and folding the
-		// forearm in gets it there without the shoulder swinging back
-		// behind the torso, which is what an arm-first solution does.
-		armF, elbowF := 2.0, 72.0
-		if p.flip {
-			armF, elbowF = -armF, -elbowF
-		}
 		world := from + (to-from)*key.t/d.frames
-		p.armF, p.elbowF = armF, elbowF
-		p.blade = world - p.rot - armF - elbowF
-		key.p = held(p)
+		key.p = lowGrip(key.p, 2, 72, world)
 		keys[i] = key
 	}
 	return clipDef{name: d.name, frames: d.frames, keys: keys}
+}
+
+// carriedRest is the pose an attack starts and ends on: exactly the
+// carry, so a swing picks up from where idle left the character.
+func carriedRest() pose {
+	return lowGrip(base().lean(4).knees(3, 3), 2, 72, 45)
 }
 
 // --- The two-handed grip ---
@@ -776,12 +794,6 @@ func reaches(p pose, tx, ty float64) bool {
 
 func clamp1(v float64) float64 { return math.Max(-1, math.Min(1, v)) }
 
-// swordStance is the two-handed middle guard every weapon clip starts
-// and ends on: hands together at the belly, blade levelled forward.
-func swordStance() pose {
-	return held(base().lean(4).arms(0, 75).elbows(0, -60).legs(-12, 12).knees(8, 12).blades(-90))
-}
-
 // slashClip is the diagonal downward cut. The blade goes up and behind
 // the head first — the windup is what makes a swing read as heavy — and
 // the cut itself is two frames of linear travel through roughly 200
@@ -790,34 +802,46 @@ func slashClip() clipDef {
 	// The windup has to lift the HANDS, not just the blade: arms left low
 	// park the hilt at the hip and the sword reads as sticking out of the
 	// character's back rather than cocked over the head.
-	ready := swordStance()
-	raise := held(base().lean(-6).arms(0, 145).elbows(0, -10).legs(-10, 10).knees(8, 12).nod(-4).blades(30))
-	raiseDeep := held(base().at(-2, 0).lean(-10).arms(0, 150).elbows(0, -12).legs(-8, 8).knees(8, 12).nod(-6).blades(26))
-	// The cut finishes with the hands back at the belly and the blade
-	// swept past the target — the reach is the blade's job, not the
-	// arms', which cannot extend without tearing the second hand off.
-	cut := held(base().at(7, 0).lean(16).squash(103, 97).arms(0, 60).elbows(0, -55).legs(-16, 14).knees(6, 14).nod(6).blades(-55))
-	follow := held(base().at(5, 1).lean(18).arms(0, 58).elbows(0, -52).legs(-16, 14).knees(6, 14).nod(8).blades(-64))
+	ready := carriedRest()
+	raise := highGrip(base().lean(-8).legs(-4, 6).knees(4, 6).nod(-4), 140, -8, 148)
+	raiseDeep := highGrip(base().at(-2, 0).lean(-12).legs(-6, 10).knees(4, 8).nod(-6), 148, -10, 160)
+	// The hips go first. The body is already thrown forward and the stance
+	// already open here while the sword is still cocked overhead — a
+	// swing where the blade and the torso start together has no weight
+	// behind it.
+	// Leg angles are body-relative, so a forward lean eats the stance: at
+	// lean 24 a hip at -26 stands the leg dead vertical on screen. These
+	// are opened far enough to still read as a wide stance after the lean,
+	// and the hips drop to keep both feet on the ground.
+	drive := highGrip(base().at(2, 6).lean(15).legs(8, -40).knees(6, 8).nod(2), 145, -8, 138)
+	// Then the blade whips through. The hands finish high, around chin
+	// height, rather than back down at the belly: the hilt up there puts
+	// the whole blade out in front of the character instead of hanging it
+	// off a fist at the waist, which is most of the reach this attack has.
+	cut := lowGrip(base().at(12, 7).lean(24).squash(103, 97).legs(4, -52).knees(5, 10).nod(6), 72, 111, -42)
+	follow := lowGrip(base().at(10, 7).lean(22).legs(4, -48).knees(5, 12).nod(8), 66, 118, -56)
 	return def("slash-anim", 24,
 		k(0, ready, true), k(6, raise, true), k(9, raiseDeep, true),
-		k(12, cut, false), k(16, follow, true), k(24, ready, true))
+		k(11, drive, false), k(13, cut, false), k(17, follow, true),
+		k(24, ready, true))
 }
 
 // slash2Clip is the heavy overhead chop that follows the first cut: the
 // blade is hauled all the way vertical, the character steps into it, and
 // the impact squashes the body. It is also reachable on its own.
 func slash2Clip() clipDef {
-	from := swordStance()
-	lift := held(base().at(-3, -1).lean(-12).arms(0, 152).elbows(0, -12).legs(-8, 8).knees(8, 12).nod(-8).blades(35))
-	liftDeep := held(base().at(-4, -2).lean(-16).arms(0, 150).elbows(0, -6).legs(-6, 6).knees(8, 12).nod(-10).blades(32))
-	// The deep lean of the chop rotates the blade with it, so the angles
-	// here are ~20 degrees further open than the cut's to land the tip in
-	// the same place on screen.
-	chop := held(base().at(9, 2).lean(22).squash(104, 96).arms(0, 62).elbows(0, -58).legs(-20, 16).knees(8, 18).nod(10).blades(-62))
-	hold := held(base().at(8, 3).lean(24).arms(0, 60).elbows(0, -56).legs(-20, 16).knees(8, 18).nod(12).blades(-68))
+	from := carriedRest()
+	lift := highGrip(base().at(-3, -1).lean(-14).legs(-6, 8).knees(6, 10).nod(-8), 152, -12, 176)
+	liftDeep := highGrip(base().at(-4, -2).lean(-18).legs(-8, 12).knees(6, 12).nod(-10), 150, -6, 184)
+	// Same order as the first cut, further exaggerated: the step and the
+	// forward throw of the body land a beat before the blade does.
+	drive := highGrip(base().at(3, 7).lean(18).legs(6, -46).knees(8, 8).nod(2), 148, -8, 150)
+	chop := lowGrip(base().at(15, 8).lean(28).squash(104, 96).legs(0, -56).knees(6, 12).nod(10), 68, 115, -34)
+	hold := lowGrip(base().at(13, 8).lean(30).legs(-2, -54).knees(6, 14).nod(12), 62, 122, -50)
 	return def("slash-2-anim", 30,
 		k(0, from, true), k(7, lift, true), k(11, liftDeep, true),
-		k(14, chop, false), k(20, hold, true), k(30, from, true))
+		k(13, drive, false), k(16, chop, false), k(22, hold, true),
+		k(30, from, true))
 }
 
 // thrustClip is the lunging stab. The blade is chambered level at the
@@ -827,11 +851,11 @@ func slash2Clip() clipDef {
 func thrustClip() clipDef {
 	// Both hands stay on the hilt, so the distance comes from the lunge
 	// and the blade's own length rather than from an extending arm.
-	ready := swordStance()
-	chamber := held(base().at(-4, 1).lean(-8).arms(0, 85).elbows(0, -70).legs(-14, 12).knees(12, 14).nod(-3).blades(-105))
-	coil := held(base().at(-6, 2).lean(-11).arms(0, 90).elbows(0, -72).legs(-18, 14).knees(16, 16).nod(-4).blades(-108))
-	lunge := held(base().at(18, 4).lean(10).arms(0, 60).elbows(0, -50).legs(-36, 26).knees(14, 6).nod(4).blades(-100))
-	reach := held(base().at(21, 4).lean(11).arms(0, 58).elbows(0, -48).legs(-38, 27).knees(13, 5).nod(4).blades(-99))
+	ready := carriedRest()
+	chamber := lowGrip(base().at(-4, 1).lean(-8).legs(-14, 12).knees(12, 14).nod(-3), 5, 80, -90)
+	coil := lowGrip(base().at(-6, 2).lean(-11).legs(-18, 14).knees(16, 16).nod(-4), 8, 84, -90)
+	lunge := lowGrip(base().at(18, 4).lean(10).legs(-36, 26).knees(14, 6).nod(4), -5, 70, -88)
+	reach := lowGrip(base().at(21, 4).lean(11).legs(-38, 27).knees(13, 5).nod(4), -8, 66, -87)
 	return def("thrust-anim", 26,
 		k(0, ready, true), k(6, chamber, true), k(9, coil, true),
 		k(12, lunge, false), k(17, reach, true), k(26, ready, true))
@@ -841,8 +865,8 @@ func thrustClip() clipDef {
 // blade stood up in front of the body, which covers torso and head at
 // this blade length.
 func swordGuardStance() pose {
-	return held(base().at(0, 3).lean(6).squash(103, 98).
-		arms(0, 72).elbows(0, -58).legs(-12, 12).knees(10, 14).nod(3).blades(156))
+	return lowGrip(base().at(0, 3).lean(6).squash(103, 98).
+		legs(-12, 12).knees(10, 14).nod(3), 8, 76, 170)
 }
 
 func swordGuardClip() clipDef {
@@ -856,8 +880,8 @@ func swordGuardHitClip() clipDef {
 	stance := swordGuardStance()
 	// The hit drives the whole guard back and rocks the blade off
 	// vertical; the hands stay locked on the hilt.
-	pushed := held(base().at(-8, 3).lean(-2).squash(103, 98).
-		arms(0, 78).elbows(0, -62).legs(-12, 12).knees(10, 14).nod(3).blades(150).fade(50))
+	pushed := lowGrip(base().at(-8, 3).lean(-2).squash(103, 98).
+		legs(-12, 12).knees(10, 14).nod(3).fade(50), 12, 80, 160)
 	back := stance.at(-4, 3)
 	return def("guard-hit-anim", 16,
 		k(0, stance, true), k(4, pushed, false), k(8, back, true), k(16, stance, true))

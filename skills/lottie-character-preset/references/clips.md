@@ -108,6 +108,30 @@ What matters when editing:
   game's `SetSpeed` when the request is "faster/slower overall" —
   keyframe surgery is for changing the *shape* of the timing.
 
+## Two joints that fool you
+
+Two rig quirks make authored numbers land somewhere other than you
+meant, and both bite hardest in attack poses:
+
+- **Limb and prop angles are body-relative, so a lean eats them.** What
+  shows on screen is `body lean + the limb's own rotation`. At a lean of
+  24 degrees a hip authored at -26 stands the leg dead vertical, and a
+  blade meant to sweep forward points at the floor instead. Open the
+  stance and the weapon by the lean as well, and drop the hips to put
+  the feet back on the ground.
+- **A folded arm has two solutions and only one of them reads.**
+  Reaching a hand to a fixed point (a hilt, a hip) can be done by
+  swinging the upper arm back to horizontal and folding the elbow hard,
+  or by leaving the upper arm hanging and folding the forearm in. Both
+  put the hand in the same place; the first parks the elbow up at
+  shoulder height where the head hides it, and the bend that stays
+  visible reads backwards. Prefer the hanging upper arm for low hands
+  and a near-straight arm for hands above the head.
+
+Order within a swing matters as much as the poses: throw the hips and
+open the stance a beat BEFORE the weapon moves. A swing whose torso and
+blade start on the same frame has no weight behind it.
+
 ## State machine JSON
 
 `work/machines/<id>.json` after a dump:
