@@ -45,6 +45,13 @@ Three things about the weapon are deliberate:
   character in every single clip: the first attempt let the far arm
   swing freely while carrying, and then the blade floated over a torso
   its own hand was behind.
+- **The far forearm comes forward with it**, ahead of the torso. It
+  folds across the FRONT of the belly to reach the hilt, so that is
+  where it belongs; left in the far chain it vanishes behind the torso
+  and the character reads as holding the sword one-handed, with a stump
+  for the other arm. The far upper arm stays behind, since its elbow
+  sits out at the torso's leading edge — exactly where an arm should
+  cross from behind the silhouette to in front of it.
 - **The second hand is solved, not eyeballed.** Weapon poses are
   two-handed: the near arm is fitted to the handle by a two-link solve
   (the generator's `held`), so the grip lands exactly and stays
