@@ -396,8 +396,8 @@ func runClip() clipDef {
 // whether to stand or to start the mirrored run.
 func runToIdleClip() clipDef {
 	from := base().legs(-50, 50).knees(15, 70).arms(40, -40).elbows(-40, -40).lean(12)
-	plant := base().at(2, 7).lean(-10).legs(25, -25).knees(30, 8).arms(90, 115).elbows(-8, -8).nod(-6).shade(112)
-	skid := base().at(3, 8).lean(-13).legs(20, -30).knees(28, 6).arms(100, 128).elbows(-6, -6).nod(-8).shade(118)
+	plant := base().at(2, 7).lean(-10).legs(25, -25).knees(30, 8).arms(-65, -85).elbows(-8, -8).nod(-6).shade(112)
+	skid := base().at(3, 8).lean(-13).legs(20, -30).knees(28, 6).arms(-75, -100).elbows(-6, -6).nod(-8).shade(118)
 	ease := base().at(1, 2).lean(-4).legs(-10, 8).knees(8, 8).arms(-8, 6).elbows(-12, -12).shade(104)
 	rest := base().elbows(-8, -8).knees(3, 3)
 	return def("run-to-idle-anim", 28,
