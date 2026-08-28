@@ -189,18 +189,21 @@ var upperArmArt = []string{
 	".OOO.",
 }
 
-// Sleeve end, bare forearm, red wrist wrap, bare fist.
+// Sleeve end, bare forearm, red wrist wrap, and an oversized fist. The
+// canvas is two art columns wider than the preset slot (21px, anchor
+// x=10) so the fist reads big; the clip JSONs carry the matching asset
+// width and anchor.
 var forearmArt = []string{
-	".OOO.",
-	"OWWWO",
-	"OWWWO",
-	"OwwwO",
-	"OPPPO",
-	"OPPPO",
-	"ORRRO",
-	"ORRRO",
-	"OPPPO",
-	".OOO.",
+	"..OOO..",
+	".OWWWO.",
+	".OwwwO.",
+	".OPPPO.",
+	".OPPPO.",
+	".ORRRO.",
+	".ORRRO.",
+	"OPPPPPO",
+	"OPPPPPO",
+	".OOOOO.",
 }
 
 // Gi trousers.
@@ -218,20 +221,24 @@ var thighArt = []string{
 	".OOOO.",
 }
 
-// Trouser hem, bare shin, bare foot with the toe pointing +x.
+// Trouser hem, bare shin, and an oversized bare foot with the toe
+// pointing +x. The canvas is two art columns longer toward the toe
+// (27px) than the preset slot; the anchor stays put because the extra
+// width is all on the +x side. The clip JSONs carry the matching asset
+// width.
 var shinArt = []string{
-	".OOOO..",
-	"OWWWWO.",
-	"OWWWWO.",
-	"OWWWWO.",
-	"OwwwwO.",
-	"OPPPPO.",
-	"OPPPPO.",
-	"OPPPPO.",
-	"OPPPPO.",
-	"OPPPPPO",
-	"OPPPPPO",
-	".OOOOO.",
+	".OOOO....",
+	"OWWWWO...",
+	"OWWWWO...",
+	"OWWWWO...",
+	"OwwwwO...",
+	"OPPPPO...",
+	"OPPPPO...",
+	"OPPPPO...",
+	"OPPPPOOO.",
+	"OPPPPPPPO",
+	"OPPPPPPPO",
+	".OOOOOOO.",
 }
 
 var shadowArt = []string{
@@ -258,12 +265,12 @@ var parts = []part{
 	{"chibi-male-body-back.png", bodyBackArt, false, 48, 48},
 	{"chibi-male-upper-arm-near.png", upperArmArt, false, 15, 27},
 	{"chibi-male-upper-arm-far.png", upperArmArt, true, 15, 27},
-	{"chibi-male-forearm-near.png", forearmArt, false, 15, 30},
-	{"chibi-male-forearm-far.png", forearmArt, true, 15, 30},
+	{"chibi-male-forearm-near.png", forearmArt, false, 21, 30},
+	{"chibi-male-forearm-far.png", forearmArt, true, 21, 30},
 	{"chibi-male-thigh-near.png", thighArt, false, 18, 33},
 	{"chibi-male-thigh-far.png", thighArt, true, 18, 33},
-	{"chibi-male-shin-near.png", shinArt, false, 21, 36},
-	{"chibi-male-shin-far.png", shinArt, true, 21, 36},
+	{"chibi-male-shin-near.png", shinArt, false, 27, 36},
+	{"chibi-male-shin-far.png", shinArt, true, 27, 36},
 	{"chibi-male-shadow.png", shadowArt, false, 84, 15},
 }
 
