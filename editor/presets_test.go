@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	lottie "github.com/shibukawa/lottie-go"
@@ -90,22 +91,70 @@ func TestChibiMalePreset(t *testing.T) {
 	settle(t, sm, "death-state", 120)
 }
 
-func TestChibiMaleDecodesClean(t *testing.T) {
-	data, err := os.ReadFile(presetPath("chibi-male"))
-	if err != nil {
-		t.Fatal(err)
+// The sword preset shares chibi-male's rig and clip vocabulary, so this
+// only pins down what differs: the extra weapon slot, the three sword
+// attacks with their combo, and the spin kick being gone.
+func TestChibiSwordPreset(t *testing.T) {
+	m := NewModel()
+	m.Open(presetPath("chibi-sword"))
+	if m.Machine() == nil {
+		t.Fatalf("no machine loaded: %s", m.Status())
 	}
-	b, err := lottie.DecodeBundle(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		t.Fatal(err)
+	if probs := m.Problems(); len(probs) != 0 {
+		t.Fatalf("validation problems: %v", probs)
 	}
-	for _, id := range b.AnimationIDs() {
-		a, err := b.Animation(id)
+	if got := len(m.AnimationIDs()); got != 21 {
+		t.Errorf("AnimationIDs() = %d clips; want 21", got)
+	}
+
+	sm := m.Preview()
+	if sm == nil {
+		t.Fatalf("preview did not start: %v", m.PreviewErr())
+	}
+
+	// slash chains into the overhead the way punch chains into punch2,
+	// and both weapon follow-ups also start on their own event.
+	fire(t, m, "slash", "slash-state", 10)
+	fire(t, m, "slash", "slash-2-state", 10)
+	settle(t, sm, "idle-state", 80)
+	fire(t, m, "slash2", "slash-2-state", 10)
+	settle(t, sm, "idle-state", 80)
+	fire(t, m, "thrust", "thrust-state", 10)
+	settle(t, sm, "idle-state", 80)
+
+	// The unarmed vocabulary is intact, but the spin kick is gone: the
+	// swordsman answers a second attack with the weapon.
+	fire(t, m, "punch", "punch-state", 10)
+	fire(t, m, "punch", "punch-2-state", 10)
+	settle(t, sm, "idle-state", 80)
+	fire(t, m, "kick", "kick-state", 10)
+	settle(t, sm, "idle-state", 80)
+	if slices.Contains(m.AnimationIDs(), "kick-2-anim") {
+		t.Error("kick-2-anim is still in the sword preset")
+	}
+	if !slices.Contains(m.AnimationIDs(), "slash-anim") {
+		t.Error("slash-anim is missing from the sword preset")
+	}
+}
+
+func TestPresetsDecodeClean(t *testing.T) {
+	for _, name := range []string{"chibi-male", "chibi-sword"} {
+		data, err := os.ReadFile(presetPath(name))
 		if err != nil {
-			t.Fatalf("%s: %v", id, err)
+			t.Fatal(err)
 		}
-		if notes := a.UnsupportedFeatures(); len(notes) > 0 {
-			t.Errorf("%s: unsupported features: %v", id, notes)
+		b, err := lottie.DecodeBundle(bytes.NewReader(data), int64(len(data)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, id := range b.AnimationIDs() {
+			a, err := b.Animation(id)
+			if err != nil {
+				t.Fatalf("%s/%s: %v", name, id, err)
+			}
+			if notes := a.UnsupportedFeatures(); len(notes) > 0 {
+				t.Errorf("%s/%s: unsupported features: %v", name, id, notes)
+			}
 		}
 	}
 }

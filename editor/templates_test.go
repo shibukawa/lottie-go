@@ -34,16 +34,18 @@ func TestTemplatesEmbedAndDecode(t *testing.T) {
 }
 
 func TestTemplateMatchesPreset(t *testing.T) {
-	data, err := templateBytes("chibi-male")
-	if err != nil {
-		t.Fatal(err)
-	}
-	disk, err := os.ReadFile(presetPath("chibi-male"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(data, disk) {
-		t.Error("embedded template drifted from testdata/presets; run `go run ./genpresets`")
+	for _, name := range templateNames() {
+		data, err := templateBytes(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		disk, err := os.ReadFile(presetPath(name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(data, disk) {
+			t.Errorf("%s: embedded template drifted from testdata/presets; run `go run ./genpresets`", name)
+		}
 	}
 }
 
