@@ -16,7 +16,7 @@ dialog offers stays `testdata/presets/chibi-male`.
 
 | slot group | chibi-male placeholder | karate-hero |
 |---|---|---|
-| head / head-side / head-back | flat teal ball | skin face, spiky hair, red headband with tails on the back |
+| head / head-side / head-back | flat teal ball | skin face with fierce angled brows and a gritted mouth, spiky hair, red headband with tails on the back |
 | body / body-side / body-back | flat green + belt | white gi jacket, skin collar V, lapel line, red belt with knot; the back view is a dimmer gi so turns still read |
 | upper arms | flat pink | gi sleeves hemmed at the elbow |
 | forearms | flat pink | sleeve end, bare forearm, red wrist wrap, bare fist |
