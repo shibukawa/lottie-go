@@ -2,6 +2,7 @@ package main
 
 import (
 	"image"
+	"math"
 	"slices"
 
 	"github.com/guigui-gui/guigui"
@@ -128,6 +129,54 @@ type previewStage struct {
 	dragMode   stageDrag
 	dragKind   stageDragKind
 	lastCursor image.Point
+
+	// panMoved separates a pan from a click that hit nothing: both start the
+	// same way, and only the release can tell them apart.
+	panMoved bool
+
+	// The onion skin renders through its own player. Borrowing the stage's
+	// would mean moving the playhead mid-draw, and SetFrame past the out
+	// point stops playback as a side effect — a display option must not be
+	// able to pause the clip.
+	ghost     *lottie.Player
+	ghostAnim *lottie.Animation
+}
+
+// ghostPlayer is the paused, non-looping player the onion skin draws with.
+// It is rebuilt only when the animation behind the stage is replaced, which
+// an edit does on every drag step.
+func (s *previewStage) ghostPlayer(anim *lottie.Animation) *lottie.Player {
+	if s.ghostAnim != anim {
+		s.ghost = anim.NewPlayer()
+		s.ghost.Pause()
+		s.ghostAnim = anim
+	}
+	return s.ghost
+}
+
+// drawOnionSkin paints the neighbouring keyframes under the current one.
+// Earlier keys go cool and later ones warm, so a limb's direction of travel
+// reads at a glance instead of having to be worked out.
+func (s *previewStage) drawOnionSkin(dst *ebiten.Image, m *Model, anim *lottie.Animation, base *lottie.DrawOptions) {
+	ghosts := m.OnionGhosts()
+	if len(ghosts) == 0 {
+		return
+	}
+	p := s.ghostPlayer(anim)
+	for _, g := range ghosts {
+		op := *base
+		// Pushed harder than looks right on paper: at this alpha the result
+		// is mostly the white stage, so a gentle tint composites away to
+		// nothing and both ghosts read as the same grey.
+		if g.next {
+			op.ColorScale.Scale(1, 0.58, 0.28, 1)
+		} else {
+			op.ColorScale.Scale(0.38, 0.6, 1, 1)
+		}
+		op.ColorScale.ScaleAlpha(onionAlpha)
+		p.SetFrame(g.frame)
+		p.Draw(dst, &op)
+	}
 }
 
 // stageDragKind says what the stage drag is editing.
@@ -137,6 +186,8 @@ const (
 	dragHitbox stageDragKind = iota
 	dragBody
 	dragSocket
+	dragPosePart
+	dragPoseJoint
 )
 
 type stageDrag int
@@ -145,6 +196,7 @@ const (
 	dragNone stageDrag = iota
 	dragMove
 	dragResize
+	dragPan
 )
 
 // transform maps animation coordinates to this widget's pixels, mirroring
@@ -159,12 +211,48 @@ func (s *previewStage) transform(m *Model, b image.Rectangle) (stageTransform, b
 	if aw <= 0 || ah <= 0 {
 		return stageTransform{}, false
 	}
-	scale := min(float64(b.Dx())/float64(aw), float64(b.Dy())/float64(ah))
+	scale := stageFitScale(b, aw, ah) * m.StageZoom()
+	panX, panY := m.StagePan()
 	return stageTransform{
 		scale: scale,
-		ox:    float64(b.Min.X) + (float64(b.Dx())-float64(aw)*scale)/2,
-		oy:    float64(b.Min.Y) + (float64(b.Dy())-float64(ah)*scale)/2,
+		ox:    float64(b.Min.X) + (float64(b.Dx())-float64(aw)*scale)/2 + panX,
+		oy:    float64(b.Min.Y) + (float64(b.Dy())-float64(ah)*scale)/2 + panY,
 	}, true
+}
+
+// stageFitScale is the magnification that shows the whole clip, which is
+// what a zoom of 1 means.
+func stageFitScale(b image.Rectangle, aw, ah int) float64 {
+	return min(float64(b.Dx())/float64(aw), float64(b.Dy())/float64(ah))
+}
+
+// zoomAt magnifies about a point on screen, so whatever is under the cursor
+// stays under it. Zooming about the centre instead would push the joint
+// being worked on off the pane the moment it got close enough to see.
+func (s *previewStage) zoomAt(m *Model, b image.Rectangle, cx, cy int, factor float64) {
+	anim := m.PreviewAnimation()
+	if anim == nil {
+		return
+	}
+	aw, ah := anim.Size()
+	if aw <= 0 || ah <= 0 {
+		return
+	}
+	tr, ok := s.transform(m, b)
+	if !ok {
+		return
+	}
+	next := min(max(m.StageZoom()*factor, stageZoomMin), stageZoomMax)
+	if next == m.StageZoom() {
+		return
+	}
+	// The animation point under the cursor, and where the new scale would
+	// otherwise put it.
+	ax, ay := tr.toAnim(cx, cy)
+	scale := stageFitScale(b, aw, ah) * next
+	baseX := float64(b.Min.X) + (float64(b.Dx())-float64(aw)*scale)/2
+	baseY := float64(b.Min.Y) + (float64(b.Dy())-float64(ah)*scale)/2
+	m.SetStageView(next, float64(cx)-ax*scale-baseX, float64(cy)-ay*scale-baseY)
 }
 
 func (s *previewStage) model(context *guigui.Context) *Model {
@@ -209,9 +297,22 @@ func (s *previewStage) Draw(context *guigui.Context, widgetBounds *guigui.Widget
 	var op lottie.DrawOptions
 	op.GeoM.Scale(tr.scale, tr.scale)
 	op.GeoM.Translate(tr.ox, tr.oy)
+	// Ghosts go under: where the current pose covers one, the current pose
+	// is what should be visible.
+	s.drawOnionSkin(dst, m, anim, &op)
 	m.PreviewDraw(dst, &op)
-	if m.OverlayVisible() {
-		drawCollisionOverlay(dst, m, tr, float32(basicwidget.UnitSize(context)))
+	u := float32(basicwidget.UnitSize(context))
+	if m.ShowRig() {
+		// Over the artwork, not under it: the rig is a diagram of what the
+		// drawing is doing, and a diagram hidden behind its subject is no
+		// use.
+		drawRigOverlay(dst, m, tr, u)
+	}
+	switch {
+	case m.PosesVisible():
+		drawPoseOverlay(dst, m, tr, u)
+	case m.OverlayVisible():
+		drawCollisionOverlay(dst, m, tr, u)
 	}
 }
 
@@ -219,16 +320,51 @@ func (s *previewStage) Draw(context *guigui.Context, widgetBounds *guigui.Widget
 // inside a shape moves it, the white grip resizes, empty stage deselects.
 func (s *previewStage) HandlePointingInput(context *guigui.Context, widgetBounds *guigui.WidgetBounds) guigui.HandleInputResult {
 	m := s.model(context)
-	if m == nil || !m.OverlayVisible() {
+	if m == nil {
 		return guigui.HandleInputResult{}
 	}
-	tr, ok := s.transform(m, widgetBounds.Bounds())
+	b := widgetBounds.Bounds()
+	// Zooming and panning are how the stage is looked at, not what it edits,
+	// so they work on every tab — the undecorated Segment one included.
+	if widgetBounds.IsHitAtCursor() && s.dragMode == dragNone {
+		if _, wy := adjustedWheel(); wy != 0 {
+			cx, cy := ebiten.CursorPosition()
+			s.zoomAt(m, b, cx, cy, math.Pow(stageZoomStep, wy))
+			return guigui.HandleInputByWidget(s)
+		}
+	}
+	if s.dragMode == dragPan {
+		if !ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+			s.dragMode = dragNone
+			// A press that never moved was a click on empty stage, which is
+			// still how a selection is dropped.
+			if !s.panMoved {
+				s.deselectAll(m)
+			}
+			return guigui.HandleInputByWidget(s)
+		}
+		cx, cy := ebiten.CursorPosition()
+		if d := image.Pt(cx, cy).Sub(s.lastCursor); d.X != 0 || d.Y != 0 {
+			s.lastCursor = image.Pt(cx, cy)
+			s.panMoved = true
+			px, py := m.StagePan()
+			m.SetStageView(m.StageZoom(), px+float64(d.X), py+float64(d.Y))
+		}
+		return guigui.HandleInputByWidget(s)
+	}
+	if !m.OverlayVisible() {
+		// No overlay to hit-test, but the view still drags.
+		return s.pressToPan(widgetBounds)
+	}
+	tr, ok := s.transform(m, b)
 	if !ok {
 		return guigui.HandleInputResult{}
 	}
 	if s.dragMode != dragNone {
 		if !ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
 			s.dragMode = dragNone
+			// A whole swing is one thing to take back.
+			m.EndPoseEdit()
 			return guigui.HandleInputByWidget(s)
 		}
 		cx, cy := ebiten.CursorPosition()
@@ -237,8 +373,21 @@ func (s *previewStage) HandlePointingInput(context *guigui.Context, widgetBounds
 		if d.X == 0 && d.Y == 0 {
 			return guigui.HandleInputByWidget(s)
 		}
+		prev := s.lastCursor
 		s.lastCursor = cur
 		dx, dy := float64(d.X)/tr.scale, float64(d.Y)/tr.scale
+		switch s.dragKind {
+		case dragPosePart:
+			// Rotation needs where the cursor was and is, not how far it
+			// moved: the angle is measured about the joint.
+			fx, fy := tr.toAnim(prev.X, prev.Y)
+			tx, ty := tr.toAnim(cur.X, cur.Y)
+			m.RotatePosePart(fx, fy, tx, ty)
+			return guigui.HandleInputByWidget(s)
+		case dragPoseJoint:
+			m.MovePosePart(dx, dy)
+			return guigui.HandleInputByWidget(s)
+		}
 		switch {
 		case s.dragMode == dragResize && s.dragKind == dragBody:
 			m.DragCPShapeHandle(dx, dy)
@@ -258,6 +407,9 @@ func (s *previewStage) HandlePointingInput(context *guigui.Context, widgetBounds
 	}
 	cx, cy := ebiten.CursorPosition()
 	s.lastCursor = image.Pt(cx, cy)
+	if m.PosesVisible() {
+		return s.handlePoseInput(context, m, tr, cx, cy)
+	}
 	// The grip belongs to the current selection, so it is tested before the
 	// shapes: a tiny handle would be unreachable under a big sibling.
 	if hx, hy, ok := handleAt(m, tr); ok {
@@ -289,11 +441,38 @@ func (s *previewStage) HandlePointingInput(context *guigui.Context, widgetBounds
 		s.dragMode, s.dragKind = dragMove, dragBody
 		return guigui.HandleInputByWidget(s)
 	}
+	return s.beginPan()
+}
+
+// pressToPan starts a pan from a press anywhere on the stage. It is the
+// whole input story for a tab with no overlay of its own.
+func (s *previewStage) pressToPan(widgetBounds *guigui.WidgetBounds) guigui.HandleInputResult {
+	if !widgetBounds.IsHitAtCursor() || !inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+		return guigui.HandleInputResult{}
+	}
+	cx, cy := ebiten.CursorPosition()
+	s.lastCursor = image.Pt(cx, cy)
+	return s.beginPan()
+}
+
+// beginPan arms a pan drag on a press that hit nothing. Whether it turns out
+// to be a pan or a click that clears the selection is decided on release, by
+// whether the cursor moved at all.
+func (s *previewStage) beginPan() guigui.HandleInputResult {
+	s.dragMode, s.panMoved = dragPan, false
+	return guigui.HandleInputByWidget(s)
+}
+
+// deselectAll drops whatever the stage had selected, which is what a click
+// on empty stage means in every tab.
+func (s *previewStage) deselectAll(m *Model) {
 	if m.SelectedHitboxIndex() >= 0 || m.SelectedCPShapeIndex() >= 0 {
 		m.SelectHitbox(-1)
 		m.SelectCPShape(-1)
 	}
-	return guigui.HandleInputResult{}
+	if m.SelectedPosePart() >= 0 {
+		m.SelectPosePart(-1)
+	}
 }
 
 func (s *previewStage) CursorShape(context *guigui.Context, widgetBounds *guigui.WidgetBounds) (ebiten.CursorShapeType, bool) {
@@ -312,6 +491,9 @@ func (s *previewStage) CursorShape(context *guigui.Context, widgetBounds *guigui
 		return 0, false
 	}
 	cx, cy := ebiten.CursorPosition()
+	if m.PosesVisible() {
+		return poseCursorShape(m, tr, float32(basicwidget.UnitSize(context)), cx, cy)
+	}
 	if hx, hy, ok := handleAt(m, tr); ok {
 		half := handleSize(float32(basicwidget.UnitSize(context)))/2 + 2
 		if abs32(float32(cx)-hx) <= half && abs32(float32(cy)-hy) <= half {

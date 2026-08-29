@@ -30,6 +30,7 @@ const (
 	inspectHitbox
 	inspectCPShape
 	inspectSocket
+	inspectPose
 	inspectConfig
 )
 
@@ -111,6 +112,32 @@ type Model struct {
 	socketSet     *lottiesockets.Set
 	socketsLoaded bool
 
+	// Pose editing (see pose.go). clipDocs holds the clips parsed for
+	// editing; the selection is one keyframe, plus the part whose numbers
+	// the inspector shows. poseLayer is -1 while the selected tick is a
+	// whole-body pose rather than one layer's key.
+	clipDocs  map[string]*clipDoc
+	poseFrame float64
+	poseSet   bool
+	poseLayer int
+	posePart  int
+
+	// Clip edits are undoable on their own stack; a drag writes on every
+	// mouse move, so it collapses into one step between Begin and End.
+	clipUndo       []clipSnapshot
+	poseDragOpen   bool
+	poseDragPushed bool
+
+	// How the stage is being looked at (see stageview.go): the zoom over
+	// fit-to-pane, the pan in screen pixels, and how much of the window the
+	// preview takes from the graph.
+	stageZoom            float64
+	stagePanX, stagePanY float64
+	previewH             int
+	onionSkin            bool
+	jointKeepsArt        bool
+	showRig              bool
+
 	// generation counts every change the UI must redraw for, including
 	// selection; widgets hash it in WriteStateKey instead of the whole
 	// document. docGen counts document edits only, so merely selecting
@@ -135,7 +162,10 @@ func NewModel() *Model {
 		selBox:        -1,
 		selCPShape:    -1,
 		selSocket:     -1,
+		poseLayer:     -1,
+		posePart:      -1,
 		trackCache:    map[string]*lottieresolv.Track{},
+		clipDocs:      map[string]*clipDoc{},
 		dialog:        make(chan dialogResult, 1),
 	}
 	m.autoPlay = true
@@ -260,6 +290,7 @@ func (m *Model) Open(path string) {
 		m.path = ""
 		m.machineID, m.machine = "", nil
 		m.sources = nil
+		m.resetClipDocCache()
 		m.ImportClip(path)
 		return
 	}
@@ -289,6 +320,7 @@ func (m *Model) Open(path string) {
 	m.machineID, m.machine = "", nil
 	m.resetCollisionSelection()
 	m.resetCollisionCache()
+	m.resetClipDocCache()
 	m.generation++
 	if ids := b.StateMachineIDs(); len(ids) > 0 {
 		m.SelectMachine(ids[0])
@@ -351,6 +383,9 @@ func (m *Model) ImportClip(path string) {
 	if !slices.Contains(m.sources, path) {
 		m.sources = append(m.sources, path)
 	}
+	// An import replaces whatever that id held, so a document parsed from
+	// the old bytes is stale.
+	delete(m.clipDocs, id)
 	m.setStatus("imported clip %q", id)
 	m.generation++
 }
@@ -391,6 +426,7 @@ func (m *Model) RemoveClip(id string) {
 	// files alone, so the cleanup is this editor's job.
 	lottieresolv.Remove(m.bundle, id)
 	delete(m.trackCache, id)
+	delete(m.clipDocs, id)
 	m.setStatus("removed clip %q", id)
 	m.generation++
 }
@@ -546,6 +582,12 @@ func (m *Model) TogglePreviewPlaying() {
 	if p.IsPlaying() {
 		p.Pause()
 	} else {
+		// Playing ends the park: the key under the playhead is about to
+		// stop being the key under the playhead, and a clip preview loops.
+		m.clearPoseSelection()
+		if m.clipPlayer != nil {
+			p.SetLoop(true)
+		}
 		p.Play()
 	}
 	m.generation++
@@ -1254,8 +1296,10 @@ func (m *Model) ShowClip(c clipRef) {
 	// them over rather than carrying the last clip's tally forward.
 	m.resetMarkerHits()
 	m.previewClip, m.clipPlayer = c, p
-	// The hitbox selection indexed the previous stage's track.
+	// The hitbox selection indexed the previous stage's track, and the pose
+	// selection indexed its layers and key times.
 	m.selBox = -1
+	m.clearPoseSelection()
 	m.setStatus("previewing %s", c.Label())
 	m.generation++
 }
@@ -1268,6 +1312,7 @@ func (m *Model) ShowMachine() {
 	m.previewClip, m.clipPlayer = clipRef{}, nil
 	m.resetMarkerHits()
 	m.selBox = -1
+	m.clearPoseSelection()
 	m.generation++
 }
 

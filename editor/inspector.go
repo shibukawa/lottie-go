@@ -9,6 +9,8 @@ import (
 
 	"github.com/guigui-gui/guigui"
 	"github.com/guigui-gui/guigui/basicwidget"
+	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
 	lottie "github.com/shibukawa/lottie-go"
 	lottieresolv "github.com/shibukawa/lottie-go/plugin/physics/resolv"
@@ -179,6 +181,45 @@ type inspectorContent struct {
 	sockForm       basicwidget.Form
 	sockFormItems  []basicwidget.FormItem
 
+	// Pose pane. The numeric fields are built from poseFields, so the
+	// labels and inputs are slices rather than one pair per member.
+	poseTitle  basicwidget.Text
+	partsTitle basicwidget.Text
+	partsList  basicwidget.List[int]
+	partsItems []basicwidget.ListItem[int]
+	// The part the list was last scrolled to, plus one so the zero value
+	// means "none". Scrolling on every rebuild would fight whoever is
+	// scrolling the list by hand.
+	partsShownPlus1 int
+	partsFront      basicwidget.Button
+	partsBack       basicwidget.Button
+	partsHide       basicwidget.Button
+	partsBtnRow     guigui.LinearLayout
+	partsBtnItems   []guigui.LinearLayoutItem
+	posePartLabel   basicwidget.Text
+	posePartInput   basicwidget.TextInput
+	poseJointLabel  basicwidget.Text
+	poseJointSel    basicwidget.Select[int]
+	poseEaseLabel   basicwidget.Text
+	poseEaseSel     basicwidget.Select[bool]
+	poseParentLabel basicwidget.Text
+	poseParentSel   basicwidget.Select[int]
+	poseJDragLabel  basicwidget.Text
+	poseJDragSel    basicwidget.Select[bool]
+	poseFrameLabel  basicwidget.Text
+	poseFrameValue  basicwidget.Text
+	poseLabels      guigui.WidgetSlice[*basicwidget.Text]
+	poseInputs      guigui.WidgetSlice[*basicwidget.TextInput]
+	poseHint        basicwidget.Text
+	poseUndo        basicwidget.Button
+	poseForm        basicwidget.Form
+	poseFormItems   []basicwidget.FormItem
+	jointItems      []basicwidget.SelectItem[int]
+	easeItems       []basicwidget.SelectItem[bool]
+	tabFields       []*basicwidget.TextInput
+	parentItems     []basicwidget.SelectItem[int]
+	jdragItems      []basicwidget.SelectItem[bool]
+
 	selectedGuard int
 
 	transItems     []basicwidget.ListItem[int]
@@ -234,6 +275,22 @@ func (c *inspectorContent) Build(context *guigui.Context, adder *guigui.ChildAdd
 		adder.AddWidget(&c.sockZBtn)
 		adder.AddWidget(&c.sockRotBtn)
 		c.buildSocketPane(context, m)
+	case inspectPose:
+		adder.AddWidget(&c.partsTitle)
+		adder.AddWidget(&c.partsList)
+		for _, w := range []guigui.Widget{&c.partsFront, &c.partsBack, &c.partsHide} {
+			adder.AddWidget(w)
+		}
+		adder.AddWidget(&c.poseTitle)
+		adder.AddWidget(&c.posePartInput)
+		adder.AddWidget(&c.poseJointSel)
+		adder.AddWidget(&c.poseEaseSel)
+		adder.AddWidget(&c.poseParentSel)
+		adder.AddWidget(&c.poseJDragSel)
+		adder.AddWidget(&c.poseForm)
+		adder.AddWidget(&c.poseUndo)
+		adder.AddWidget(&c.poseHint)
+		c.buildPosePane(context, m, adder)
 	case inspectConfig:
 		adder.AddWidget(&c.cfgTitle)
 		adder.AddWidget(&c.cfgForm)
@@ -532,6 +589,8 @@ func (c *inspectorContent) buildSocketPane(context *guigui.Context, m *Model) {
 	for _, w := range []guigui.Widget{&c.sockNameInput, &c.sockZBtn, &c.sockRotBtn, &c.sockDXInput, &c.sockDYInput, &c.sockDRInput} {
 		context.SetEnabled(w, s != nil && !m.Viewer())
 	}
+
+	tabOrder(context, &c.sockNameInput, &c.sockDXInput, &c.sockDYInput, &c.sockDRInput)
 
 	c.sockFormItems = slices.Delete(c.sockFormItems, 0, len(c.sockFormItems))
 	c.sockFormItems = append(c.sockFormItems,
@@ -938,6 +997,16 @@ func (c *inspectorContent) WriteStateKey(context *guigui.Context, w *guigui.Stat
 func (c *inspectorContent) layout(context *guigui.Context) guigui.LinearLayout {
 	u := basicwidget.UnitSize(context)
 
+	c.partsBtnItems = slices.Delete(c.partsBtnItems, 0, len(c.partsBtnItems))
+	c.partsBtnItems = append(c.partsBtnItems,
+		guigui.LinearLayoutItem{Widget: &c.partsFront, Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Widget: &c.partsBack, Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Widget: &c.partsHide, Size: guigui.FlexibleSize(1)},
+	)
+	c.partsBtnRow = guigui.LinearLayout{
+		Direction: guigui.LayoutDirectionHorizontal, Items: c.partsBtnItems, Gap: u / 4,
+	}
+
 	c.items = slices.Delete(c.items, 0, len(c.items))
 	target := inspectState
 	if m := c.model(context); m != nil {
@@ -969,6 +1038,16 @@ func (c *inspectorContent) layout(context *guigui.Context) guigui.LinearLayout {
 			guigui.LinearLayoutItem{Widget: &c.sockForm},
 			guigui.LinearLayoutItem{Widget: &c.sockZBtn, Size: guigui.FixedSize(u)},
 			guigui.LinearLayoutItem{Widget: &c.sockRotBtn, Size: guigui.FixedSize(u)},
+		)
+	case inspectPose:
+		c.items = append(c.items,
+			guigui.LinearLayoutItem{Widget: &c.partsTitle, Size: guigui.FixedSize(u)},
+			guigui.LinearLayoutItem{Widget: &c.partsList, Size: guigui.FixedSize(6 * u)},
+			guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.partsBtnRow},
+			guigui.LinearLayoutItem{Widget: &c.poseTitle, Size: guigui.FixedSize(u)},
+			guigui.LinearLayoutItem{Widget: &c.poseForm},
+			guigui.LinearLayoutItem{Widget: &c.poseUndo, Size: guigui.FixedSize(u)},
+			guigui.LinearLayoutItem{Widget: &c.poseHint, Size: guigui.FixedSize(2 * u)},
 		)
 	case inspectConfig:
 		c.items = append(c.items,
@@ -1049,4 +1128,360 @@ func (c *inspectorContent) Layout(context *guigui.Context, widgetBounds *guigui.
 
 func (c *inspectorContent) Measure(context *guigui.Context, constraints guigui.Constraints) image.Point {
 	return c.layout(context).Measure(context, constraints)
+}
+
+// poseField is one editable number of the pose pane. A rig is driven almost
+// entirely by rotation, so that comes first; the rest are here because the
+// value at a key should be readable and typeable even when nothing on the
+// stage drags it.
+type poseField struct {
+	label string
+	prop  string
+	comp  int // which component of the property, for the vector members
+	dim   int // how many components the property must have to be writable
+}
+
+var poseFields = []poseField{
+	{"rotation °", "r", 0, 1},
+	{"position x", "p", 0, 2},
+	{"position y", "p", 1, 2},
+	{"scale x %", "s", 0, 2},
+	{"scale y %", "s", 1, 2},
+	{"opacity %", "o", 0, 1},
+	{"anchor x", "a", 0, 2},
+	{"anchor y", "a", 1, 2},
+}
+
+// buildPosePane shows the values stored at the selected keyframe — not the
+// interpolated ones, so what is typed is what lands in the file. This pane
+// is also the way a pose found by dragging leaves the editor: for the
+// repository's own presets the generator stays the source of truth, and
+// these numbers are what gets transcribed back into it.
+func (c *inspectorContent) buildPosePane(context *guigui.Context, m *Model, adder *guigui.ChildAdder) {
+	c.buildPartsList(context, m)
+	setBold(&c.poseTitle, "Pose")
+	frame, onKey := m.SelectedPoseKey()
+	part := m.SelectedPosePart()
+	editable := onKey && part >= 0 && !m.Viewer()
+
+	label(&c.posePartLabel, "part")
+	label(&c.poseJointLabel, "joint")
+	label(&c.poseEaseLabel, "ease")
+	label(&c.poseParentLabel, "parent")
+	label(&c.poseJDragLabel, "joint drag")
+	label(&c.poseFrameLabel, "frame")
+	c.poseFrameValue.SetVerticalAlign(basicwidget.VerticalAlignMiddle)
+	// The part row is its name, and the name is what everything outside this
+	// clip uses to find the layer, so it is editable here.
+	c.posePartInput.SetValue(m.SelectedPosePartName())
+	c.posePartInput.OnValueChanged(func(context *guigui.Context, text string, committed bool) {
+		if committed {
+			m.RenamePosePart(text)
+		}
+	})
+	context.SetEnabled(&c.posePartInput, part >= 0 && !m.Viewer())
+	c.buildJointPicker(context, m)
+	c.buildEasePicker(context, m, onKey)
+	c.buildParentPicker(context, m, onKey)
+	if onKey {
+		c.poseFrameValue.SetValue(strconv.FormatFloat(frame, 'f', -1, 64))
+	} else {
+		c.poseFrameValue.SetValue("—")
+	}
+
+	c.poseLabels.SetLen(len(poseFields))
+	c.poseInputs.SetLen(len(poseFields))
+	for i, f := range poseFields {
+		lb, in := c.poseLabels.At(i), c.poseInputs.At(i)
+		adder.AddWidget(lb)
+		adder.AddWidget(in)
+		label(lb, f.label)
+
+		v, ok := m.PoseValue(f.prop)
+		writable := editable && ok && len(v) >= f.dim
+		if writable {
+			in.SetValue(strconv.FormatFloat(v[f.comp], 'g', -1, 64))
+		} else {
+			in.SetValue("")
+		}
+		in.OnValueChanged(func(context *guigui.Context, text string, committed bool) {
+			if !committed {
+				return
+			}
+			n, err := strconv.ParseFloat(strings.TrimSpace(text), 64)
+			if err != nil {
+				return
+			}
+			cur, ok := m.PoseValue(f.prop)
+			if !ok || len(cur) <= f.comp {
+				return
+			}
+			next := slices.Clone(cur)
+			next[f.comp] = n
+			m.SetPoseValue(f.prop, next)
+		})
+		context.SetEnabled(in, writable)
+	}
+
+	// A drag writes into the document on every mouse move, so the way back
+	// is a button here: the editor has no keyboard shortcuts to hang it on.
+	c.poseUndo.SetText("Undo pose edit")
+	c.poseUndo.OnDown(func(context *guigui.Context) { m.UndoClipEdit() })
+	context.SetEnabled(&c.poseUndo, m.CanUndoClipEdit() && !m.Viewer())
+
+	// The hint carries the one rule that is not visible on the stage: an
+	// edit needs a key under the playhead.
+	switch {
+	case m.StageClipDoc() == nil:
+		c.poseHint.SetValue("No clip on stage to pose.")
+	case part >= 0 && m.PosePartNameProblem() != "":
+		// The stage finds a layer by name and takes the first match, so an
+		// unnamed or duplicated one would be dragged in the wrong space.
+		c.poseHint.SetValue("Cannot drag on the stage: " +
+			m.PosePartNameProblem() + ". Rename it above; the numbers below still work.")
+	case !onKey:
+		c.poseHint.SetValue("Click a keyframe on the Poses row to edit; " +
+			"values are only written at a key.")
+	case part < 0:
+		c.poseHint.SetValue("Click a part on the stage to pose it.")
+	case !m.PoseValueIsKeyed("r"):
+		c.poseHint.SetValue("Rotation is static across this clip; " +
+			"editing it keys every pose.")
+	default:
+		c.poseHint.SetValue("Drag the part to swing it, the joint mark to move it.")
+	}
+	c.poseHint.SetScale(0.85)
+
+	// Tab walks the form: name, then the numbers in the order they read.
+	c.tabFields = append(c.tabFields[:0], &c.posePartInput)
+	for i := range poseFields {
+		c.tabFields = append(c.tabFields, c.poseInputs.At(i))
+	}
+	tabOrder(context, c.tabFields...)
+
+	c.poseFormItems = slices.Delete(c.poseFormItems, 0, len(c.poseFormItems))
+	c.poseFormItems = append(c.poseFormItems,
+		basicwidget.FormItem{PrimaryWidget: &c.posePartLabel, SecondaryWidget: &c.posePartInput},
+		basicwidget.FormItem{PrimaryWidget: &c.poseJointLabel, SecondaryWidget: &c.poseJointSel},
+		basicwidget.FormItem{PrimaryWidget: &c.poseParentLabel, SecondaryWidget: &c.poseParentSel},
+		basicwidget.FormItem{PrimaryWidget: &c.poseJDragLabel, SecondaryWidget: &c.poseJDragSel},
+		basicwidget.FormItem{PrimaryWidget: &c.poseFrameLabel, SecondaryWidget: &c.poseFrameValue},
+		basicwidget.FormItem{PrimaryWidget: &c.poseEaseLabel, SecondaryWidget: &c.poseEaseSel},
+	)
+	for i := range poseFields {
+		c.poseFormItems = append(c.poseFormItems, basicwidget.FormItem{
+			PrimaryWidget:   c.poseLabels.At(i),
+			SecondaryWidget: c.poseInputs.At(i),
+		})
+	}
+	c.poseForm.SetItems(c.poseFormItems)
+}
+
+// buildPartsList lists every part of the rig, selected either way: clicking
+// a row picks the part on the stage, and picking one on the stage highlights
+// its row.
+//
+// The list exists because the stage cannot offer every part. A rig layers
+// parts over each other — the far arm sits behind the torso — and swaps
+// others out by opacity, so a click can only ever reach what is on top and
+// visible. Those are the parts that need posing least.
+func (c *inspectorContent) buildPartsList(context *guigui.Context, m *Model) {
+	setBold(&c.partsTitle, "Parts")
+	parts := m.PoseParts()
+
+	c.partsItems = slices.Delete(c.partsItems, 0, len(c.partsItems))
+	for _, i := range parts {
+		// The joint tells you what a part does; "hidden" tells you why it is
+		// not on the stage to be clicked.
+		note := poseJoints[m.PoseLayerName(i)]
+		if m.PosePartHidden(i) {
+			if note != "" {
+				note += " · "
+			}
+			note += "hidden"
+		}
+		c.partsItems = append(c.partsItems, basicwidget.ListItem[int]{
+			Text: m.PoseLayerName(i), KeyText: note, Value: i,
+			Movable: m.CanReorderParts(),
+		})
+	}
+	c.partsList.SetItems(c.partsItems)
+
+	// The list order is the draw order, so dragging a row is how the overlap
+	// changes: the gripping forearm in front of the torso during a swing,
+	// behind it at rest. The footer does the same one place at a time, for
+	// when a drag is more precision than the job needs.
+	reorder := m.CanReorderParts()
+	c.partsList.OnItemsMoved(func(context *guigui.Context, from, count, to int) {
+		if count == 1 {
+			m.ReorderPosePartTo(from, to)
+		}
+	})
+	sel := m.SelectedPosePart()
+	c.partsFront.SetText("▲ Front")
+	c.partsFront.OnDown(func(context *guigui.Context) { m.ReorderPosePart(-1) })
+	c.partsBack.SetText("▼ Back")
+	c.partsBack.OnDown(func(context *guigui.Context) { m.ReorderPosePart(1) })
+	i := slices.Index(parts, sel)
+	context.SetEnabled(&c.partsFront, reorder && i > 0)
+	context.SetEnabled(&c.partsBack, reorder && i >= 0 && i < len(parts)-1)
+
+	// Which drawing of a slot is showing — a head seen from another angle,
+	// say — is opacity, and opacity is per key like every other pose value.
+	hideText := "Hide"
+	if sel >= 0 && m.PosePartHidden(sel) {
+		hideText = "Show"
+	}
+	c.partsHide.SetText(hideText)
+	c.partsHide.OnDown(func(context *guigui.Context) { m.TogglePosePartHidden() })
+	_, onKey := m.SelectedPoseKey()
+	context.SetEnabled(&c.partsHide, sel >= 0 && onKey && !m.Viewer())
+
+	if i >= 0 {
+		c.partsList.SelectItemByValue(sel)
+		// A part picked on the stage may be well down the list, and a
+		// highlight nobody can see is not a highlight.
+		if c.partsShownPlus1 != sel+1 {
+			c.partsList.EnsureItemVisibleByIndex(i)
+			c.partsShownPlus1 = sel + 1
+		}
+	} else {
+		c.partsShownPlus1 = 0
+	}
+	c.partsList.OnItemSelected(func(context *guigui.Context, index int) {
+		if index >= 0 && index < len(parts) && parts[index] != m.SelectedPosePart() {
+			m.SelectPosePart(parts[index])
+		}
+	})
+}
+
+// buildJointPicker turns the joint readout into a way to change what is
+// being posed. It names the parts the way the rig does — arms(near) rather
+// than upper-arm-near — so a pose written in the generator's vocabulary can
+// be followed here without translating it in your head. Parts with no joint
+// of their own are listed by layer name so the picker is never a dead end.
+func (c *inspectorContent) buildJointPicker(context *guigui.Context, m *Model) {
+	parts := m.PoseParts()
+	c.jointItems = slices.Delete(c.jointItems, 0, len(c.jointItems))
+	for _, i := range parts {
+		text := poseJoints[m.PoseLayerName(i)]
+		if text == "" {
+			text = m.PoseLayerName(i)
+		}
+		c.jointItems = append(c.jointItems, basicwidget.SelectItem[int]{Text: text, Value: i})
+	}
+	c.poseJointSel.SetItems(c.jointItems)
+	if sel := m.SelectedPosePart(); slices.Contains(parts, sel) {
+		c.poseJointSel.SelectItemByValue(sel)
+	}
+	c.poseJointSel.OnItemSelected(func(context *guigui.Context, index int) {
+		if index >= 0 && index < len(parts) && parts[index] != m.SelectedPosePart() {
+			m.SelectPosePart(parts[index])
+		}
+	})
+	context.SetEnabled(&c.poseJointSel, len(parts) > 0)
+}
+
+// buildEasePicker sets whether the selected pose arrives on a curve. It is a
+// property of the pose, not of one limb: a body easing in while its arm
+// arrives linearly reads as a mistake, so the whole column moves together.
+func (c *inspectorContent) buildEasePicker(context *guigui.Context, m *Model, onKey bool) {
+	c.easeItems = slices.Delete(c.easeItems, 0, len(c.easeItems))
+	c.easeItems = append(c.easeItems,
+		basicwidget.SelectItem[bool]{Text: "linear", Value: false},
+		basicwidget.SelectItem[bool]{Text: "eased", Value: true},
+	)
+	c.poseEaseSel.SetItems(c.easeItems)
+	c.poseEaseSel.SelectItemByValue(m.PoseEased())
+	c.poseEaseSel.OnItemSelected(func(context *guigui.Context, index int) {
+		if item, ok := c.poseEaseSel.ItemByIndex(index); ok {
+			m.SetPoseEase(item.Value)
+		}
+	})
+	context.SetEnabled(&c.poseEaseSel, onKey && !m.Viewer())
+}
+
+// buildParentPicker changes what a part hangs from, and how its joint drags.
+//
+// The candidates leave out the part's own descendants, so a cycle is not
+// something to warn about after the fact — it is not in the list. Attaching
+// rewrites the transform so the part does not jump, which only makes sense
+// at a key, since that is where the values live.
+func (c *inspectorContent) buildParentPicker(context *guigui.Context, m *Model, onKey bool) {
+	cands := m.PoseParentCandidates()
+	c.parentItems = slices.Delete(c.parentItems, 0, len(c.parentItems))
+	// -1 is the composition itself: the body and the shadow ride on it, and
+	// anything detached joins them.
+	c.parentItems = append(c.parentItems, basicwidget.SelectItem[int]{Text: "(none)", Value: -1})
+	for _, i := range cands {
+		c.parentItems = append(c.parentItems, basicwidget.SelectItem[int]{
+			Text: m.PoseLayerName(i), Value: i,
+		})
+	}
+	c.poseParentSel.SetItems(c.parentItems)
+	cur := -1
+	if p, ok := m.PosePartParent(); ok {
+		cur = p
+	}
+	c.poseParentSel.SelectItemByValue(cur)
+	c.poseParentSel.OnItemSelected(func(context *guigui.Context, index int) {
+		if item, ok := c.poseParentSel.ItemByIndex(index); ok && item.Value != cur {
+			m.SetPosePartParent(item.Value)
+		}
+	})
+	context.SetEnabled(&c.poseParentSel, onKey && m.SelectedPosePart() >= 0 && !m.Viewer())
+
+	// Both readings of a joint drag are wanted: an attach point in the wrong
+	// place needs the part to follow, a limb turning about the wrong pixel
+	// needs it to stay.
+	c.jdragItems = slices.Delete(c.jdragItems, 0, len(c.jdragItems))
+	c.jdragItems = append(c.jdragItems,
+		basicwidget.SelectItem[bool]{Text: "moves part", Value: false},
+		basicwidget.SelectItem[bool]{Text: "keeps art", Value: true},
+	)
+	c.poseJDragSel.SetItems(c.jdragItems)
+	c.poseJDragSel.SelectItemByValue(m.JointDragKeepsArt())
+	c.poseJDragSel.OnItemSelected(func(context *guigui.Context, index int) {
+		if item, ok := c.poseJDragSel.ItemByIndex(index); ok {
+			m.SetJointDragKeepsArt(item.Value)
+		}
+	})
+}
+
+// tabOrder wires Tab to walk a form's fields, and Shift-Tab to walk back.
+//
+// Moving on is also how the value lands: a text input commits when it loses
+// focus, so tabbing out of a field is the same as pressing Enter in it.
+// Nothing in guigui claims Tab, so a field would otherwise swallow it and
+// the only way out of one would be the mouse.
+//
+// Disabled fields are stepped over rather than focused, or Tab would strand
+// the caret somewhere that cannot be typed into.
+func tabOrder(context *guigui.Context, fields ...*basicwidget.TextInput) {
+	for i, in := range fields {
+		step := func(dir int) *basicwidget.TextInput {
+			for n := 1; n <= len(fields); n++ {
+				cand := fields[((i+dir*n)%len(fields)+len(fields))%len(fields)]
+				if context.IsEnabled(cand) {
+					return cand
+				}
+			}
+			return nil
+		}
+		in.OnHandleButtonInput(func(context *guigui.Context, widgetBounds *guigui.WidgetBounds) guigui.HandleInputResult {
+			if !inpututil.IsKeyJustPressed(ebiten.KeyTab) {
+				return guigui.HandleInputResult{}
+			}
+			dir := 1
+			if ebiten.IsKeyPressed(ebiten.KeyShiftLeft) || ebiten.IsKeyPressed(ebiten.KeyShiftRight) {
+				dir = -1
+			}
+			target := step(dir)
+			if target == nil {
+				return guigui.HandleInputResult{}
+			}
+			context.SetFocused(target, true)
+			return guigui.HandleInputByWidget(in)
+		})
+	}
 }

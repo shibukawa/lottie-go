@@ -6,6 +6,8 @@ import (
 	"image/color"
 	"math"
 	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/guigui-gui/guigui"
 	"github.com/guigui-gui/guigui/basicwidget"
@@ -330,6 +332,7 @@ type colTab int
 
 const (
 	colSegment colTab = iota
+	colPoses
 	colHitboxes
 	colBody
 	colSockets
@@ -345,6 +348,21 @@ type collisionPanel struct {
 	tabs     basicwidget.SegmentedControl[colTab]
 	timeline timelineView
 	chart    chartView
+	poses    poseChartView
+
+	// Autoplay belongs to the stage, not to any one tab, so it sits above
+	// the tab bar where every working context can reach it. The zoom
+	// readout and its reset keep it company for the same reason.
+	autoChk  basicwidget.Checkbox
+	autoLbl  basicwidget.Text
+	onionChk basicwidget.Checkbox
+	onionLbl basicwidget.Text
+	rigChk   basicwidget.Checkbox
+	rigLbl   basicwidget.Text
+	zoomLbl  basicwidget.Text
+	fitBtn   basicwidget.Button
+	zoomInB  basicwidget.Button
+	zoomOutB basicwidget.Button
 
 	addRect   basicwidget.Button
 	addCircle basicwidget.Button
@@ -356,6 +374,29 @@ type collisionPanel struct {
 	addCPBox  basicwidget.Button
 	delCP     basicwidget.Button
 
+	// Pose operations. The chart shows where the poses are; these change
+	// which ones there are, and how long the clip they sit in runs.
+	poseAdd      basicwidget.Button
+	poseDel      basicwidget.Button
+	poseBack     basicwidget.Button
+	poseFwd      basicwidget.Button
+	poseLenLabel basicwidget.Text
+	poseLenInput basicwidget.TextInput
+	copyLabel    basicwidget.Text
+	copyClipSel  basicwidget.Select[string]
+	copyKeySel   basicwidget.Select[float64]
+	copyBtn      basicwidget.Button
+	swapChk      basicwidget.Checkbox
+	swapLbl      basicwidget.Text
+	poseSwap     basicwidget.Button
+	copyClip     string
+	copyKey      float64
+	insertSwap   bool
+	copyClips    []basicwidget.SelectItem[string]
+	copyKeys     []basicwidget.SelectItem[float64]
+	poseRow2     guigui.LinearLayout
+	poseRow2Item []guigui.LinearLayoutItem
+
 	sockList    basicwidget.List[int]
 	addSockBtns guigui.WidgetSlice[*basicwidget.Button]
 	delSock     basicwidget.Button
@@ -364,9 +405,11 @@ type collisionPanel struct {
 	bodyItems []basicwidget.ListItem[int]
 	sockItems []basicwidget.ListItem[int]
 
-	btnRow      guigui.LinearLayout
-	btnRowItems []guigui.LinearLayoutItem
-	items       []guigui.LinearLayoutItem
+	btnRow       guigui.LinearLayout
+	btnRowItems  []guigui.LinearLayoutItem
+	autoRow      guigui.LinearLayout
+	autoRowItems []guigui.LinearLayoutItem
+	items        []guigui.LinearLayoutItem
 }
 
 func (c *collisionPanel) model(context *guigui.Context) *Model {
@@ -381,7 +424,7 @@ func (c *collisionPanel) model(context *guigui.Context) *Model {
 // availableTabs is the tab set the physics config leaves standing. The
 // segment overview and sockets are always there.
 func availableTabs(m *Model) []colTab {
-	out := []colTab{colSegment}
+	out := []colTab{colSegment, colPoses}
 	if m.ResolvEnabled() {
 		out = append(out, colHitboxes)
 	}
@@ -399,6 +442,54 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 	avail := availableTabs(m)
 	tab := m.CollisionTab()
 
+	adder.AddWidget(&c.autoChk)
+	adder.AddWidget(&c.autoLbl)
+	c.autoChk.SetValue(m.AutoPlay())
+	c.autoChk.OnValueChanged(func(context *guigui.Context, v bool) { m.SetAutoPlay(v) })
+	c.autoLbl.SetValue("autoplay")
+	c.autoLbl.SetScale(0.75)
+	c.autoLbl.SetVerticalAlign(basicwidget.VerticalAlignMiddle)
+	context.SetPassthrough(&c.autoLbl, true)
+
+	adder.AddWidget(&c.onionChk)
+	adder.AddWidget(&c.onionLbl)
+	c.onionChk.SetValue(m.OnionSkin())
+	c.onionChk.OnValueChanged(func(context *guigui.Context, v bool) { m.SetOnionSkin(v) })
+	c.onionLbl.SetValue("onion skin")
+	c.onionLbl.SetScale(0.75)
+	c.onionLbl.SetVerticalAlign(basicwidget.VerticalAlignMiddle)
+	context.SetPassthrough(&c.onionLbl, true)
+
+	adder.AddWidget(&c.rigChk)
+	adder.AddWidget(&c.rigLbl)
+	c.rigChk.SetValue(m.ShowRig())
+	c.rigChk.OnValueChanged(func(context *guigui.Context, v bool) { m.SetShowRig(v) })
+	c.rigLbl.SetValue("rig")
+	c.rigLbl.SetScale(0.75)
+	c.rigLbl.SetVerticalAlign(basicwidget.VerticalAlignMiddle)
+	context.SetPassthrough(&c.rigLbl, true)
+
+	// The stage fits the whole clip by default, which is right for watching
+	// a machine run and far too small to pose a rig in: a chibi forearm is
+	// a few pixels wide at that size. The wheel zooms on the stage itself;
+	// these are the discoverable version of the same thing, plus the way
+	// back.
+	for _, w := range []guigui.Widget{&c.zoomOutB, &c.zoomInB, &c.zoomLbl, &c.fitBtn} {
+		adder.AddWidget(w)
+	}
+	c.zoomOutB.SetText("−")
+	c.zoomOutB.OnDown(func(context *guigui.Context) { m.ZoomStage(1 / stageZoomButtonStep) })
+	c.zoomInB.SetText("+")
+	c.zoomInB.OnDown(func(context *guigui.Context) { m.ZoomStage(stageZoomButtonStep) })
+	c.zoomLbl.SetValue(fmt.Sprintf("%.0f%%", m.StageZoom()*100))
+	c.zoomLbl.SetScale(0.75)
+	c.zoomLbl.SetVerticalAlign(basicwidget.VerticalAlignMiddle)
+	c.zoomLbl.SetHorizontalAlign(basicwidget.HorizontalAlignEnd)
+	context.SetPassthrough(&c.zoomLbl, true)
+	c.fitBtn.SetText("Fit")
+	c.fitBtn.OnDown(func(context *guigui.Context) { m.ResetStageView() })
+	context.SetEnabled(&c.fitBtn, m.StageViewChanged())
+
 	adder.AddWidget(&c.tabs)
 	c.tabItems = slices.Delete(c.tabItems, 0, len(c.tabItems))
 	for _, t := range avail {
@@ -406,6 +497,7 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 		// feed resolv detection, the body feeds a cp space.
 		text := map[colTab]string{
 			colSegment:  "Segment",
+			colPoses:    "Poses",
 			colHitboxes: "Hitbox (resolv)",
 			colBody:     "Body (cp)",
 			colSockets:  "Sockets",
@@ -428,6 +520,10 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 		// The whole-clip overview: where the played range (a state's
 		// segment) sits inside the full timeline, markers included.
 		adder.AddWidget(&c.timeline)
+	case colPoses:
+		// Where the clip's keyframes are, and which one an edit lands on.
+		adder.AddWidget(&c.poses)
+		c.buildPoseButtons(context, m, adder)
 	case colHitboxes:
 		adder.AddWidget(&c.chart)
 		for _, w := range []guigui.Widget{&c.addRect, &c.addCircle, &c.addWin, &c.delBox} {
@@ -561,6 +657,17 @@ func (c *collisionPanel) layout(context *guigui.Context) guigui.LinearLayout {
 	}
 	c.btnRowItems = slices.Delete(c.btnRowItems, 0, len(c.btnRowItems))
 	switch tab {
+	case colPoses:
+		c.btnRowItems = append(c.btnRowItems,
+			guigui.LinearLayoutItem{Widget: &c.poseAdd, Size: guigui.FixedSize(3 * u)},
+			guigui.LinearLayoutItem{Widget: &c.poseDel, Size: guigui.FixedSize(5 * u / 2)},
+			guigui.LinearLayoutItem{Widget: &c.poseBack, Size: guigui.FixedSize(3 * u / 2)},
+			guigui.LinearLayoutItem{Widget: &c.poseFwd, Size: guigui.FixedSize(3 * u / 2)},
+			guigui.LinearLayoutItem{Widget: &c.poseSwap, Size: guigui.FixedSize(2 * u)},
+			guigui.LinearLayoutItem{Size: guigui.FlexibleSize(1)},
+			guigui.LinearLayoutItem{Widget: &c.poseLenLabel, Size: guigui.FixedSize(3 * u)},
+			guigui.LinearLayoutItem{Widget: &c.poseLenInput, Size: guigui.FixedSize(2 * u)},
+		)
 	case colHitboxes:
 		c.btnRowItems = append(c.btnRowItems,
 			guigui.LinearLayoutItem{Widget: &c.addRect, Size: guigui.FixedSize(2 * u)},
@@ -590,13 +697,34 @@ func (c *collisionPanel) layout(context *guigui.Context) guigui.LinearLayout {
 		Direction: guigui.LayoutDirectionHorizontal, Items: c.btnRowItems, Gap: u / 4,
 	}
 
+	c.autoRowItems = slices.Delete(c.autoRowItems, 0, len(c.autoRowItems))
+	c.autoRowItems = append(c.autoRowItems,
+		guigui.LinearLayoutItem{Widget: &c.autoChk, Size: guigui.FixedSize(u)},
+		guigui.LinearLayoutItem{Widget: &c.autoLbl, Size: guigui.FixedSize(3 * u)},
+		guigui.LinearLayoutItem{Widget: &c.onionChk, Size: guigui.FixedSize(u)},
+		guigui.LinearLayoutItem{Widget: &c.onionLbl, Size: guigui.FixedSize(4 * u)},
+		guigui.LinearLayoutItem{Widget: &c.rigChk, Size: guigui.FixedSize(u)},
+		guigui.LinearLayoutItem{Widget: &c.rigLbl, Size: guigui.FixedSize(3 * u / 2)},
+		guigui.LinearLayoutItem{Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Widget: &c.zoomOutB, Size: guigui.FixedSize(u)},
+		guigui.LinearLayoutItem{Widget: &c.zoomInB, Size: guigui.FixedSize(u)},
+		guigui.LinearLayoutItem{Widget: &c.zoomLbl, Size: guigui.FixedSize(2 * u)},
+		guigui.LinearLayoutItem{Widget: &c.fitBtn, Size: guigui.FixedSize(2 * u)},
+	)
+	c.autoRow = guigui.LinearLayout{
+		Direction: guigui.LayoutDirectionHorizontal, Items: c.autoRowItems, Gap: u / 4,
+	}
+
 	c.items = slices.Delete(c.items, 0, len(c.items))
 	c.items = append(c.items,
+		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.autoRow},
 		guigui.LinearLayoutItem{Widget: &c.tabs, Size: guigui.FixedSize(u)},
 	)
 	switch tab {
 	case colSegment:
 		c.items = append(c.items, guigui.LinearLayoutItem{Widget: &c.timeline})
+	case colPoses:
+		c.items = append(c.items, guigui.LinearLayoutItem{Widget: &c.poses})
 	case colHitboxes:
 		c.items = append(c.items, guigui.LinearLayoutItem{Widget: &c.chart})
 	case colBody:
@@ -610,6 +738,25 @@ func (c *collisionPanel) layout(context *guigui.Context) guigui.LinearLayout {
 			guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.btnRow},
 		)
 	}
+	if tab == colPoses {
+		// Borrowing a pose needs a clip and a key to take it from, which is
+		// two pickers and does not share a row with anything.
+		c.poseRow2Item = slices.Delete(c.poseRow2Item, 0, len(c.poseRow2Item))
+		c.poseRow2Item = append(c.poseRow2Item,
+			guigui.LinearLayoutItem{Widget: &c.swapChk, Size: guigui.FixedSize(u)},
+			guigui.LinearLayoutItem{Widget: &c.swapLbl, Size: guigui.FixedSize(4 * u)},
+			guigui.LinearLayoutItem{Widget: &c.copyLabel, Size: guigui.FixedSize(4 * u)},
+			guigui.LinearLayoutItem{Widget: &c.copyClipSel, Size: guigui.FlexibleSize(2)},
+			guigui.LinearLayoutItem{Widget: &c.copyKeySel, Size: guigui.FlexibleSize(1)},
+			guigui.LinearLayoutItem{Widget: &c.copyBtn, Size: guigui.FixedSize(4 * u)},
+		)
+		c.poseRow2 = guigui.LinearLayout{
+			Direction: guigui.LayoutDirectionHorizontal, Items: c.poseRow2Item, Gap: u / 4,
+		}
+		c.items = append(c.items,
+			guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.poseRow2},
+		)
+	}
 	return guigui.LinearLayout{
 		Direction: guigui.LayoutDirectionVertical, Items: c.items, Gap: u / 4,
 	}
@@ -621,4 +768,126 @@ func (c *collisionPanel) Layout(context *guigui.Context, widgetBounds *guigui.Wi
 
 func (c *collisionPanel) Measure(context *guigui.Context, constraints guigui.Constraints) image.Point {
 	return c.layout(context).Measure(context, constraints)
+}
+
+// buildPoseButtons is the Poses tab's own footer: what poses the clip has,
+// where the playhead is among them, and how long the clip runs.
+func (c *collisionPanel) buildPoseButtons(context *guigui.Context, m *Model, adder *guigui.ChildAdder) {
+	for _, w := range []guigui.Widget{
+		&c.poseAdd, &c.poseDel, &c.poseBack, &c.poseFwd,
+		&c.swapChk, &c.swapLbl, &c.poseSwap,
+		&c.poseLenLabel, &c.poseLenInput,
+		&c.copyLabel, &c.copyClipSel, &c.copyKeySel, &c.copyBtn,
+	} {
+		adder.AddWidget(w)
+	}
+
+	c.poseAdd.SetText("+Pose")
+	c.poseAdd.OnDown(func(context *guigui.Context) { m.InsertPose(c.insertSwap) })
+	context.SetEnabled(&c.poseAdd, m.CanInsertPose())
+
+	// Half a walk cycle is the other half with the limbs traded, so the
+	// swap rides on the insert rather than being a separate trip. The
+	// button does the same to a pose that is already there.
+	c.swapChk.SetValue(c.insertSwap)
+	c.swapChk.OnValueChanged(func(context *guigui.Context, v bool) {
+		c.insertSwap = v
+		m.Touch()
+	})
+	c.swapLbl.SetValue("swap near/far")
+	c.swapLbl.SetScale(0.75)
+	c.swapLbl.SetVerticalAlign(basicwidget.VerticalAlignMiddle)
+	context.SetPassthrough(&c.swapLbl, true)
+	c.poseSwap.SetText("Swap")
+	c.poseSwap.OnDown(func(context *guigui.Context) { m.SwapPose() })
+	_, onKey := m.SelectedPoseKey()
+	context.SetEnabled(&c.poseSwap, onKey && !m.Viewer())
+	c.poseDel.SetText("Delete")
+	c.poseDel.OnDown(func(context *guigui.Context) { m.DeletePose() })
+	context.SetEnabled(&c.poseDel, m.CanDeletePose())
+
+	// The frames between poses hold nothing to edit, so stepping through a
+	// clip means stepping key to key, not frame to frame.
+	c.poseBack.SetText("|◀")
+	c.poseBack.OnDown(func(context *guigui.Context) { m.JumpToKey(-1) })
+	c.poseFwd.SetText("▶|")
+	c.poseFwd.OnDown(func(context *guigui.Context) { m.JumpToKey(1) })
+	onStage := m.StageClipDoc() != nil
+	context.SetEnabled(&c.poseBack, onStage)
+	context.SetEnabled(&c.poseFwd, onStage)
+
+	label(&c.poseLenLabel, "length")
+	c.poseLenLabel.SetScale(0.75)
+	if onStage {
+		c.poseLenInput.SetValue(strconv.FormatFloat(m.ClipLength(), 'f', -1, 64))
+	} else {
+		c.poseLenInput.SetValue("")
+	}
+	c.poseLenInput.OnValueChanged(func(context *guigui.Context, text string, committed bool) {
+		if !committed {
+			return
+		}
+		if v, err := strconv.ParseFloat(strings.TrimSpace(text), 64); err == nil {
+			m.SetClipLength(v)
+		}
+	})
+	context.SetEnabled(&c.poseLenInput, onStage && !m.Viewer())
+
+	c.buildPoseCopy(context, m)
+}
+
+// buildPoseCopy picks a pose out of another clip. A preset's clips share one
+// rig, so a rest stance or a guard is worth borrowing rather than dialling
+// in again; layers are matched by name, which is what makes the clips of a
+// preset interchangeable in the first place.
+func (c *collisionPanel) buildPoseCopy(context *guigui.Context, m *Model) {
+	label(&c.copyLabel, "copy from")
+	c.copyLabel.SetScale(0.75)
+
+	ids := m.AnimationIDs()
+	c.copyClips = slices.Delete(c.copyClips, 0, len(c.copyClips))
+	for _, id := range ids {
+		c.copyClips = append(c.copyClips, basicwidget.SelectItem[string]{Text: id, Value: id})
+	}
+	c.copyClipSel.SetItems(c.copyClips)
+	if !slices.Contains(ids, c.copyClip) && len(ids) > 0 {
+		c.copyClip = ids[0]
+	}
+	c.copyClipSel.SelectItemByValue(c.copyClip)
+	c.copyClipSel.OnItemSelected(func(context *guigui.Context, index int) {
+		if item, ok := c.copyClipSel.ItemByIndex(index); ok && item.Value != c.copyClip {
+			c.copyClip = item.Value
+			// The keys of the old clip mean nothing in the new one.
+			c.copyKey = 0
+			m.Touch()
+		}
+	})
+
+	keys := m.PoseSourceKeys(c.copyClip)
+	c.copyKeys = slices.Delete(c.copyKeys, 0, len(c.copyKeys))
+	for _, k := range keys {
+		c.copyKeys = append(c.copyKeys, basicwidget.SelectItem[float64]{
+			Text: strconv.FormatFloat(k, 'f', -1, 64), Value: k,
+		})
+	}
+	c.copyKeySel.SetItems(c.copyKeys)
+	if !slices.Contains(keys, c.copyKey) && len(keys) > 0 {
+		c.copyKey = keys[0]
+	}
+	c.copyKeySel.SelectItemByValue(c.copyKey)
+	c.copyKeySel.OnItemSelected(func(context *guigui.Context, index int) {
+		if item, ok := c.copyKeySel.ItemByIndex(index); ok {
+			c.copyKey = item.Value
+		}
+	})
+
+	c.copyBtn.SetText("Insert")
+	c.copyBtn.OnDown(func(context *guigui.Context) {
+		m.InsertPoseFrom(c.copyClip, c.copyKey, c.insertSwap)
+	})
+	can := m.CanInsertPose() && len(keys) > 0
+	context.SetEnabled(&c.copyBtn, can)
+	for _, w := range []guigui.Widget{&c.copyClipSel, &c.copyKeySel} {
+		context.SetEnabled(w, len(ids) > 0)
+	}
 }

@@ -23,11 +23,129 @@ window starts blank and its first Save writes the chosen path. Templates
 are embedded at build time from `editor/templates/`, which
 `go run ./genpresets` keeps in sync with the presets.
 
-The Segment tab carries the same transport as the collision chart —
-play/pause, −1, +1 — plus an **autoplay** toggle (on by default). With
-autoplay off, every clip that reaches the stage arrives paused on its
-first frame: firing an event still transitions, so an attack can be
-inspected from the exact frame it started, one +1 at a time.
+Every tab carries the same transport — play/pause, −1, +1 — and the row
+above the tab bar holds what describes the stage rather than any one tab:
+an **autoplay** toggle (on by default), an **onion skin** toggle, a zoom
+readout, **−** / **+**, and **Fit**.
+
+**rig** draws the skeleton the artwork hides: a dot at every joint and a
+bone wherever a chain continues. The torso has five limbs hanging off it at
+five different points, so joining each to its single hip joint would draw a
+starburst that says nothing — a hub is drawn as a hub, which is to say as
+its joint alone. With onion skin on, the neighbouring keys get their joints
+too, in the same cool and warm — dots only, since three skeletons of lines
+over one drawing is a thicket. A joint that travelled is then a line
+between two dots rather than two overlapping drawings at a third of an
+alpha.
+
+Onion skin draws the keyframes either side of the playhead faintly under
+the current one — the previous tinted cool, the next warm, so which way a
+limb is travelling reads at a glance. Between two keys it shows the pair
+bracketing the playhead, which is as useful while scrubbing as while parked
+on a key; it stays out of the way while the clip is playing, where the pair
+would change several times a second.
+
+The stage fits the whole clip by default, which is right for watching a
+machine run and far too small to pose a rig in — a chibi forearm is a few
+pixels wide at that size. The mouse wheel zooms about the cursor, the
+buttons zoom about the middle of the pane, dragging empty stage pans, and
+**Fit** puts it back. Dragging the boundary between the state graph and the
+preview gives the whole stage more of the window; that split is remembered
+for the session. With autoplay off, every clip
+that reaches the stage arrives paused on its first frame: firing an event
+still transitions, so an attack can be inspected from the exact frame it
+started, one +1 at a time.
+
+The **Poses** tab marks where the clip's keyframes actually are. A Lottie
+clip stores a handful of keys and interpolates between them, so a 20-frame
+punch may hold only five — and those are the only frames an edit can land
+on. The preset rigs keep every animated property on one set of times, so
+the tab shows a single **Poses** row whose ticks are whole-body poses;
+when a clip's properties disagree, it falls back to a row per animated
+layer. Diamonds interpolate, squares hold. Click a tick to park the
+playhead on it, drag one to retime it (it stops one frame short of its
+neighbours).
+
+Choosing the Poses tab opens the **Parts** list at the top of the right
+pane: every part of the rig, front to back, with the `genpresets` joint it
+belongs to. Selection runs both ways — clicking a row picks the part on the
+stage, and picking one on the stage highlights (and scrolls to) its row.
+The list is there because the stage cannot offer every part: a rig layers
+them over each other, and switches others off by opacity, which the rows
+mark as `hidden`. A hidden part is not on the stage, so a click falls
+through it to whatever is drawn underneath — the list is the only way to
+reach one.
+
+The list order *is* the draw order, so dragging a row — or **▲ Front** /
+**▼ Back** — changes the overlap: the gripping forearm in front of the
+torso during a swing, behind it at rest. Parent links are by `ind`, not by
+position, so the rig survives being rearranged; clips using track mattes
+refuse the whole operation, because there the layer before a matte is its
+source. **Hide** / **Show** switches the selected part's opacity at the
+current key, which is how a slot's alternate drawings take turns.
+
+The Poses tab's own footer changes which poses the clip has. **+Pose**
+inserts one at the playhead as a copy of the pose before it — a new pose
+starts as the one it follows and is then changed — and **Delete** removes
+the selected column. **|◀** and **▶|** step key to key, since the frames
+between poses hold nothing to edit, and **length** sets the clip's own out
+point (it refuses to cut past the last pose; delete that pose instead). The
+second row borrows a pose from another clip: a preset's clips share one
+rig, so a rest stance or a guard is worth copying rather than dialling in
+again.
+
+**swap near/far** trades the paired limbs as a pose is inserted — the near
+arm takes the far arm's angles and back — because half a walk cycle is the
+other half with the legs the other way round. **Swap** does the same to a
+pose that is already there. Only properties keyed on both sides trade: a
+limb's attach point is rig spec that puts it on its own side of the torso,
+and trading those would detach the pair rather than swap it. Which limb
+draws in front is a separate edit, in the Parts list.
+
+The Pose form's **parent** row changes what a part hangs from — a sword
+passing from one hand to the other — and rewrites its transform so the part
+does not jump. A value keeps the form it had: a static attach point is
+corrected once and stays static, because static means "rigidly here on my
+parent" and that is still true of the new one; a keyed rotation is
+corrected at every key, so the limb keeps its poses. Position can only
+match at the frame the link was changed — two parents that move differently
+cannot both be followed by one point, which is the reason for re-parenting
+rather than a shortcoming of it. The candidate list leaves out the part's
+own descendants, so a cycle is not something to warn about: it cannot be
+chosen.
+
+**joint drag** picks what the joint mark does. `moves part` is the plain
+reading — the part follows its attach point, which is also how the
+character itself is moved, since the body's joint is its position in the
+composition. `keeps art` moves the point the part turns about and leaves
+the drawing exactly where it is, which is how a limb rotating about the
+wrong pixel gets fixed.
+
+**Tab** moves between the fields of a form and **Shift-Tab** back, stepping
+over any that are disabled. A text input commits when it loses focus, so
+tabbing out of a field is the same as pressing Enter in it.
+
+The **part** row is the layer's name and is editable. Names are how a
+socket binds a layer, how a pose is copied between clips, and how the
+near/far pairs are found, so a rename is a real edit — blanks and
+duplicates are refused, and a socket still bound to the old name is called
+out in the status bar. A part whose name (or whose parent's name) is blank
+or duplicated cannot be dragged on the stage at all: the core resolves a
+layer by name and takes the first match, so a drag would write plausible
+numbers into the wrong space. The pane says which, and the numeric fields
+keep working.
+
+With a key selected, click a part on the stage or in the list, then drag
+inside its outline to swing it about its joint, or drag the joint mark to
+move it. In the Pose form the **joint** row is a picker as well as a
+readout, naming the parts the way the rig does, and **ease** switches the
+whole pose between the two curves `genpresets` writes. The Pose pane on the right shows the numbers stored at that key —
+rotation in degrees, and the `genpresets` joint the part belongs to
+(`upper-arm-near` → `arms(near)`), so a pose found by dragging can be
+transcribed back into the generator. **Undo pose edit** takes back the
+last change, counting a whole drag as one step. Editing is only possible
+while the playhead sits on a key; scrubbing away ends it rather than
+writing a value at a frame the other tracks have no key at.
 
 `-viewer` starts **viewer mode**: the editor watches every file the
 document was loaded from — the `.lottie` bundle (whose images travel
