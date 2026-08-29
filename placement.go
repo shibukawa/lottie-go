@@ -105,6 +105,24 @@ func decompose(m matrix, visible bool) LayerPlacement {
 	}
 }
 
+// LayerTransform returns the exact matrix mapping the named layer's own
+// coordinates into animation coordinates, resolved the same way
+// LayerPlacement resolves a name.
+//
+// LayerPlacement is the friendlier form and the right one for attaching a
+// sprite, but its decomposition folds a mirror into a half turn: a layer
+// scaled -100% reads back as positive scale and a rotation 180° away.
+// Anything that must reproduce the layer's own frame — an editor drawing a
+// part's outline, or converting a drag back into the layer's parent space —
+// needs the matrix that was actually composed.
+func (a *Animation) LayerTransform(name string, frame float64) (ebiten.GeoM, bool) {
+	m, _, ok := placeLayer(a.layers, name, frame, identityMatrix, true, 0)
+	if !ok {
+		return ebiten.GeoM{}, false
+	}
+	return m.toGeoM(), true
+}
+
 // LayerNames returns every layer name reachable from the animation's root
 // composition — its own layers, then precomp contents depth-first —
 // deduplicated in first-seen order. Empty names are skipped. This is what

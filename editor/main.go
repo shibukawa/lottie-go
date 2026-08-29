@@ -36,6 +36,7 @@ type Root struct {
 	graph        graphView
 	graphPanel   basicwidget.Panel
 	graphFrame   framedPane
+	splitter     splitterView
 	preview      previewPane
 	previewFrame framedPane
 	inspector    inspectorPane
@@ -70,6 +71,7 @@ func (r *Root) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 	adder.AddWidget(&r.configBtn)
 	adder.AddWidget(&r.clips)
 	adder.AddWidget(&r.graphFrame)
+	adder.AddWidget(&r.splitter)
 	adder.AddWidget(&r.previewFrame)
 	adder.AddWidget(&r.inspector)
 	adder.AddWidget(&r.status)
@@ -171,11 +173,26 @@ func (r *Root) Layout(context *guigui.Context, widgetBounds *guigui.WidgetBounds
 	}
 
 	// The graph and the preview share the middle column: you watch the
-	// machine run right under the graph you are editing.
+	// machine run right under the graph you are editing. The boundary
+	// drags, because the useful split is not the same for both jobs —
+	// wiring a machine wants the graph, posing a rig wants the stage.
+	b := widgetBounds.Bounds()
+	// What the centre column has to spend: the window, less the toolbar and
+	// the status bar, their gaps, and the surrounding padding.
+	centerH := b.Dy() - 2*u - u/2 - u
+	// The default keeps the two-fifths the preview had before it was
+	// resizable, plus the row the autoplay and zoom controls now take, so a
+	// window that was comfortable stays comfortable.
+	r.model.InitPreviewHeight(centerH*2/5 + 5*u/4)
+	previewH := min(max(r.model.PreviewHeight(), 4*u), max(centerH-4*u, 4*u))
+	r.model.SetPreviewHeight(previewH)
+	r.splitter.limit = max(centerH-4*u, 4*u)
+
 	r.centerItems = slices.Delete(r.centerItems, 0, len(r.centerItems))
 	r.centerItems = append(r.centerItems,
-		guigui.LinearLayoutItem{Widget: &r.graphFrame, Size: guigui.FlexibleSize(3)},
-		guigui.LinearLayoutItem{Widget: &r.previewFrame, Size: guigui.FlexibleSize(2)},
+		guigui.LinearLayoutItem{Widget: &r.graphFrame, Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Widget: &r.splitter, Size: guigui.FixedSize(u / 2)},
+		guigui.LinearLayoutItem{Widget: &r.previewFrame, Size: guigui.FixedSize(previewH)},
 	)
 	r.center = guigui.LinearLayout{
 		Direction: guigui.LayoutDirectionVertical, Items: r.centerItems, Gap: u / 4,
@@ -220,6 +237,7 @@ func main() {
 	case flag.NArg() > 0:
 		root.model.Open(flag.Arg(0))
 	}
+	applyScreenshotSetup(root.model)
 	title := "Lottie State Machine Editor"
 	if *viewer {
 		title += " (viewer)"

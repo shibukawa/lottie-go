@@ -114,12 +114,19 @@ func (m *Model) CollisionTab() colTab {
 		}
 	case colSockets:
 		return colSockets
+	case colPoses:
+		return colPoses
 	}
 	return colSegment
 }
 
 func (m *Model) SetCollisionTab(t colTab) {
 	m.colTab = t
+	// Choosing Poses is choosing to pose, so the right pane switches to the
+	// part list with it rather than waiting for something to be selected.
+	if t == colPoses {
+		m.setInspect(inspectPose)
+	}
 	m.generation++
 }
 
@@ -142,7 +149,7 @@ func (m *Model) SocketsVisible() bool {
 // OverlayVisible reports whether any overlay group shows, which is what
 // the stage checks before drawing or hit-testing at all.
 func (m *Model) OverlayVisible() bool {
-	return m.HitboxesVisible() || m.BodyVisible() || m.SocketsVisible()
+	return m.HitboxesVisible() || m.BodyVisible() || m.SocketsVisible() || m.PosesVisible()
 }
 
 // stageFrameLimit is the last meaningful frame of the stage animation;

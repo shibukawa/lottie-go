@@ -6,6 +6,7 @@ import (
 	"image/png"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/guigui-gui/guigui"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -18,7 +19,54 @@ import (
 const (
 	screenshotPathEnv  = "LSM_EDITOR_SCREENSHOT"
 	screenshotTicksEnv = "LSM_EDITOR_SCREENSHOT_TICKS"
+	// A pane that only appears once something is selected cannot be
+	// photographed from a cold start, so the shot can drive the model
+	// first. Comma-separated key=value: clip, tab, key, part.
+	screenshotSetupEnv = "LSM_EDITOR_SCREENSHOT_SETUP"
 )
+
+// applyScreenshotSetup puts the model into the state a screenshot wants.
+// Unknown keys and unparseable values are ignored: this is a debugging
+// affordance, not an interface anything depends on.
+func applyScreenshotSetup(m *Model) {
+	spec := os.Getenv(screenshotSetupEnv)
+	if spec == "" {
+		return
+	}
+	for _, part := range strings.Split(spec, ",") {
+		k, v, ok := strings.Cut(strings.TrimSpace(part), "=")
+		if !ok {
+			continue
+		}
+		switch k {
+		case "clip":
+			m.ShowClip(clipRef{Anim: v})
+		case "tab":
+			if tab, ok := map[string]colTab{
+				"segment": colSegment, "poses": colPoses,
+				"hitbox": colHitboxes, "body": colBody, "sockets": colSockets,
+			}[v]; ok {
+				m.SetCollisionTab(tab)
+			}
+		case "key":
+			if f, err := strconv.ParseFloat(v, 64); err == nil {
+				m.SelectPoseKey(f, -1)
+			}
+		case "part":
+			if i, ok := m.PosePartIndex(v); ok {
+				m.SelectPosePart(i)
+			}
+		case "onion":
+			m.SetOnionSkin(v == "1" || v == "true")
+		case "rig":
+			m.SetShowRig(v == "1" || v == "true")
+		case "zoom":
+			if f, err := strconv.ParseFloat(v, 64); err == nil {
+				m.SetStageView(f, 0, 0)
+			}
+		}
+	}
+}
 
 type screenshotGame struct {
 	ebiten.Game

@@ -18,8 +18,13 @@ ui:
   panel:
     kind: tabs
     id: tabs.collision
-    columns: ["Segment", "Hitbox (resolv)", "Body (cp)", "Sockets"]
+    columns: ["Segment", "Poses", "Hitbox (resolv)", "Body (cp)", "Sockets"]
     state: annotation tab labels carry their engine so the destination of each group's data is legible at a glance
+    state: the row above the tab bar holds what belongs to the stage rather than to a tab — the autoplay and onion-skin checkboxes, a zoom readout, -/+ and Fit. Autoplay used to live inside the Segment tab, where the other tabs could not reach it
+    state: stage view is zoom over fit-to-pane plus a pan; wheel zooms about the cursor, the buttons about the pane centre, dragging empty stage pans, Fit returns. It applies to every tab because it is how the stage is looked at, not what it edits — collision shapes get the magnification too
+    state: onion skin draws the keys either side of the playhead under the current frame, previous cool and next warm; it renders through its own paused player, because moving the stage player mid-draw would stop playback as a side effect of a display option. Off while the clip plays, where the pair would strobe
+    state: the boundary between the state graph and the preview drags (splitterView), so posing can take the window back from the graph. The split is seeded from the height the preview used to have and then belongs to whoever dragged it; it lives for the session, not the document
+    state: Poses is ui:keyframe-editing; the tab set is otherwise the annotation groups
     state: Segment (default) holds the whole-clip overview timeline — where the played range sits in the full extent, markers included; scrub-only, no buttons
     state: tabs the physics config leaves standing; Hitboxes holds the chart + add buttons (the redundant box dropdown is gone — chart rows select), Body and Sockets hold lists whose rows select for the inspector
     state: socket rows read "name / layer … · front|behind"; socket crosses drag on the stage, writing the layer-local dx/dy trim (also numeric in the socket pane)

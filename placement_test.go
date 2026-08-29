@@ -177,3 +177,67 @@ func TestOnFrameSpan(t *testing.T) {
 		t.Fatalf("swept %v frames, want 80", total)
 	}
 }
+
+// mirrorFixture holds a layer scaled negatively on x, the way a rigged
+// character flips a part to face the other way.
+const mirrorFixture = `{
+  "v": "5.9.0", "fr": 60, "ip": 0, "op": 60, "w": 200, "h": 200,
+  "layers": [
+    {"ty": 3, "nm": "flipped", "ind": 1, "ip": 0, "op": 60, "st": 0, "ks": {
+      "p": {"a": 0, "k": [100, 100]},
+      "s": {"a": 0, "k": [-100, 100]}
+    }}
+  ]
+}`
+
+// LayerTransform exists because the decomposed placement cannot express a
+// mirror: it reports positive scale and folds the flip into a half turn.
+// Anything reproducing the layer's own frame needs the composed matrix.
+func TestLayerTransformKeepsMirror(t *testing.T) {
+	a, err := Decode(strings.NewReader(mirrorFixture))
+	if err != nil {
+		t.Fatalf("decode fixture: %v", err)
+	}
+	g, ok := a.LayerTransform("flipped", 0)
+	if !ok {
+		t.Fatal("flipped not found")
+	}
+	// A mirror flips x and leaves y alone. The probe point is off the
+	// x-axis on purpose: on it, a mirror and a half turn agree.
+	x, y := g.Apply(10, 20)
+	if !near(x, 90) || !near(y, 120) {
+		t.Errorf("mirrored point: got (%v, %v); want (90, 120)", x, y)
+	}
+	if d := g.Element(0, 0)*g.Element(1, 1) - g.Element(0, 1)*g.Element(1, 0); d >= 0 {
+		t.Errorf("determinant = %v; want negative for a mirrored layer", d)
+	}
+	// The decomposition, by contrast, reports a right-handed frame and
+	// turns the flip into a half turn, which also flips y. That is exactly
+	// the gap the matrix accessor closes.
+	p, _ := a.LayerPlacement("flipped", 0)
+	if p.ScaleX < 0 {
+		t.Errorf("LayerPlacement.ScaleX = %v; expected the decomposition to lose the sign", p.ScaleX)
+	}
+	pg := p.GeoM()
+	if px, py := pg.Apply(10, 20); !near(px, 90) || !near(py, 80) {
+		t.Errorf("LayerPlacement.GeoM point = (%v, %v); want the half-turn (90, 80) "+
+			"that makes the matrix accessor necessary", px, py)
+	}
+}
+
+// A transform must resolve through a parent chain and a precomp the same way
+// a placement does, since it shares the resolver.
+func TestLayerTransformMatchesPlacement(t *testing.T) {
+	a := placementAnim(t)
+	for _, name := range []string{"hand", "tip", "muzzle"} {
+		g, ok := a.LayerTransform(name, 20)
+		if !ok {
+			t.Fatalf("%s not found", name)
+		}
+		p, _ := a.LayerPlacement(name, 20)
+		x, y := g.Apply(0, 0)
+		if !near(x, p.X) || !near(y, p.Y) {
+			t.Errorf("%s origin: matrix (%v, %v), placement (%v, %v)", name, x, y, p.X, p.Y)
+		}
+	}
+}
