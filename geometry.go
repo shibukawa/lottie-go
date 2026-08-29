@@ -103,9 +103,10 @@ func rectShape(dst *bezierShape, cx, cy, w, h, r float64) {
 		return
 	}
 	o := r * kappa
-	// Clockwise from the start of the top-right corner arc.
+	// Clockwise from the right-edge start, after the top-right arc — the
+	// vertex lottie-web's convertRectToPath begins at, so trim paths and
+	// dash offsets line up.
 	dst.V = append(dst.V[:0],
-		[2]float64{cx + hw - r, cy - hh}, // top edge end, before top-right arc
 		[2]float64{cx + hw, cy - hh + r}, // right edge start
 		[2]float64{cx + hw, cy + hh - r}, // right edge end
 		[2]float64{cx + hw - r, cy + hh}, // bottom edge start
@@ -113,19 +114,20 @@ func rectShape(dst *bezierShape, cx, cy, w, h, r float64) {
 		[2]float64{cx - hw, cy + hh - r}, // left edge start
 		[2]float64{cx - hw, cy - hh + r}, // left edge end
 		[2]float64{cx - hw + r, cy - hh}, // top edge start
+		[2]float64{cx + hw - r, cy - hh}, // top edge end, before top-right arc
 	)
 	dst.O = append(dst.O[:0],
-		[2]float64{o, 0}, [2]float64{},
-		[2]float64{0, o}, [2]float64{},
-		[2]float64{-o, 0}, [2]float64{},
-		[2]float64{0, -o}, [2]float64{},
+		[2]float64{}, [2]float64{0, o},
+		[2]float64{}, [2]float64{-o, 0},
+		[2]float64{}, [2]float64{0, -o},
+		[2]float64{}, [2]float64{o, 0},
 	)
 	// In-tangents point backward along the direction of travel at each
 	// corner's exit vertex.
 	dst.I = append(dst.I[:0],
-		[2]float64{}, [2]float64{0, -o},
-		[2]float64{}, [2]float64{o, 0},
-		[2]float64{}, [2]float64{0, o},
-		[2]float64{}, [2]float64{-o, 0},
+		[2]float64{0, -o}, [2]float64{},
+		[2]float64{o, 0}, [2]float64{},
+		[2]float64{0, o}, [2]float64{},
+		[2]float64{-o, 0}, [2]float64{},
 	)
 }

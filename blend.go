@@ -94,7 +94,7 @@ func ensureBlendShader() {
 // backdrop-sampling blend mode. dst must not be the final screen image, which
 // Ebitengine forbids reading; renderer.render keeps root-level shader blends
 // off the screen by wrapping the animation in an offscreen.
-func compositeBlend(dst, content *ebiten.Image, bounds image.Rectangle, bm int, opacity float64, cs ebiten.ColorScale) {
+func (r *renderer) compositeBlend(dst, content *ebiten.Image, bounds image.Rectangle, bm int, opacity float64, cs ebiten.ColorScale) {
 	ensureBlendShader()
 	w, h := bounds.Dx(), bounds.Dy()
 	backdrop, backdropBase := sharedPool.get(w, h)
@@ -110,10 +110,15 @@ func compositeBlend(dst, content *ebiten.Image, bounds image.Rectangle, bm int, 
 	op.Images[0] = content
 	op.Images[1] = backdrop
 	op.Blend = ebiten.BlendCopy
-	op.Uniforms = map[string]any{
-		"Mode":  float32(bm),
-		"Scale": []float32{cs.R() * a, cs.G() * a, cs.B() * a, cs.A() * a},
+	// Renderer-owned uniform scratch: Ebitengine copies the values during
+	// the draw, so the map and slice are free to refill next call.
+	if r.blendUnis == nil {
+		r.blendUnis = map[string]any{"Scale": make([]float32, 4)}
 	}
+	r.blendUnis["Mode"] = float32(bm)
+	s := r.blendUnis["Scale"].([]float32)
+	s[0], s[1], s[2], s[3] = cs.R()*a, cs.G()*a, cs.B()*a, cs.A()*a
+	op.Uniforms = r.blendUnis
 	dst.DrawRectShader(w, h, blendShader, &op)
 	sharedPool.put(backdropBase)
 }

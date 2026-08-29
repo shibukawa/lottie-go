@@ -153,7 +153,7 @@ func TestGradientStopsBeyondCapKeepOpacity(t *testing.T) {
 		data = append(data, pos, 1, 0.5, 0) // opaque orange, no alpha tail
 	}
 	var g gradientCmd
-	buildGradientStops(&g, data, declared, 1)
+	buildGradientStops(&g, data, declared, 1, nil)
 	if g.count != maxGradStops {
 		t.Fatalf("stop count = %d; want clamped to %d", g.count, maxGradStops)
 	}

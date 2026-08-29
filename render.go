@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"github.com/hajimehoshi/ebiten/v2/vector"
 )
 
@@ -247,12 +248,48 @@ type renderer struct {
 	shapeScratch bezierShape
 	maskScratch  bezierShape
 	maskExpand   bezierShape // expanded mask contour scratch
-	vecScratch   []float64
 	dashVals     []float64
 	repGeoms     []geometry // repeater source snapshot
 	repCmds      []drawCmd
 	trim         trimmer
 	atlas        *scratchAtlas // non-nil while this render holds sharedAtlas
+
+	// Per-purpose atInto buffers, so every animated property evaluated on
+	// the render path reuses one allocation instead of churning the heap
+	// each frame. A renderer belongs to one player, so these never race.
+	vecScratch  []float64 // shape positions
+	sizeScratch []float64 // shape sizes (live alongside a position)
+	colorBuf    []float64
+	repABuf     []float64
+	repPBuf     []float64
+	repSBuf     []float64
+	gradStartB  []float64
+	gradEndB    []float64
+	gradStopsB  []float64
+
+	// Gradient arenas and draw-time scratch: commands, the opacity-stop
+	// scratch, and the uniform buffers executeGradient refills per draw
+	// (Ebitengine copies uniform values during the draw call, so the
+	// backing slices are safe to reuse).
+	gradCmds   []gradientCmd
+	nGrad      int
+	gradAlphas []alphaStop
+	gradStopsU []float32
+	gradColors []float32
+	gradVerts  [4]ebiten.Vertex
+	gradUnis   map[string]any
+	blendUnis  map[string]any
+	lumaUnis   map[string]any
+
+	// Text scratch (renderGlyphText): shaped glyphs, per-glyph animator
+	// state, the flattened factor buffer behind it, and the selector-unit
+	// table. All frame-local; reused so animated text stops allocating
+	// per glyph per frame.
+	textGlyphs  []text.Glyph
+	textStates  []glyphState
+	textFactors []float64
+	textUnits   []glyphUnit
+	textLines   [][]glyphUnit
 }
 
 func nextSlot(arr []geometry, n *int) ([]geometry, *geometry) {
@@ -294,9 +331,22 @@ func copyPoints(dst, src [][2]float64) [][2]float64 {
 	return append(dst[:0], src...)
 }
 
+// rootShaderBlendActive reports whether a root layer that blends through
+// the shader actually draws at frame f — the offscreen wrap below is only
+// needed then, not on every frame of an animation that merely contains one.
+func rootShaderBlendActive(anim *Animation, f float64) bool {
+	for _, l := range anim.layers {
+		if blendNeedsShader(l.blend) && !l.hidden && !l.matteOnly &&
+			f >= l.ip && f < l.op && l.transform.opacityAt(l.localTime(f)) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // render draws the whole animation at composition frame f.
 func (r *renderer) render(dst *ebiten.Image, anim *Animation, f float64, root matrix, cs ebiten.ColorScale, antialias bool) {
-	if anim.rootShaderBlend {
+	if anim.rootShaderBlend && rootShaderBlendActive(anim, f) {
 		// Backdrop-sampling blends on root layers would have to read dst,
 		// which Ebitengine forbids when dst is the screen. Render through an
 		// offscreen instead; those blends then composite against the
@@ -408,14 +458,18 @@ func (r *renderer) planPhases(dst *ebiten.Image, layers []*layerNode, f float64,
 	}
 	// Batching only pays from two nodes up, and the bounds evaluation below
 	// walks each candidate's shapes, so count the cheap flags first and skip
-	// the whole plan for the common single-node layer list.
+	// the whole plan for the common single-node layer list. (Letting single
+	// candidates join a frame-wide batch was tried and measured worse: each
+	// atlas region is its own render target, so lone nodes pay the target
+	// switches without the within-list merging that makes phases pay off.)
 	candidates := 0
 	for _, l := range layers {
 		if l.phaseOK && !l.hidden && !l.matteOnly && f >= l.ip && f < l.op {
 			candidates++
 		}
 	}
-	if candidates < 2 {
+	const minNodes = 2
+	if candidates < minNodes {
 		return nil
 	}
 	r.atlas.newShelf()
@@ -440,6 +494,19 @@ func (r *renderer) planPhases(dst *ebiten.Image, layers []*layerNode, f float64,
 			bounds:   dst.Bounds().Intersect(lb),
 			hasMatte: l.matteMode != 0 && l.matteSrc != nil,
 		}
+		if n.hasMatte {
+			if src := l.matteSrc; src.hidden || f < src.ip || f >= src.op ||
+				src.transform.opacityAt(src.localTime(f)) <= 0 {
+				// Same shortcut renderLayer takes: an empty matte erases
+				// alpha/luma modes outright and is a no-op inverted.
+				if l.matteMode == 1 || l.matteMode == 3 {
+					n.bounds = image.Rectangle{}
+					add(l, n)
+					continue
+				}
+				n.hasMatte = false
+			}
+		}
 		if n.bounds.Empty() {
 			add(l, n) // nothing to draw; claim the layer so z-pass skips it
 			continue
@@ -457,9 +524,10 @@ func (r *renderer) planPhases(dst *ebiten.Image, layers []*layerNode, f float64,
 		add(l, n)
 		nodes = append(nodes, n)
 	}
-	// A single node gains nothing from batching — its draw count matches
-	// the pooled path — so do not bring the atlases into play for it.
-	if len(nodes) < 2 {
+	// A lone node in a frame that has no other phase work gains nothing
+	// from batching — its draw count matches the pooled path — so do not
+	// bring the atlases into play for it.
+	if len(nodes) < minNodes {
 		for _, n := range nodes {
 			delete(plan, n.l)
 		}
@@ -512,7 +580,7 @@ func (r *renderer) preparePhases(nodes []*phaseNode, rows image.Rectangle, f flo
 			content.DrawImage(maskImg.SubImage(n.region).(*ebiten.Image), &op)
 		}
 		if n.hasMatte {
-			combineMatte(content, maskImg.SubImage(n.matteRegion).(*ebiten.Image), n.l.matteMode)
+			r.combineMatte(content, maskImg.SubImage(n.matteRegion).(*ebiten.Image), n.l.matteMode)
 		}
 	}
 }
@@ -543,6 +611,19 @@ func (r *renderer) renderLayer(dst *ebiten.Image, l *layerNode, f float64, root 
 	shaderBlend := blendNeedsShader(l.blend)
 
 	hasMatte := applyMatte && l.matteMode != 0 && l.matteSrc != nil
+	if hasMatte {
+		if src := l.matteSrc; src.hidden || f < src.ip || f >= src.op ||
+			src.transform.opacityAt(src.localTime(f)) <= 0 {
+			// An inactive matte source leaves an empty matte: the alpha
+			// and luma modes erase the whole layer, so skip it outright;
+			// the inverted modes keep it untouched, so skip the matte
+			// offscreen and combine instead.
+			if l.matteMode == 1 || l.matteMode == 3 {
+				return
+			}
+			hasMatte = false
+		}
+	}
 	if len(l.masks) == 0 && !hasMatte && !shaderBlend && len(l.effects) == 0 {
 		r.renderBody(dst, l, f, lt, mat, opacity, cs, blend, antialias)
 		return
@@ -580,12 +661,12 @@ func (r *renderer) renderLayer(dst *ebiten.Image, l *layerNode, f float64, root 
 		if !src.hidden && f >= src.ip && f < src.op {
 			r.renderLayer(matteImg, src, f, shift.mul(root), neutral, antialias, false)
 		}
-		combineMatte(content, matteImg, l.matteMode)
+		r.combineMatte(content, matteImg, l.matteMode)
 		sharedPool.put(matteBase)
 	}
 
 	if shaderBlend {
-		compositeBlend(dst, content, bounds, l.blend, opacity, cs)
+		r.compositeBlend(dst, content, bounds, l.blend, opacity, cs)
 	} else {
 		var op ebiten.DrawImageOptions
 		op.GeoM.Translate(float64(bounds.Min.X), float64(bounds.Min.Y))
@@ -642,6 +723,7 @@ func (r *renderer) layerBaseBounds(l *layerNode, f, lt float64, mat matrix) (ima
 func (r *renderer) shapeBounds(l *layerNode, lt float64, mat matrix) (image.Rectangle, bool) {
 	r.nGeoms = 0
 	r.nDash = 0
+	r.nGrad = 0
 	r.cmds = r.cmds[:0]
 	r.walkShapes(l.shapes, lt, mat, 1)
 
@@ -727,6 +809,7 @@ func (r *renderer) renderBody(dst *ebiten.Image, l *layerNode, f, lt float64, ma
 	case 4:
 		r.nGeoms = 0
 		r.nDash = 0
+		r.nGrad = 0
 		r.cmds = r.cmds[:0]
 		r.walkShapes(l.shapes, lt, mat, opacity)
 		for c := len(r.cmds) - 1; c >= 0; c-- {
@@ -915,7 +998,7 @@ func Fragment(dst vec4, src vec2, color vec4) vec4 {
 // combineMatte intersects content with the matte according to the tt mode.
 // content and matte must be the same size but may sit at different positions
 // of their images, as atlas regions do.
-func combineMatte(content, matte *ebiten.Image, mode int) {
+func (r *renderer) combineMatte(content, matte *ebiten.Image, mode int) {
 	b := content.Bounds()
 	switch mode {
 	case 1: // alpha
@@ -944,7 +1027,11 @@ func combineMatte(content, matte *ebiten.Image, mode int) {
 		if mode == 4 {
 			invert = 1
 		}
-		op.Uniforms = map[string]any{"Invert": invert}
+		if r.lumaUnis == nil {
+			r.lumaUnis = map[string]any{}
+		}
+		r.lumaUnis["Invert"] = invert
+		op.Uniforms = r.lumaUnis
 		content.DrawRectShader(b.Dx(), b.Dy(), lumaShader, &op)
 	}
 }
@@ -1020,20 +1107,26 @@ func (r *renderer) walkShapes(nodes []*shapeNode, f float64, mat matrix, opacity
 			g.bez.I = copyPoints(g.bez.I, src.I)
 			g.bez.O = copyPoints(g.bez.O, src.O)
 		case "rc":
-			p := n.pos.at(f, r.vecScratch)
-			s := n.size.at(f, nil)
+			p := n.pos.atInto(f, &r.vecScratch)
+			s := n.size.atInto(f, &r.sizeScratch)
 			round := n.roundness.scalarAt(f, 0)
 			g := r.nextGeom()
 			g.mat = mat
 			rectShape(&g.bez, at(p, 0), at(p, 1), at(s, 0), at(s, 1), round)
+			if n.dir == 3 {
+				reverseContour(&g.bez)
+			}
 		case "el":
-			p := n.pos.at(f, r.vecScratch)
-			s := n.size.at(f, nil)
+			p := n.pos.atInto(f, &r.vecScratch)
+			s := n.size.atInto(f, &r.sizeScratch)
 			g := r.nextGeom()
 			g.mat = mat
 			ellipseShape(&g.bez, at(p, 0), at(p, 1), at(s, 0)/2, at(s, 1)/2)
+			if n.dir == 3 {
+				reverseContour(&g.bez)
+			}
 		case "sr":
-			p := n.pos.at(f, r.vecScratch)
+			p := n.pos.atInto(f, &r.vecScratch)
 			g := r.nextGeom()
 			g.mat = mat
 			polystarShape(&g.bez, n.starType == 1,
@@ -1042,6 +1135,9 @@ func (r *renderer) walkShapes(nodes []*shapeNode, f float64, mat matrix, opacity
 				n.rotation.scalarAt(f, 0),
 				n.outerR.scalarAt(f, 0), n.innerR.scalarAt(f, 0),
 				n.outerRound.scalarAt(f, 0), n.innerRound.scalarAt(f, 0))
+			if n.dir == 3 {
+				reverseContour(&g.bez)
+			}
 		case "fl", "st", "gf", "gs":
 			r.emitStyle(n, f, opacity, groupStart, mat)
 		case "tm":
@@ -1132,7 +1228,7 @@ func at(v []float64, i int) float64 {
 }
 
 func (r *renderer) styleCmd(n *shapeNode, f float64, opacity float64, start, end int) drawCmd {
-	c := n.color.at(f, nil)
+	c := n.color.atInto(f, &r.colorBuf)
 	cr, cg, cb := at(c, 0), at(c, 1), at(c, 2)
 	ca := 1.0
 	if len(c) > 3 {
@@ -1166,14 +1262,16 @@ func (r *renderer) execute(dst *ebiten.Image, cmd *drawCmd, cs ebiten.ColorScale
 	if cmd.dashed {
 		arr = r.dashGeoms
 	}
+	if cmd.grad != nil {
+		// executeGradient rasterizes into its own shifted path; building
+		// r.path here too would trace the same geometry twice.
+		r.executeGradient(dst, cmd, arr, cs, blend, antialias)
+		return
+	}
 	r.path.Reset()
 	for i := cmd.geomStart; i < cmd.geomEnd; i++ {
 		g := &arr[i]
 		g.bez.appendToPath(&r.path, g.mat)
-	}
-	if cmd.grad != nil {
-		r.executeGradient(dst, cmd, arr, cs, blend, antialias)
-		return
 	}
 	a := cmd.a * cmd.alphaMul
 	var op vector.DrawPathOptions

@@ -393,6 +393,10 @@ type shapeNode struct {
 	trimOffset *vectorTrack
 	trimMode   int
 
+	// Primitive direction (rc, el, sr): 3 reverses the contour, which
+	// nonzero-rule fills rely on for holes.
+	dir int
+
 	// Polystar (sr).
 	starType   int // 1 star, 2 polygon
 	rotation   *vectorTrack
@@ -411,6 +415,7 @@ type shapeNode struct {
 	repRot    *vectorTrack
 	repSO     *vectorTrack
 	repEO     *vectorTrack
+	repMode   int // 1 copies above the original, 2 below (reverse stack)
 
 	// Stroke dashes (st, gs).
 	dashPattern []*vectorTrack // alternating dash/gap lengths
@@ -461,6 +466,10 @@ func (b *builder) buildLayers(raws []rawLayer) []*layerNode {
 				name = fmt.Sprintf("layer type %d", rl.Type)
 			}
 			b.anim.note(name)
+			// The skipped layer was still "the layer above": an implicit
+			// track matte below it must not silently matte against the
+			// next supported layer further up.
+			prevNode = nil
 			continue
 		}
 		n := &layerNode{
@@ -779,6 +788,7 @@ func (b *builder) buildShapeItems(items []rawShapeItem) []*shapeNode {
 			nodes = append(nodes, &shapeNode{
 				kind:      "rc",
 				name:      it.Name,
+				dir:       it.direction(),
 				pos:       b.vectorProp(it.P, "rect position", []float64{0, 0}),
 				size:      b.vectorProp(it.S, "rect size", []float64{0, 0}),
 				roundness: b.vectorProp(it.R, "rect roundness", []float64{0}),
@@ -787,6 +797,7 @@ func (b *builder) buildShapeItems(items []rawShapeItem) []*shapeNode {
 			nodes = append(nodes, &shapeNode{
 				kind: "el",
 				name: it.Name,
+				dir:  it.direction(),
 				pos:  b.vectorProp(it.P, "ellipse position", []float64{0, 0}),
 				size: b.vectorProp(it.S, "ellipse size", []float64{0, 0}),
 			})
@@ -877,6 +888,7 @@ func (b *builder) buildShapeItems(items []rawShapeItem) []*shapeNode {
 			nodes = append(nodes, &shapeNode{
 				kind:       "sr",
 				name:       it.Name,
+				dir:        it.direction(),
 				starType:   st,
 				pos:        b.vectorProp(it.P, "polystar position", []float64{0, 0}),
 				rotation:   b.vectorProp(it.R, "polystar rotation", []float64{0}),
@@ -914,10 +926,11 @@ func (b *builder) buildShapeItems(items []rawShapeItem) []*shapeNode {
 			})
 		case "rp":
 			n := &shapeNode{
-				kind:   "rp",
-				name:   it.Name,
-				copies: b.vectorProp(it.C, "repeater copies", []float64{1}),
-				offset: b.vectorProp(it.O, "repeater offset", []float64{0}),
+				kind:    "rp",
+				name:    it.Name,
+				copies:  b.vectorProp(it.C, "repeater copies", []float64{1}),
+				offset:  b.vectorProp(it.O, "repeater offset", []float64{0}),
+				repMode: it.M, // 1 stacks copies above the original, 2 below
 			}
 			tr := it.RepeaterT
 			if tr == nil {

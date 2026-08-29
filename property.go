@@ -162,13 +162,58 @@ func (tr *vectorTrack) at(f float64, dst []float64) []float64 {
 	return dst
 }
 
-// scalarAt is a convenience for 1-dimensional tracks.
+// scalarAt is a convenience for 1-dimensional tracks. It interpolates the
+// first component directly, without the scratch slice at needs — this runs
+// for every animated scalar of every shape on every frame.
 func (tr *vectorTrack) scalarAt(f float64, def float64) float64 {
-	v := tr.at(f, nil)
-	if len(v) == 0 {
+	first := func(v []float64) float64 {
+		if len(v) == 0 {
+			return def
+		}
+		return v[0]
+	}
+	if tr.keys == nil {
+		return first(tr.static)
+	}
+	keys := tr.keys
+	if f <= keys[0].t {
+		return first(keys[0].value)
+	}
+	if last := &keys[len(keys)-1]; f >= last.t {
+		return first(last.value)
+	}
+	i := 0
+	for i < len(keys)-1 && keys[i+1].t <= f {
+		i++
+	}
+	k0, k1 := &keys[i], &keys[i+1]
+	if k0.hold {
+		return first(k0.value)
+	}
+	end := k1.value
+	if k0.legacyEnd != nil {
+		end = k0.legacyEnd
+	}
+	if len(k0.value) == 0 || len(end) == 0 {
 		return def
 	}
-	return v[0]
+	u := k0.ease.at((f - k0.t) / (k1.t - k0.t))
+	return k0.value[0] + (end[0]-k0.value[0])*u
+}
+
+// atInto evaluates like at but always leaves the result in *buf, growing it
+// as needed. Callers holding several results at once keep one buffer each
+// and stay off the heap; the copy also means the caller never aliases a
+// track's stored keyframe data.
+func (tr *vectorTrack) atInto(f float64, buf *[]float64) []float64 {
+	v := tr.at(f, *buf)
+	if cap(*buf) < len(v) {
+		*buf = make([]float64, len(v))
+	}
+	b := (*buf)[:len(v)]
+	copy(b, v)
+	*buf = b
+	return b
 }
 
 // shapeKey is one keyframe of a bezier shape.

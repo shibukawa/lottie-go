@@ -1,6 +1,8 @@
 package lottie
 
 import (
+	"image"
+	"math"
 	"sync"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -72,15 +74,18 @@ func Fragment(dst vec4, src vec2, color vec4) vec4 {
 }
 `
 
-// gradientCmd evaluates a gf/gs node into a draw command.
+// gradientCmd evaluates a gf/gs node into a draw command. The command
+// struct comes from the renderer's arena, reset alongside the geometry
+// arenas, so evaluating gradients every frame stays off the heap.
 func (r *renderer) gradientCmd(n *shapeNode, f float64, opacity float64, start, end int, mat matrix) drawCmd {
 	alpha := clamp01(opacity * clamp01(n.opacity.scalarAt(f, 100)/100))
-	g := &gradientCmd{kind: n.gradKind, mat: mat}
-	s := n.gradStart.at(f, nil)
-	e := n.gradEnd.at(f, nil)
+	g := r.nextGradCmd()
+	g.kind, g.mat = n.gradKind, mat
+	s := n.gradStart.atInto(f, &r.gradStartB)
+	e := n.gradEnd.atInto(f, &r.gradEndB)
 	g.sx, g.sy = at(s, 0), at(s, 1)
 	g.ex, g.ey = at(e, 0), at(e, 1)
-	buildGradientStops(g, n.gradStops.at(f, nil), n.gradStopCount, alpha)
+	r.gradAlphas = buildGradientStops(g, n.gradStops.atInto(f, &r.gradStopsB), n.gradStopCount, alpha, r.gradAlphas)
 	return drawCmd{
 		geomStart: start,
 		geomEnd:   end,
@@ -90,21 +95,24 @@ func (r *renderer) gradientCmd(n *shapeNode, f float64, opacity float64, start, 
 	}
 }
 
+// alphaStop is one (position, alpha) pair of a gradient's opacity tail.
+type alphaStop struct{ pos, a float64 }
+
 // buildGradientStops merges Lottie's flattened color stops (pos,r,g,b)*count
 // plus optional trailing alpha stops (pos,a)* into premultiplied RGBA stops.
-func buildGradientStops(g *gradientCmd, data []float64, count int, alpha float64) {
+// scratch is reused across calls and the grown slice is returned.
+func buildGradientStops(g *gradientCmd, data []float64, count int, alpha float64, scratch []alphaStop) []alphaStop {
 	if count <= 0 || len(data) < count*4 {
 		// Malformed: fall back to opaque black -> transparent.
 		g.count = 2
 		g.stops = [maxGradStops]float32{0, 1}
 		g.colors[0] = [4]float32{0, 0, 0, float32(alpha)}
 		g.colors[1] = [4]float32{0, 0, 0, float32(alpha)}
-		return
+		return scratch
 	}
 	// The alpha tail starts after the file's full color-stop run; slice it
 	// before clamping count, or extra color stops read back as alpha stops.
-	type alphaStop struct{ pos, a float64 }
-	var alphas []alphaStop
+	alphas := scratch[:0]
 	rest := data[count*4:]
 	if count > maxGradStops {
 		count = maxGradStops
@@ -142,12 +150,58 @@ func buildGradientStops(g *gradientCmd, data []float64, count int, alpha float64
 			float32(cr * a), float32(cg * a), float32(cb * a), float32(a),
 		}
 	}
+	return alphas
 }
 
-// executeGradient renders the current path as a coverage mask and shades it
-// with the gradient shader. arr is the geometry array the command indexes.
+// nextGradCmd hands out a gradientCmd from the arena, growing it on
+// demand. Slots are reclaimed when the geometry arenas reset; a command
+// whose pointer predates a growth keeps reading its old backing, which
+// still holds the finished value — commands are never mutated after build.
+func (r *renderer) nextGradCmd() *gradientCmd {
+	if r.nGrad == len(r.gradCmds) {
+		r.gradCmds = append(r.gradCmds, gradientCmd{})
+	}
+	g := &r.gradCmds[r.nGrad]
+	r.nGrad++
+	return g
+}
+
+// geomControlBounds bounds the commands' geometry in device space from the
+// bezier control points — a superset of the curves themselves, which only
+// costs a little area on the coverage mask.
+func geomControlBounds(arr []geometry, start, end int) (image.Rectangle, bool) {
+	minX, minY := math.Inf(1), math.Inf(1)
+	maxX, maxY := math.Inf(-1), math.Inf(-1)
+	for i := start; i < end; i++ {
+		g := &arr[i]
+		for j, v := range g.bez.V {
+			px, py := v[0], v[1]
+			for _, pt := range [3][2]float64{
+				{px, py},
+				{px + tangentAt(g.bez.I, j)[0], py + tangentAt(g.bez.I, j)[1]},
+				{px + tangentAt(g.bez.O, j)[0], py + tangentAt(g.bez.O, j)[1]},
+			} {
+				x, y := g.mat.apply(pt[0], pt[1])
+				minX, minY = math.Min(minX, x), math.Min(minY, y)
+				maxX, maxY = math.Max(maxX, x), math.Max(maxY, y)
+			}
+		}
+	}
+	if minX > maxX {
+		return image.Rectangle{}, false
+	}
+	return image.Rect(int(math.Floor(minX)), int(math.Floor(minY)),
+		int(math.Ceil(maxX)), int(math.Ceil(maxY))), true
+}
+
+// executeGradient renders the commands' geometry as a coverage mask and
+// shades it with the gradient shader. arr is the geometry array the
+// command indexes; the path is built once, directly in mask space.
 func (r *renderer) executeGradient(dst *ebiten.Image, cmd *drawCmd, arr []geometry, cs ebiten.ColorScale, blend ebiten.Blend, antialias bool) {
-	region := r.path.Bounds()
+	region, ok := geomControlBounds(arr, cmd.geomStart, cmd.geomEnd)
+	if !ok {
+		return
+	}
 	if cmd.stroke {
 		pad := int(cmd.strokeOpts.Width) + 2
 		region = region.Inset(-pad)
@@ -205,8 +259,11 @@ func (r *renderer) executeGradient(dst *ebiten.Image, cmd *drawCmd, arr []geomet
 	oy := float64(dst.Bounds().Min.Y)
 	invTX, invTY := inv.apply(ox, oy)
 
-	stops := make([]float32, maxGradStops)
-	colors := make([]float32, maxGradStops*4)
+	if r.gradStopsU == nil {
+		r.gradStopsU = make([]float32, maxGradStops)
+		r.gradColors = make([]float32, maxGradStops*4)
+	}
+	stops, colors := r.gradStopsU, r.gradColors
 	for i := 0; i < grad.count; i++ {
 		stops[i] = grad.stops[i]
 		copy(colors[i*4:], grad.colors[i][:])
@@ -222,7 +279,7 @@ func (r *renderer) executeGradient(dst *ebiten.Image, cmd *drawCmd, arr []geomet
 	// The repeater opacity ramp rides on the vertex color (stop colors
 	// already carry the style opacity).
 	am := float32(cmd.alphaMul)
-	vs := make([]ebiten.Vertex, 4)
+	vs := r.gradVerts[:]
 	for i := range vs {
 		vs[i].ColorR = cs.R() * am
 		vs[i].ColorG = cs.G() * am
@@ -237,19 +294,38 @@ func (r *renderer) executeGradient(dst *ebiten.Image, cmd *drawCmd, arr []geomet
 	vs[2].DstX, vs[2].DstY, vs[2].SrcX, vs[2].SrcY = x0, y1, 0, fh
 	vs[3].DstX, vs[3].DstY, vs[3].SrcX, vs[3].SrcY = x1, y1, fw, fh
 
+	// The uniform map and its slices are renderer-owned scratch, refilled
+	// per draw: Ebitengine copies uniform values during the call, so the
+	// backing arrays are free again the moment it returns.
+	if r.gradUnis == nil {
+		r.gradUnis = map[string]any{
+			"Start": make([]float32, 2),
+			"End":   make([]float32, 2),
+			"InvA":  make([]float32, 4),
+			"InvT":  make([]float32, 2),
+		}
+	}
+	u := r.gradUnis
+	u["Kind"] = float32(grad.kind)
+	u["Count"] = float32(grad.count)
+	fill2 := func(key string, a, b float64) {
+		s := u[key].([]float32)
+		s[0], s[1] = float32(a), float32(b)
+	}
+	fill2("Start", grad.sx, grad.sy)
+	fill2("End", grad.ex, grad.ey)
+	ia := u["InvA"].([]float32)
+	ia[0], ia[1], ia[2], ia[3] = float32(inv.A), float32(inv.C), float32(inv.B), float32(inv.D)
+	fill2("InvT", invTX, invTY)
+	u["Stops"] = stops
+	u["Colors"] = colors
+
 	var top ebiten.DrawTrianglesShaderOptions
 	top.Images[0] = mask
 	top.Blend = blend
-	top.Uniforms = map[string]any{
-		"Kind":   float32(grad.kind),
-		"Start":  []float32{float32(grad.sx), float32(grad.sy)},
-		"End":    []float32{float32(grad.ex), float32(grad.ey)},
-		"Count":  float32(grad.count),
-		"InvA":   []float32{float32(inv.A), float32(inv.C), float32(inv.B), float32(inv.D)},
-		"InvT":   []float32{float32(invTX), float32(invTY)},
-		"Stops":  stops,
-		"Colors": colors,
-	}
-	dst.DrawTrianglesShader(vs, []uint16{0, 1, 2, 1, 3, 2}, gradShader, &top)
+	top.Uniforms = u
+	dst.DrawTrianglesShader(vs, gradIndices[:], gradShader, &top)
 	sharedPool.put(maskBase)
 }
+
+var gradIndices = [6]uint16{0, 1, 2, 1, 3, 2}

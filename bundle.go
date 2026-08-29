@@ -150,7 +150,7 @@ func DecodeBundle(r io.ReaderAt, size int64) (*Bundle, error) {
 			b.images[base] = data
 		case "s/":
 			b.smJSON[stripJSONExt(base)] = data
-		case "t/":
+		case "t/", "themes/":
 			b.themes[stripJSONExt(base)] = data
 		case "f/":
 			b.fonts[base] = data
@@ -536,6 +536,22 @@ func (b *Bundle) Encode(w io.Writer) error {
 	// them here or another tool wrote them into the file being edited.
 	for _, name := range sortedKeys(b.extFiles) {
 		if err := writeZipFile(zw, name, b.extFiles[name]); err != nil {
+			return err
+		}
+	}
+	// Archive members the groups above do not model — a v1 states/
+	// directory, a stray readme — carry over verbatim; dropping them
+	// would break the round-trip preservation policy.
+	for _, name := range sortedKeys(b.files) {
+		if name == "manifest.json" || strings.HasPrefix(name, extensionsPrefix) {
+			continue
+		}
+		dir, _ := path.Split(name)
+		switch dir {
+		case "a/", "animations/", "i/", "images/", "s/", "t/", "themes/", "f/":
+			continue // owned by a regenerated (or v1-mapped) group
+		}
+		if err := writeZipFile(zw, name, b.files[name]); err != nil {
 			return err
 		}
 	}

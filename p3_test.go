@@ -162,8 +162,9 @@ func TestZigZagLine(t *testing.T) {
 	r.applyZigZag(n, 0, 0)
 	out := r.geoms[0].bez
 	// One segment with one interior ridge: start, middle, end, offset
-	// alternately along the downward-then-upward normal.
-	want := [][2]float64{{0, -10}, {50, 10}, {100, -10}}
+	// alternately starting inward (direction -1), matching lottie-web's
+	// ZigZagModifier.
+	want := [][2]float64{{0, 10}, {50, -10}, {100, 10}}
 	if len(out.V) != len(want) {
 		t.Fatalf("points = %d; want %d (%v)", len(out.V), len(want), out.V)
 	}

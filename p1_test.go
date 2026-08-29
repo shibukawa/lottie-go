@@ -75,7 +75,7 @@ func TestGradientStopMerging(t *testing.T) {
 		0, 1,
 		1, 0,
 	}
-	buildGradientStops(&g, data, 2, 1)
+	buildGradientStops(&g, data, 2, 1, nil)
 	if g.count != 2 {
 		t.Fatalf("count = %d", g.count)
 	}
@@ -86,7 +86,7 @@ func TestGradientStopMerging(t *testing.T) {
 		t.Errorf("stop 1 = %v; want transparent (premultiplied)", g.colors[1])
 	}
 	// Style opacity scales everything.
-	buildGradientStops(&g, data[:8], 2, 0.5)
+	buildGradientStops(&g, data[:8], 2, 0.5, nil)
 	if math.Abs(float64(g.colors[0][0])-0.5) > 1e-6 || math.Abs(float64(g.colors[0][3])-0.5) > 1e-6 {
 		t.Errorf("stop 0 with opacity = %v; want premultiplied half red", g.colors[0])
 	}
