@@ -311,6 +311,58 @@ func (m *Model) PoseValueIsKeyed(prop string) bool {
 	return keyed
 }
 
+// PoseAdjacentValue reads the value a transform member holds at its own key
+// on one side of the selected one — dir < 0 is the key before, the pose the
+// part is arriving from; dir > 0 the key after, the pose it is heading to —
+// along with the frame that key sits at, which is what the copy buttons'
+// tooltips name. Reading the property's key times rather than the pose
+// columns keeps it exact when a member is keyed more sparsely than the poses
+// are. A static member has no keys and reports nothing, which is right: it
+// already equals its neighbours.
+func (m *Model) PoseAdjacentValue(prop string, dir int) ([]float64, float64, bool) {
+	d := m.StageClipDoc()
+	frame, ok := m.SelectedPoseKey()
+	if d == nil || !ok || m.posePart < 0 {
+		return nil, 0, false
+	}
+	adj, found := 0.0, false
+	for _, t := range d.keyTimesOf(m.posePart, prop) {
+		if dir < 0 {
+			if t < frame && (!found || t > adj) {
+				adj, found = t, true
+			}
+		} else {
+			if t > frame && (!found || t < adj) {
+				adj, found = t, true
+			}
+		}
+	}
+	if !found {
+		return nil, 0, false
+	}
+	v, ok := d.valueAt(m.posePart, prop, adj)
+	return v, adj, ok
+}
+
+// CopyPoseValueFromAdjacent sets one component of a transform member to what
+// it is at the member's neighbouring key, before (dir < 0) or after (dir > 0).
+// A pose mostly is its neighbour with a few numbers nudged, so "same as the
+// key next door" is the edit the pane's per-field copy buttons make in one
+// click instead of a retyped number.
+func (m *Model) CopyPoseValueFromAdjacent(prop string, comp, dir int) {
+	adj, _, okAdj := m.PoseAdjacentValue(prop, dir)
+	cur, okCur := m.PoseValue(prop)
+	if !okAdj || !okCur || comp >= len(adj) || comp >= len(cur) {
+		return
+	}
+	if adj[comp] == cur[comp] {
+		return
+	}
+	next := slices.Clone(cur)
+	next[comp] = adj[comp]
+	m.SetPoseValue(prop, next)
+}
+
 // SetPoseValue writes a transform member at the selected key, keying a
 // static member first when the clip has a pose set to key it against.
 func (m *Model) SetPoseValue(prop string, v []float64) {

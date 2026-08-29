@@ -209,7 +209,7 @@ type inspectorContent struct {
 	poseFrameLabel  basicwidget.Text
 	poseFrameValue  basicwidget.Text
 	poseLabels      guigui.WidgetSlice[*basicwidget.Text]
-	poseInputs      guigui.WidgetSlice[*basicwidget.TextInput]
+	poseRows        guigui.WidgetSlice[*poseFieldRow]
 	poseHint        basicwidget.Text
 	poseUndo        basicwidget.Button
 	poseForm        basicwidget.Form
@@ -1190,12 +1190,13 @@ func (c *inspectorContent) buildPosePane(context *guigui.Context, m *Model, adde
 	}
 
 	c.poseLabels.SetLen(len(poseFields))
-	c.poseInputs.SetLen(len(poseFields))
+	c.poseRows.SetLen(len(poseFields))
 	for i, f := range poseFields {
-		lb, in := c.poseLabels.At(i), c.poseInputs.At(i)
+		lb, row := c.poseLabels.At(i), c.poseRows.At(i)
 		adder.AddWidget(lb)
-		adder.AddWidget(in)
+		adder.AddWidget(row)
 		label(lb, f.label)
+		in := &row.text
 
 		v, ok := m.PoseValue(f.prop)
 		writable := editable && ok && len(v) >= f.dim
@@ -1221,6 +1222,32 @@ func (c *inspectorContent) buildPosePane(context *guigui.Context, m *Model, adde
 			m.SetPoseValue(f.prop, next)
 		})
 		context.SetEnabled(in, writable)
+
+		// Poses are mostly edited as differences from a neighbouring key, so
+		// each field carries buttons that fetch the previous and next keys'
+		// values. A button is enabled only while there is something to
+		// fetch, which doubles as a mark of the fields where this frame
+		// differs from that neighbour.
+		for dir, btn := range map[int]*basicwidget.Button{-1: &row.prev, +1: &row.next} {
+			tip := &row.prevTip
+			side := "previous"
+			if dir > 0 {
+				tip = &row.nextTip
+				side = "next"
+			}
+			adj, at, adjOK := m.PoseAdjacentValue(f.prop, dir)
+			canCopy := writable && adjOK && len(adj) > f.comp && adj[f.comp] != v[f.comp]
+			btn.OnDown(func(context *guigui.Context) {
+				m.CopyPoseValueFromAdjacent(f.prop, f.comp, dir)
+			})
+			context.SetEnabled(btn, canCopy)
+			if adjOK {
+				tip.SetText(fmt.Sprintf("Copy from the %s key (frame %s)",
+					side, strconv.FormatFloat(at, 'f', -1, 64)))
+			} else {
+				tip.SetText("No " + side + " key to copy from")
+			}
+		}
 	}
 
 	// A drag writes into the document on every mouse move, so the way back
@@ -1248,14 +1275,17 @@ func (c *inspectorContent) buildPosePane(context *guigui.Context, m *Model, adde
 		c.poseHint.SetValue("Rotation is static across this clip; " +
 			"editing it keys every pose.")
 	default:
-		c.poseHint.SetValue("Drag the part to swing it, the joint mark to move it.")
+		c.poseHint.SetValue("Drag the part to swing it, the joint mark to move it. " +
+			"The clipboard buttons copy a value from the key next door.")
 	}
+	c.poseHint.SetMultiline(true)
+	c.poseHint.SetWrapMode(basicwidget.WrapModeNormal)
 	c.poseHint.SetScale(0.85)
 
 	// Tab walks the form: name, then the numbers in the order they read.
 	c.tabFields = append(c.tabFields[:0], &c.posePartInput)
 	for i := range poseFields {
-		c.tabFields = append(c.tabFields, c.poseInputs.At(i))
+		c.tabFields = append(c.tabFields, &c.poseRows.At(i).text)
 	}
 	tabOrder(context, c.tabFields...)
 
@@ -1271,7 +1301,7 @@ func (c *inspectorContent) buildPosePane(context *guigui.Context, m *Model, adde
 	for i := range poseFields {
 		c.poseFormItems = append(c.poseFormItems, basicwidget.FormItem{
 			PrimaryWidget:   c.poseLabels.At(i),
-			SecondaryWidget: c.poseInputs.At(i),
+			SecondaryWidget: c.poseRows.At(i),
 		})
 	}
 	c.poseForm.SetItems(c.poseFormItems)

@@ -374,6 +374,85 @@ func TestPoseUndoStepsThroughTypedEdits(t *testing.T) {
 	}
 }
 
+// The per-field copy buttons read the neighbouring keys of the member
+// itself, so what they report must be the stored value one key away in
+// either direction, along with the frame it sits at — and nothing past the
+// ends, where there is no neighbour to copy.
+func TestPoseAdjacentValueReadsTheKeysNextDoor(t *testing.T) {
+	m := posedModel(t, "punch-anim")
+	m.SelectPoseKey(7, -1)
+	m.SelectPosePart(partIndex(t, m, "forearm-near"))
+
+	prev := storedRotation(t, m, "punch-anim", "forearm-near", 4)
+	if got, at, ok := m.PoseAdjacentValue("r", -1); !ok || at != 4 || len(got) == 0 || got[0] != prev {
+		t.Errorf("PoseAdjacentValue(r, -1) = %v @%v, %v; want [%v] @4, true", got, at, ok, prev)
+	}
+	next := storedRotation(t, m, "punch-anim", "forearm-near", 12)
+	if got, at, ok := m.PoseAdjacentValue("r", +1); !ok || at != 12 || len(got) == 0 || got[0] != next {
+		t.Errorf("PoseAdjacentValue(r, +1) = %v @%v, %v; want [%v] @12, true", got, at, ok, next)
+	}
+
+	m.SelectPoseKey(0, -1)
+	if v, _, ok := m.PoseAdjacentValue("r", -1); ok {
+		t.Errorf("PoseAdjacentValue(r, -1) at the first key = %v; want none", v)
+	}
+	m.SelectPoseKey(20, -1)
+	if v, _, ok := m.PoseAdjacentValue("r", +1); ok {
+		t.Errorf("PoseAdjacentValue(r, +1) at the last key = %v; want none", v)
+	}
+}
+
+// Copying from a neighbouring key writes that key's component into the
+// bundle at the selected key and nowhere else, in either direction, and is
+// a real edit: undoable, and a no-op when the values already agree.
+func TestCopyPoseValueFromAdjacent(t *testing.T) {
+	m := posedModel(t, "punch-anim")
+	m.SelectPoseKey(7, -1)
+	m.SelectPosePart(partIndex(t, m, "forearm-near"))
+
+	before := storedRotation(t, m, "punch-anim", "forearm-near", 7)
+	prev := storedRotation(t, m, "punch-anim", "forearm-near", 4)
+	next := storedRotation(t, m, "punch-anim", "forearm-near", 12)
+	if before == prev || before == next {
+		t.Fatal("key 7 already agrees with a neighbour; the fixture cannot exercise a copy")
+	}
+
+	m.CopyPoseValueFromAdjacent("r", 0, -1)
+	if got := storedRotation(t, m, "punch-anim", "forearm-near", 7); got != prev {
+		t.Errorf("rotation at 7 = %v; want the previous key's %v", got, prev)
+	}
+	if got := storedRotation(t, m, "punch-anim", "forearm-near", 12); got != next {
+		t.Errorf("rotation at 12 changed to %v; want %v", got, next)
+	}
+
+	m.CopyPoseValueFromAdjacent("r", 0, +1)
+	if got := storedRotation(t, m, "punch-anim", "forearm-near", 7); got != next {
+		t.Errorf("rotation at 7 = %v; want the next key's %v", got, next)
+	}
+	if got := storedRotation(t, m, "punch-anim", "forearm-near", 4); got != prev {
+		t.Errorf("rotation at 4 changed to %v; want %v", got, prev)
+	}
+
+	m.UndoClipEdit()
+	m.UndoClipEdit()
+	if got := storedRotation(t, m, "punch-anim", "forearm-near", 7); got != before {
+		t.Errorf("after undoing both copies rotation at 7 = %v; want %v", got, before)
+	}
+
+	// Copying a value that already matches the neighbour must not push
+	// another undo step.
+	m.SelectPoseKey(7, -1)
+	m.SetPoseValue("r", []float64{prev})
+	m.CopyPoseValueFromAdjacent("r", 0, -1)
+	m.UndoClipEdit()
+	if m.CanUndoClipEdit() {
+		t.Errorf("a copy of an already-matching value pushed an undo step")
+	}
+	if got := storedRotation(t, m, "punch-anim", "forearm-near", 7); got != before {
+		t.Errorf("after undoing everything rotation at 7 = %v; want %v", got, before)
+	}
+}
+
 // An edit that changes nothing must not leave a step that undoes nothing:
 // a click without movement is the common case.
 func TestPoseUndoIgnoresNoOpEdits(t *testing.T) {
