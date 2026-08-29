@@ -2,6 +2,11 @@ package lottie
 
 import "math"
 
+// maxPolystarPoints bounds runaway point counts: the value comes straight
+// from the file, and an absurd one would otherwise allocate gigabytes of
+// vertices per frame.
+const maxPolystarPoints = 1024
+
 // polystarShape builds a star or polygon centered at (cx, cy), following
 // lottie-web's construction: vertices on alternating radii with roundness
 // tangents perpendicular to the radius.
@@ -9,6 +14,9 @@ func polystarShape(dst *bezierShape, star bool, cx, cy, points, rotDeg, outerR, 
 	numPts := int(math.Floor(points))
 	if numPts < 3 {
 		numPts = 3
+	}
+	if numPts > maxPolystarPoints {
+		numPts = maxPolystarPoints
 	}
 	dst.Closed = true
 	dst.V = dst.V[:0]
@@ -177,6 +185,11 @@ func (r *renderer) applyPuckerBloat(n *shapeNode, f float64, groupStart int) {
 func (r *renderer) applyZigZag(n *shapeNode, f float64, groupStart int) {
 	amp := n.amount.scalarAt(f, 0)
 	freq := int(math.Max(0, math.Round(n.zzFreq.scalarAt(f, 1))))
+	// The ridge count comes straight from the file; cap it like the
+	// repeater and dash counts, or one bad value hangs every frame.
+	if freq > maxZigZagRidges {
+		freq = maxZigZagRidges
+	}
 	smooth := n.zzPoints.scalarAt(f, 1) == 2
 	if amp == 0 {
 		return
@@ -193,6 +206,9 @@ func (r *renderer) applyZigZag(n *shapeNode, f float64, groupStart int) {
 	}
 }
 
+// maxZigZagRidges bounds ridges per segment, mirroring maxDashSegments.
+const maxZigZagRidges = 1024
+
 func zigZagContour(dst, src *bezierShape, amp float64, freq int, smooth bool) {
 	n := len(src.V)
 	dst.Closed = src.Closed
@@ -206,11 +222,32 @@ func zigZagContour(dst, src *bezierShape, amp float64, freq int, smooth bool) {
 	if src.Closed {
 		segs = n
 	}
-	dir := 1.0
+	// lottie-web starts the first point inward (direction -1 for a
+	// clockwise contour), not outward.
+	dir := -1.0
 	place := func(s int, u float64) {
 		p0, p1, p2, p3 := segmentPoints(src, s)
 		x, y := cubicPoint(p0, p1, p2, p3, u)
-		nx, ny := cubicNormal(p0, p1, p2, p3, u)
+		var nx, ny float64
+		if u == 0 && (src.Closed || s > 0) {
+			// Corner vertices displace along the perpendicular of the
+			// prev->next vertex chord (the corner bisector), the way
+			// lottie-web's getProjectingAngle does — the outgoing
+			// segment's normal would kink the corner along one edge.
+			prev := s - 1
+			if prev < 0 {
+				prev = n - 1
+			}
+			pv, nv := src.V[prev], src.V[(s+1)%n]
+			dx, dy := nv[0]-pv[0], nv[1]-pv[1]
+			if l := math.Hypot(dx, dy); l > 0 {
+				nx, ny = dy/l, -dx/l
+			} else {
+				nx, ny = cubicNormal(p0, p1, p2, p3, u)
+			}
+		} else {
+			nx, ny = cubicNormal(p0, p1, p2, p3, u)
+		}
 		dst.V = append(dst.V, [2]float64{x + nx*amp*dir, y + ny*amp*dir})
 		dir = -dir
 	}
@@ -270,7 +307,8 @@ const maxRepeaterCopies = 512
 // in the group, applying the per-copy transform cumulatively and the
 // start/end opacity ramp. Copies stack below the original (AE's default).
 func (r *renderer) applyRepeater(n *shapeNode, f float64, mat matrix, groupStart, cmdStart int) {
-	copies := int(math.Round(n.copies.scalarAt(f, 1)))
+	// lottie-web ceils fractional copies, so 2.2 animating copies show 3.
+	copies := int(math.Ceil(n.copies.scalarAt(f, 1)))
 	if copies > maxRepeaterCopies {
 		copies = maxRepeaterCopies
 	}
@@ -280,14 +318,16 @@ func (r *renderer) applyRepeater(n *shapeNode, f float64, mat matrix, groupStart
 		return
 	}
 	offset := n.offset.scalarAt(f, 0)
-	if copies == 1 && offset == 0 {
+	so := clamp01(n.repSO.scalarAt(f, 100) / 100)
+	// A single unmoved copy still takes the start-opacity ramp, so only
+	// skip the rework when that too is a no-op.
+	if copies == 1 && offset == 0 && so >= 1 {
 		return
 	}
-	a := n.repAnchor.at(f, nil)
-	p := n.repPos.at(f, nil)
-	s := n.repScale.at(f, nil)
+	a := n.repAnchor.atInto(f, &r.repABuf)
+	p := n.repPos.atInto(f, &r.repPBuf)
+	s := n.repScale.atInto(f, &r.repSBuf)
 	rot := n.repRot.scalarAt(f, 0)
-	so := clamp01(n.repSO.scalarAt(f, 100) / 100)
 	eo := clamp01(n.repEO.scalarAt(f, 100) / 100)
 	minv, ok := mat.invert()
 	if !ok {
@@ -316,7 +356,13 @@ func (r *renderer) applyRepeater(n *shapeNode, f float64, mat matrix, groupStart
 	if len(s) > 1 {
 		sy = s[1] / 100
 	}
-	for k := 0; k < copies; k++ {
+	for ki := 0; ki < copies; ki++ {
+		// Composite mode 2 stacks copies in reverse: the original draws
+		// last, on top. The opacity ramp stays keyed by the copy index.
+		k := ki
+		if n.repMode == 2 {
+			k = copies - 1 - ki
+		}
 		e := float64(k) + offset
 		T := repeaterMatrix(at(a, 0), at(a, 1), at(p, 0), at(p, 1), rot, sx, sy, e)
 		alpha := so
@@ -361,9 +407,23 @@ func repeaterMatrix(ax, ay, px, py, rotDeg, sx, sy, e float64) matrix {
 		m = m.rotate(rotDeg * e * math.Pi / 180)
 	}
 	if sx != 1 || sy != 1 {
-		m = m.scale(math.Pow(sx, e), math.Pow(sy, e))
+		m = m.scale(powScale(sx, e), powScale(sy, e))
 	}
 	return m.translate(-ax, -ay)
+}
+
+// powScale is math.Pow that stays finite for a mirror (negative) scale
+// raised to a fractional exponent: the magnitude interpolates and the sign
+// alternates per whole copy, instead of the NaN Pow would return.
+func powScale(s, e float64) float64 {
+	if s >= 0 {
+		return math.Pow(s, e)
+	}
+	p := math.Pow(-s, e)
+	if int(math.Floor(e))%2 != 0 {
+		return -p
+	}
+	return p
 }
 
 // maxDashSegments bounds the number of dash segments emitted per contour.
@@ -412,6 +472,8 @@ func (r *renderer) buildDashedRange(n *shapeNode, f float64, start, end int) (in
 		}
 		cur := -phase
 		idx := 0
+		contourStart := r.nDash
+		firstClipped, lastClipped := false, false
 		for cur < total && idx < maxDashSegments {
 			seg := pat[idx%len(pat)]
 			on := idx%2 == 0
@@ -425,11 +487,47 @@ func (r *renderer) buildDashedRange(n *shapeNode, f float64, start, end int) (in
 						slot := r.nextDash()
 						copyGeomInto(slot, &t.out[i])
 					}
+					if cur < 0 {
+						firstClipped = true
+					}
+					lastClipped = cur+seg > total
 				}
 			}
 			cur += seg
 			idx++
 		}
+		// When the seam of a closed contour falls inside an "on" dash —
+		// the first piece was clipped at fraction 0 and the last at 1 —
+		// the two pieces are one dash running through the seam; join them
+		// so caps and joins render as one stroke, the way trims do.
+		if g.bez.Closed && firstClipped && lastClipped && r.nDash-contourStart >= 2 {
+			r.joinDashSeam(contourStart)
+		}
 	}
 	return dashStart, r.nDash
+}
+
+// joinDashSeam merges the last dash piece of a contour (ending at the
+// seam) with the first (starting there): the seam vertex keeps the last
+// piece's in-tangent and the first piece's out-tangent.
+func (r *renderer) joinDashSeam(contourStart int) {
+	first := &r.dashGeoms[contourStart]
+	last := &r.dashGeoms[r.nDash-1]
+	if len(first.bez.V) == 0 || len(last.bez.V) == 0 {
+		return
+	}
+	t := &r.trim
+	t.out = t.out[:0]
+	mg := t.nextOut(first.mat)
+	mg.alpha = first.alpha
+	mg.xor = first.xor
+	mg.bez.V = append(mg.bez.V, last.bez.V...)
+	mg.bez.I = append(mg.bez.I, last.bez.I...)
+	mg.bez.O = append(mg.bez.O, last.bez.O...)
+	mg.bez.O[len(mg.bez.O)-1] = first.bez.O[0]
+	mg.bez.V = append(mg.bez.V, first.bez.V[1:]...)
+	mg.bez.I = append(mg.bez.I, first.bez.I[1:]...)
+	mg.bez.O = append(mg.bez.O, first.bez.O[1:]...)
+	copyGeomInto(first, mg)
+	r.nDash--
 }

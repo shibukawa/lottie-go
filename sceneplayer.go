@@ -93,6 +93,11 @@ type ScenePlayer struct {
 	phase      string
 	phaseEnded bool
 
+	// bindingDepth counts nested deliver calls: focus and phase actions
+	// re-enter deliver, and two bindings pointing at each other would
+	// otherwise recurse without bound.
+	bindingDepth int
+
 	onPhaseChanged func(from, to string)
 	onPhaseEnd     func(phase string)
 
@@ -503,6 +508,10 @@ func (sp *ScenePlayer) OnPhaseEnd(f func(phase string)) { sp.onPhaseEnd = f }
 // afresh, members of other phases leave, and phaseless nodes keep playing
 // through the switch — a background loop should not pop. Entering the
 // running phase again replays it.
+// maxBindingDepth bounds nested binding delivery, mirroring the state
+// machine player's maxTransitionsPerUpdate.
+const maxBindingDepth = 16
+
 func (sp *ScenePlayer) SetPhase(name string) bool {
 	if _, ok := sp.scene.Phase(name); !ok {
 		return false
@@ -1050,6 +1059,16 @@ func (sp *ScenePlayer) nodeAt(x, y float64) *SceneNodePlayer {
 // auto-fires it — a button's focus/press/activate states need no explicit
 // wiring. Reports whether anything ran.
 func (sp *ScenePlayer) deliver(n *SceneNodePlayer, ev SceneEvent) bool {
+	// Focus and phase actions re-enter deliver; a binding cycle (two nodes
+	// whose bindings focus each other, two phases that switch to each
+	// other) must be cut, not crash the process — the machine player
+	// bounds its transition chains the same way.
+	if sp.bindingDepth >= maxBindingDepth {
+		sp.note(fmt.Sprintf("node %q: binding chain stopped at depth %d; bindings likely form a cycle", n.def.Name, maxBindingDepth))
+		return false
+	}
+	sp.bindingDepth++
+	defer func() { sp.bindingDepth-- }()
 	ran := false
 	for _, b := range n.def.Bindings {
 		if b.On != ev {

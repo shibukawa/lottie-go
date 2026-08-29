@@ -245,6 +245,19 @@ type rawDashElem struct {
 	Value *rawProp `json:"v"`
 }
 
+// direction decodes the "d" field as a shape direction number; 0 when it
+// is a dash array or absent. 3 means the contour runs reversed.
+func (it *rawShapeItem) direction() int {
+	if len(it.D) == 0 {
+		return 0
+	}
+	var d float64
+	if err := json.Unmarshal(it.D, &d); err != nil {
+		return 0
+	}
+	return int(d)
+}
+
 // dashes decodes the "d" field as a dash array; nil when it is a plain
 // direction number or absent.
 func (it *rawShapeItem) dashes() []rawDashElem {

@@ -28,10 +28,12 @@ const (
 )
 
 // effectNode is one compiled layer effect. params holds the effect's
-// parameters by schema index; entries the file omits stay nil.
+// parameters by schema index; entries the file omits stay nil. divs are
+// the per-parameter color divisors decided from the authored keyframes.
 type effectNode struct {
 	kind   int
 	params []*vectorTrack
+	divs   [][2]float64
 }
 
 // scalar evaluates the i-th parameter at layer-local frame f.
@@ -52,13 +54,15 @@ func (e *effectNode) colorAt(i int, f float64) (r, g, b, a float64) {
 	if len(c) > 3 {
 		a = c[3]
 	}
-	// Some exporters write colors as 0..255.
-	if r > 1 || g > 1 || b > 1 {
-		r /= 255
-		g /= 255
-		b /= 255
-		if a > 1 {
-			a /= 255
+	// Some exporters write colors as 0..255; like styleCmd, the divisor
+	// was decided at build time from the authored keyframes so an eased
+	// overshoot past 1.0 mid-segment is left alone.
+	if i < len(e.divs) {
+		if d := e.divs[i][0]; d > 1 {
+			r, g, b = r/d, g/d, b/d
+		}
+		if d := e.divs[i][1]; d > 1 {
+			a /= d
 		}
 	}
 	return r, g, b, a
@@ -88,9 +92,13 @@ func (b *builder) buildEffects(raw json.RawMessage) []effectNode {
 				it := &re.Values[j]
 				if it.V == nil {
 					n.params = append(n.params, nil)
+					n.divs = append(n.divs, [2]float64{1, 1})
 					continue
 				}
-				n.params = append(n.params, b.vectorProp(it.V, "effect parameter", nil))
+				tr := b.vectorProp(it.V, "effect parameter", nil)
+				n.params = append(n.params, tr)
+				rgb, a := colorDivisors(tr)
+				n.divs = append(n.divs, [2]float64{rgb, a})
 			}
 			out = append(out, n)
 		case effectCustom:

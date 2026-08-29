@@ -6,6 +6,7 @@ import (
 	"math"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
@@ -297,37 +298,53 @@ type glyphUnit struct {
 	space                    bool
 }
 
+// glyphState is one glyph's accumulated tracking and animator factors.
+type glyphState struct {
+	shift  float64 // accumulated tracking before this glyph
+	track  float64 // tracking this glyph adds after itself
+	factor []float64
+}
+
 // renderGlyphText draws the text one glyph at a time so animators and
-// tracking can position and style each character on its own.
+// tracking can position and style each character on its own. Its working
+// buffers live on the renderer: they are refilled every frame, and text
+// with animators would otherwise allocate per glyph per frame.
 func (r *renderer) renderGlyphText(dst *ebiten.Image, tn *textNode, doc *textDoc, face *text.GoTextFace, lines []string, lh, lt float64, mat matrix, opacity float64, cs ebiten.ColorScale, blend ebiten.Blend) {
 	// Count the selector units of the whole text block first: ranges span
-	// every line, not each line separately.
+	// every line, not each line separately. The per-line tables slice one
+	// flat buffer; ranges are recorded first because appending may move it.
 	var totals glyphUnit
-	counts := make([][]glyphUnit, len(lines))
+	flat := r.textUnits[:0]
+	counts := r.textLines[:0]
+	type span struct{ lo, hi int }
+	spans := make([]span, 0, 8)
 	for li, line := range lines {
-		runes := []rune(line)
-		units := make([]glyphUnit, len(runes))
+		lo := len(flat)
 		inWord := false
-		for ri, rn := range runes {
+		for _, rn := range line {
 			space := unicode.IsSpace(rn)
 			if !space && !inWord {
 				totals.word++
 			}
 			inWord = !space
-			units[ri] = glyphUnit{
+			flat = append(flat, glyphUnit{
 				char:   totals.char,
 				charNS: totals.charNS,
 				word:   totals.word - 1,
 				line:   li,
 				space:  space,
-			}
+			})
 			totals.char++
 			if !space {
 				totals.charNS++
 			}
 		}
-		counts[li] = units
+		spans = append(spans, span{lo, len(flat)})
 	}
+	for _, sp := range spans {
+		counts = append(counts, flat[sp.lo:sp.hi])
+	}
+	r.textUnits, r.textLines = flat, counts
 	totals.line = len(lines)
 
 	baseTracking := doc.tracking / 1000 * doc.size
@@ -335,29 +352,33 @@ func (r *renderer) renderGlyphText(dst *ebiten.Image, tn *textNode, doc *textDoc
 	// line up by the ascent — the same correction the plain-text path
 	// applies — or the two paths disagree by a whole ascent.
 	ascent := face.Metrics().HAscent
-	var glyphs []text.Glyph
+	na := len(tn.animators)
 	for li, line := range lines {
 		if line == "" {
 			continue
 		}
 		units := counts[li]
-		glyphs = text.AppendGlyphs(glyphs[:0], line, face, nil)
+		r.textGlyphs = text.AppendGlyphs(r.textGlyphs[:0], line, face, nil)
+		glyphs := r.textGlyphs
 
 		// First pass: per-glyph factors decide tracking, which shifts both
 		// the glyph positions and the line width used for justification.
-		type glyphState struct {
-			shift  float64 // accumulated tracking before this glyph
-			track  float64 // tracking this glyph adds after itself
-			factor []float64
+		if cap(r.textStates) < len(glyphs) {
+			r.textStates = make([]glyphState, len(glyphs))
 		}
-		states := make([]glyphState, len(glyphs))
+		states := r.textStates[:len(glyphs)]
+		if cap(r.textFactors) < len(glyphs)*na {
+			r.textFactors = make([]float64, len(glyphs)*na)
+		}
+		factorBuf := r.textFactors[:len(glyphs)*na]
 		shift := 0.0
+		var uc unitCursor
 		for gi := range glyphs {
 			g := &glyphs[gi]
-			u := unitFor(units, line, g.StartIndexInBytes)
+			u := uc.unitFor(units, line, g.StartIndexInBytes)
 			states[gi].shift = shift
 			track := baseTracking
-			factors := make([]float64, len(tn.animators))
+			factors := factorBuf[gi*na : (gi+1)*na : (gi+1)*na]
 			for ai := range tn.animators {
 				ta := &tn.animators[ai]
 				f := ta.factorAt(lt, unitIndex(ta.basedOn, u), unitTotal(ta.basedOn, &totals))
@@ -461,15 +482,22 @@ func (r *renderer) renderGlyphText(dst *ebiten.Image, tn *textNode, doc *textDoc
 	}
 }
 
-// unitFor maps a glyph's byte offset to its rune's selector indices.
-func unitFor(units []glyphUnit, line string, byteIdx int) glyphUnit {
-	ri := 0
-	for i := range line {
-		if i >= byteIdx {
-			break
-		}
-		ri++
+// unitCursor maps glyph byte offsets to rune selector indices. Glyphs
+// usually arrive in ascending byte order, so the cursor advances
+// incrementally — a fresh scan per glyph would make long lines quadratic —
+// and restarts only when shaping hands back an earlier offset (RTL runs).
+type unitCursor struct{ byteIdx, runeIdx int }
+
+func (c *unitCursor) unitFor(units []glyphUnit, line string, byteIdx int) glyphUnit {
+	if byteIdx < c.byteIdx {
+		c.byteIdx, c.runeIdx = 0, 0
 	}
+	for c.byteIdx < byteIdx && c.byteIdx < len(line) {
+		_, size := utf8.DecodeRuneInString(line[c.byteIdx:])
+		c.byteIdx += size
+		c.runeIdx++
+	}
+	ri := c.runeIdx
 	if ri >= len(units) {
 		if len(units) == 0 {
 			return glyphUnit{}
