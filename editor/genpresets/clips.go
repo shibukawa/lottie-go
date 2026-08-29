@@ -742,12 +742,88 @@ func highGrip(p pose, armF, elbowF, world float64) pose {
 	return lowGrip(p, armF, elbowF, world)
 }
 
+// swordHold is what posing a clip in the editor settled on: the blade's
+// angle on the far forearm, how the near hand grips, and where the head
+// looks. One value covers the whole clip, a list gives one per keyframe,
+// and an empty field keeps what the generator derives — the near arm
+// solved onto the hilt, the blade on holdArc's world angle.
+//
+// These are transcribed from that posing session rather than derived,
+// which is why they are bare numbers. An authored head angle is taken as
+// given, without the eyes-up clamp: the clamp exists to stop a derived
+// pose from staring at the floor, not to overrule a pose someone sat and
+// aimed by hand.
+type swordHold struct {
+	blade  []float64
+	armN   []float64
+	elbowN []float64
+	head   []float64
+}
+
+// Locomotion and air, posed in the editor. The blade rides much further
+// back than the derived carry had it — trailing near horizontal in the
+// gaits, swung up on the jump — and the near arm is aimed by hand rather
+// than solved, so the two hands sit on the hilt the way they looked
+// right rather than the way the solver placed them.
+var swordHolds = map[string]swordHold{
+	"walk-anim": {blade: []float64{17}, armN: []float64{27}, elbowN: []float64{-100}, head: []float64{0}},
+	"run-anim":  {blade: []float64{20}, armN: []float64{38}, elbowN: []float64{-102}, head: []float64{-10}},
+	// The brake's first key is the run's own contact pose, so it takes
+	// the run's new grip: left on the values it was posed from, the
+	// handoff out of run-state would jump.
+	"run-to-idle-anim": {
+		blade:  []float64{20, 50, 50, 40, 0},
+		armN:   []float64{38, 20, 20, 20, 20},
+		elbowN: []float64{-102, -83.15, -84.89, -75.32, -77.22},
+		head:   []float64{-10, -10, -10, 10, 10},
+	},
+	"jump-anim":      {blade: []float64{91}, head: []float64{0}},
+	"fall-anim":      {blade: []float64{26}, head: []float64{0}},
+	"fall-loop-anim": {blade: []float64{65}, head: []float64{-8}},
+}
+
+// perKey reads a swordHold field: one value covers every key, a list is
+// indexed, and an empty list means the field was not authored.
+func perKey(vs []float64, i int) (float64, bool) {
+	switch {
+	case len(vs) == 0:
+		return 0, false
+	case len(vs) == 1:
+		return vs[0], true
+	}
+	return vs[min(i, len(vs)-1)], true
+}
+
 func carry(d clipDef) clipDef {
+	h := swordHolds[d.name]
 	from, to := holdArc(d.name)
 	keys := make([]kf, len(d.keys))
 	for i, key := range d.keys {
-		world := from + (to-from)*key.t/d.frames
-		key.p = lowGrip(key.p, 2, 72, world)
+		p := key.p
+		armF, elbowF := 2.0, 72.0
+		if p.flip {
+			armF, elbowF = -armF, -elbowF
+		}
+		p.armF, p.elbowF = armF, elbowF
+		if blade, ok := perKey(h.blade, i); ok {
+			p.blade = blade
+		} else {
+			world := from + (to-from)*key.t/d.frames
+			p.blade = world - p.rot - armF - elbowF
+		}
+		if head, ok := perKey(h.head, i); ok {
+			p.head = head
+		} else {
+			p = eyesUp(p)
+		}
+		p = held(p)
+		if armN, ok := perKey(h.armN, i); ok {
+			p.armN = armN
+		}
+		if elbowN, ok := perKey(h.elbowN, i); ok {
+			p.elbowN = elbowN
+		}
+		key.p = p
 		keys[i] = key
 	}
 	return clipDef{name: d.name, frames: d.frames, keys: keys}
@@ -1002,14 +1078,32 @@ func swordGuardHitClip() clipDef {
 // kept, and the punches dropped — a two-handed swordsman never lets go
 // of the hilt to throw one. In their place go three weapon attacks and
 // a guard that blocks with the blade.
+// swordIdleClip replaces the unarmed idle outright, because posing it in
+// the editor turned it into a different stance: feet staggered rather
+// than together, weight rocking back as the knees flex, and the far arm
+// working with the near one instead of hanging still. Only the breathing
+// beat survives from chibi-male's version, so there is nothing left to
+// inherit.
+func swordIdleClip() clipDef {
+	rest := base().arms(-7, 2).elbows(-44, 46.34).
+		legs(23, -29).knees(-2, 21).blades(14)
+	sink := base().at(0, 2).arms(17.27, 22.23).elbows(-70.97, 12.1).
+		legs(19.52, -46.49).knees(24.38, 46.26).blades(37.7)
+	return def("idle-anim", 96,
+		k(0, rest, true), k(48, sink, true), k(96, rest, true))
+}
+
 func chibiSwordDefs() []clipDef {
 	defs := carried(
-		idleClip(), idleTurnClip(), walkClip(), walkTurnClip(),
+		idleTurnClip(), walkClip(), walkTurnClip(),
 		runClip(), runToIdleClip(),
 		slideClip(), jumpClip(), fallClip(), fallLoopClip(),
 		hurtClip(), deathClip(),
 		kickClip(), jumpKickClip(),
 	)
+	// The idle is authored for the sword, not carried, so it goes in
+	// ahead of the rest — the preview sheet reads in this order.
+	defs = append([]clipDef{swordIdleClip()}, defs...)
 	return append(defs,
 		slashClip(), slash2Clip(), thrustClip(),
 		swordGuardClip(), swordGuardHitClip())
