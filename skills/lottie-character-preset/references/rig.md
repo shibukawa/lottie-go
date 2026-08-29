@@ -44,6 +44,16 @@ read as a back view under a forward-looking face.
   space for body and shadow). Keyframes move parts relative to these, so
   they are part of the motion data, not the art.
 
+An attach point is a *rest* position, not a rivet: a layer's position is
+an ordinary animatable property, so a joint can travel within a clip.
+The shoulders are the ones worth moving. A shoulder girdle is not rigid,
+and once an arm is straight there is nothing left for rotation to give —
+driving the leading shoulder forward is the only thing that still adds
+reach to a strike. Send the grip forward by the same distance when you
+do, or the arm simply folds back up and you have gained nothing. Keep
+this off the *chain children* (forearms, shins): they follow their
+parent, and moving their attach detaches the limb at the joint.
+
 Canvas 256x256, ground line y=236, 60fps. File names are
 `chibi-male-<slot>.png` in `parts/` (any format Go's image decoders and
 a blank-imported WebP decoder handle: PNG and WebP are both fine).

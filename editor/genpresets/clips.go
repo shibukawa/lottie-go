@@ -23,6 +23,8 @@ type pose struct {
 	elbowN, elbowF float64  // forearm rotation relative to the upper arm
 	legN, legF     float64  // hip rotation
 	kneeN, kneeF   float64  // shin rotation relative to the thigh
+	shNX, shNY     float64  // near shoulder shifted off its rest attach
+	shFX, shFY     float64  // far shoulder likewise
 	blade          float64  // sword rotation relative to the far forearm
 	alpha          float64  // whole-character opacity % (hurt flash)
 	shadow         float64  // ground shadow scale % (reads as height)
@@ -57,13 +59,23 @@ func (p pose) elbows(near, far float64) pose { p.elbowN, p.elbowF = near, far; r
 func (p pose) legs(near, far float64) pose   { p.legN, p.legF = near, far; return p }
 func (p pose) knees(near, far float64) pose  { p.kneeN, p.kneeF = near, far; return p }
 func (p pose) blades(deg float64) pose       { p.blade = deg; return p }
-func (p pose) fade(a float64) pose           { p.alpha = a; return p }
-func (p pose) shade(s float64) pose          { p.shadow = s; return p }
-func (p pose) turned() pose                  { p.flip = true; return p }
-func (p pose) away() pose                    { p.view = viewBack; return p }
-func (p pose) aside() pose                   { p.view = viewSide; return p }
-func (p pose) swapped() pose                 { p.swap = true; return p }
-func (p pose) swappedLegs() pose             { p.swapLegs = true; return p }
+
+// shoulders slides the arm roots off their rest attach points. The
+// shoulder girdle is not rigid — driving the leading shoulder through a
+// swing is most of where a strike's extra reach comes from, and no
+// amount of arm rotation substitutes for it, since a straight arm has
+// already spent its length.
+func (p pose) shoulders(nx, ny, fx, fy float64) pose {
+	p.shNX, p.shNY, p.shFX, p.shFY = nx, ny, fx, fy
+	return p
+}
+func (p pose) fade(a float64) pose  { p.alpha = a; return p }
+func (p pose) shade(s float64) pose { p.shadow = s; return p }
+func (p pose) turned() pose         { p.flip = true; return p }
+func (p pose) away() pose           { p.view = viewBack; return p }
+func (p pose) aside() pose          { p.view = viewSide; return p }
+func (p pose) swapped() pose        { p.swap = true; return p }
+func (p pose) swappedLegs() pose    { p.swapLegs = true; return p }
 
 // faceAside keeps the head at the rear-quarter view (one eye on the
 // opponent) while the body shows whatever view is set — the head never
@@ -234,6 +246,29 @@ func clip(name string, frames float64, keys []kf) obj {
 			track(keys, scalar(func(p pose) float64 { return p.alpha })),
 		)
 	}
+	// armSeg is seg for the two shoulders, whose attach can also slide
+	// within a pose. A clip that trades the arms' sides has to switch on
+	// hold keys, as before, or the swap would morph; one that only slides
+	// them eases, so a shoulder driving through a swing travels smoothly.
+	armSeg := func(pt part, far bool, get func(pose) float64) obj {
+		root := func(p pose) []float64 {
+			r := armRoot(far, p)
+			return []float64{r[0], r[1]}
+		}
+		pos := obj(nil)
+		if predVaries(keys, armsSwapped) {
+			pos = holdTrack(keys, root)
+		} else {
+			pos = track(keys, root)
+		}
+		return transform(
+			static([]float64{pt.anchor[0], pt.anchor[1]}),
+			pos,
+			static([]float64{100, 100}),
+			track(keys, scalar(get)),
+			track(keys, scalar(func(p pose) float64 { return p.alpha })),
+		)
+	}
 	// The head is three layers (front, side, back) and the torso two
 	// (front, side); exactly one of each set is visible per pose. The
 	// switches are cuts on hold keys when the clip rotates through views,
@@ -298,10 +333,10 @@ func clip(name string, frames float64, keys []kf) obj {
 		static(28.0),
 	)
 	farForearm := imgLayer("forearm-far", 10, upperArmFInd, frames, "forearm-far", seg(forearmF, nil, false, func(p pose) float64 { return p.elbowF }))
-	farUpperArm := imgLayer("upper-arm-far", upperArmFInd, bodyInd, frames, "upper-arm-far", seg(upperArmF, armsSwapped, false, func(p pose) float64 { return p.armF }))
+	farUpperArm := imgLayer("upper-arm-far", upperArmFInd, bodyInd, frames, "upper-arm-far", armSeg(upperArmF, true, func(p pose) float64 { return p.armF }))
 	layers := []obj{
 		imgLayer("forearm-near", 1, upperArmNInd, frames, "forearm-near", seg(forearmN, nil, false, func(p pose) float64 { return p.elbowN })),
-		imgLayer("upper-arm-near", upperArmNInd, bodyInd, frames, "upper-arm-near", seg(upperArmN, armsSwapped, false, func(p pose) float64 { return p.armN })),
+		imgLayer("upper-arm-near", upperArmNInd, bodyInd, frames, "upper-arm-near", armSeg(upperArmN, false, func(p pose) float64 { return p.armN })),
 		headLayer("head", 3, func(v viewKind) bool { return v == viewFront }),
 		headLayer("head-side", 12, func(v viewKind) bool { return v == viewSide }),
 		headLayer("head-back", 14, func(v viewKind) bool { return v == viewBack }),
@@ -684,7 +719,20 @@ func lowGrip(p pose, armF, elbowF, world float64) pose {
 	}
 	p.armF, p.elbowF = armF, elbowF
 	p.blade = world - p.rot - armF - elbowF
-	return held(p)
+	return held(eyesUp(p))
+}
+
+// eyesUp keeps the character from ever looking at the floor. Head angle
+// is relative to the torso, so a deep forward lean drags the face down
+// with it unless the neck gives that rotation back — a swordsman at a
+// lean of 30 with a neutral neck is staring at their own feet. Poses
+// that deliberately look further up are left alone.
+func eyesUp(p pose) pose {
+	const brow = -8 // chin up, looking a little above the horizon
+	if p.rot+p.head > brow {
+		p.head = brow - p.rot
+	}
+	return p
 }
 
 // highGrip is the same idea overhead: the arm goes up nearly straight,
@@ -731,14 +779,32 @@ func limbDir(deg float64) (float64, float64) {
 	return -math.Sin(r), math.Cos(r)
 }
 
-// armRoot is where a shoulder actually sits for a pose: a turn trades
-// the two arms' attach points, and a grip solved against the unswapped
-// ones would come apart the moment the character mirrors.
-func armRoot(pt part, p pose) [2]float64 {
-	if armsSwapped(p) {
-		return bodyMirrorX(pt.pos)
+// armRoot is where a shoulder actually sits for a pose: its rest attach
+// plus whatever the pose slides it by, and mirrored when a turn trades
+// the two arms' sides. Everything that needs a shoulder position — the
+// clip builder, the preview compositor, the two-handed grip solve — goes
+// through here, so a moved shoulder cannot come apart from the hand
+// that is supposed to be on the hilt.
+func armRoot(far bool, p pose) [2]float64 {
+	pt, ox, oy := upperArmN, p.shNX, p.shNY
+	if far {
+		pt, ox, oy = upperArmF, p.shFX, p.shFY
 	}
-	return pt.pos
+	pos := [2]float64{pt.pos[0] + ox, pt.pos[1] + oy}
+	if armsSwapped(p) {
+		pos = bodyMirrorX(pos)
+	}
+	return pos
+}
+
+// predVaries reports whether a pose predicate changes over the clip.
+func predVaries(keys []kf, pred func(pose) bool) bool {
+	for _, kf := range keys[1:] {
+		if pred(kf.p) != pred(keys[0].p) {
+			return true
+		}
+	}
+	return false
 }
 
 func handAt(root [2]float64, shoulder, elbow float64) (float64, float64) {
@@ -759,8 +825,8 @@ func handAt(root [2]float64, shoulder, elbow float64) (float64, float64) {
 // sword is actually held. Out-of-reach poses stop the generator rather
 // than draw a hand grasping at air beside the hilt.
 func held(p pose) pose {
-	near := armRoot(upperArmN, p)
-	hx, hy := handAt(armRoot(upperArmF, p), p.armF, p.elbowF)
+	near := armRoot(false, p)
+	hx, hy := handAt(armRoot(true, p), p.armF, p.elbowF)
 	bx, by := limbDir(p.armF + p.elbowF + p.blade)
 	tx, ty := hx-gripOffset*bx, hy-gripOffset*by
 	dx, dy := tx-near[0], ty-near[1]
@@ -788,7 +854,7 @@ func held(p pose) pose {
 }
 
 func reaches(p pose, tx, ty float64) bool {
-	x, y := handAt(armRoot(upperArmN, p), p.armN, p.elbowN)
+	x, y := handAt(armRoot(false, p), p.armN, p.elbowN)
 	return math.Hypot(x-tx, y-ty) < 0.5
 }
 
@@ -813,7 +879,8 @@ func slashClip() clipDef {
 	// lean 24 a hip at -26 stands the leg dead vertical on screen. These
 	// are opened far enough to still read as a wide stance after the lean,
 	// and the hips drop to keep both feet on the ground.
-	drive := highGrip(base().at(4, 5).lean(16).legs(10, -50).knees(0, 34).nod(2), 145, -8, 138)
+	drive := highGrip(base().at(4, 5).lean(16).legs(10, -50).knees(0, 34).
+		shoulders(5, 1, -1, -1), 145, -8, 138)
 	// Then the blade whips through, and every part of the pose is spent
 	// on reach: the body is thrown a long way forward, the near arm runs
 	// straight out from the shoulder beside the head down to the hilt
@@ -822,8 +889,18 @@ func slashClip() clipDef {
 	// with the blade hanging steeply off it wastes most of its length.
 	// The leading knee folds deep under all of it, which is where the
 	// weight reads from.
-	cut := lowGrip(base().at(24, 8).lean(30).squash(103, 97).legs(2, -70).knees(0, 50).nod(10), -37, 95, -65)
-	follow := lowGrip(base().at(22, 9).lean(28).legs(2, -64).knees(2, 46).nod(12), -32, 92, -72)
+	// The near shoulder drives forward and in under the head's base, and
+	// the far one gives ground behind it: the girdle rotates through the
+	// swing. This is what buys the last of the reach — the arm is already
+	// straight, so nothing it does can add length, but its root can still
+	// travel.
+	// A shoulder driven forward without sending the grip forward with it
+	// just folds the arm back up, so the hilt travels the same distance:
+	// the arm stays straight and the whole assembly is further out.
+	cut := lowGrip(base().at(24, 8).lean(30).squash(103, 97).legs(2, -70).knees(0, 50).
+		shoulders(14, 3, -4, -2), 18, -69, -65)
+	follow := lowGrip(base().at(22, 9).lean(28).legs(2, -64).knees(2, 46).
+		shoulders(12, 3, -3, -2), 32, -86, -72)
 	return def("slash-anim", 24,
 		k(0, ready, true), k(6, raise, true), k(9, raiseDeep, true),
 		k(11, drive, false), k(13, cut, false), k(17, follow, true),
@@ -835,16 +912,24 @@ func slashClip() clipDef {
 // the impact squashes the body. It is also reachable on its own.
 func slash2Clip() clipDef {
 	from := carriedRest()
-	lift := highGrip(base().at(-3, -1).lean(-14).legs(-6, 8).knees(6, 10).nod(-8), 152, -12, 176)
-	liftDeep := highGrip(base().at(-4, -2).lean(-18).legs(-8, 12).knees(6, 12).nod(-10), 150, -6, 184)
-	// Same order as the first cut, further exaggerated: the step and the
-	// forward throw of the body land a beat before the blade does.
-	drive := highGrip(base().at(5, 6).lean(18).legs(8, -56).knees(0, 38).nod(2), 148, -8, 150)
-	chop := lowGrip(base().at(28, 9).lean(34).squash(104, 96).legs(0, -76).knees(0, 54).nod(12), -40, 98, -62)
-	hold := lowGrip(base().at(26, 10).lean(32).legs(0, -70).knees(2, 50).nod(14), -34, 94, -70)
+	// The windup goes the opposite way from the first cut's: the blade
+	// drops behind and swings back to horizontal while the knees fold,
+	// loading the legs underneath it.
+	sink := lowGrip(base().at(-4, 8).lean(-6).legs(-14, 10).knees(24, 18), 76, -65, 78)
+	sinkDeep := lowGrip(base().at(-6, 10).lean(-10).legs(-18, 12).knees(30, 22), 59, -35, 92)
+	// Hips and legs lead here too: they start unfolding while the blade is
+	// still down behind.
+	drive := lowGrip(base().at(4, 5).lean(6).legs(-30, 22).knees(16, 6), 84, -84, 55)
+	// Then the blade comes up through the front and keeps going. The far
+	// shoulder drops back out of the way so the near arm can run out
+	// along the rising line instead of jamming into its own shoulder.
+	rise := lowGrip(base().at(14, 2).lean(-4).squash(97, 104).legs(-20, 16).
+		shoulders(6, -2, -16, 4), -67, -98, -150)
+	top := lowGrip(base().at(12, 2).lean(-6).legs(-18, 14).
+		shoulders(8, -2, -16, 4), -84, -90, -165)
 	return def("slash-2-anim", 30,
-		k(0, from, true), k(7, lift, true), k(11, liftDeep, true),
-		k(13, drive, false), k(16, chop, false), k(22, hold, true),
+		k(0, from, true), k(6, sink, true), k(10, sinkDeep, true),
+		k(13, drive, false), k(16, rise, false), k(21, top, true),
 		k(30, from, true))
 }
 
@@ -858,8 +943,19 @@ func thrustClip() clipDef {
 	ready := carriedRest()
 	chamber := lowGrip(base().at(-4, 1).lean(-8).legs(-14, 12).knees(12, 14).nod(-3), 5, 80, -90)
 	coil := lowGrip(base().at(-6, 2).lean(-11).legs(-18, 14).knees(16, 16).nod(-4), 8, 84, -90)
-	lunge := lowGrip(base().at(18, 4).lean(10).legs(-36, 26).knees(14, 6).nod(4), -5, 70, -88)
-	reach := lowGrip(base().at(21, 4).lean(11).legs(-38, 27).knees(13, 5).nod(4), -8, 66, -87)
+	// Both arms run out straight, which the rig cannot do from the
+	// shoulders where they rest: two arms of equal length reaching from
+	// two points side by side can only meet straight up or straight down,
+	// never out in front. So the near shoulder slides across to sit just
+	// behind the far one, putting both roots on the line of the thrust —
+	// then both arms extend along it and the two hands land the width of
+	// the grip apart. The hips stay put and the front leg carries the
+	// lunge; the arms alone push the tip about as far as the canvas has
+	// room for.
+	lunge := lowGrip(base().at(0, 7).lean(10).legs(-57, 16).knees(50, 0).
+		shoulders(36, -1, 0, -2), -55, -82, -90)
+	reach := lowGrip(base().at(2, 7).lean(11).legs(-59, 17).knees(48, 0).
+		shoulders(36, -1, 0, -2), -56, -84, -90)
 	return def("thrust-anim", 26,
 		k(0, ready, true), k(6, chamber, true), k(9, coil, true),
 		k(12, lunge, false), k(17, reach, true), k(26, ready, true))
@@ -868,9 +964,19 @@ func thrustClip() clipDef {
 // swordGuardStance blocks with the weapon: hands together at the belly,
 // blade stood up in front of the body, which covers torso and head at
 // this blade length.
+// swordGuardStance holds the blade out in FRONT of the character, not
+// tucked against the chest: a guard whose hilt sits behind the body's
+// own centerline is not covering anything, and reads as flinching away
+// rather than meeting the hit.
+// swordGuardStance holds the blade out in FRONT of the character, not
+// tucked against the chest: a guard whose hilt sits behind the body's
+// own centerline is not covering anything, and reads as flinching away
+// rather than meeting the hit. The blade rises forward rather than
+// straight up, since a head this size is wide enough that a vertical
+// blade in front of it just crosses the face.
 func swordGuardStance() pose {
-	return lowGrip(base().at(0, 3).lean(6).squash(103, 98).
-		legs(-12, 12).knees(10, 14).nod(3), 8, 76, 170)
+	return lowGrip(base().at(6, 3).lean(10).squash(103, 98).
+		legs(-12, 12).knees(10, 14).shoulders(8, 2, 0, 0), -49, 124, 225)
 }
 
 func swordGuardClip() clipDef {
@@ -884,9 +990,9 @@ func swordGuardHitClip() clipDef {
 	stance := swordGuardStance()
 	// The hit drives the whole guard back and rocks the blade off
 	// vertical; the hands stay locked on the hilt.
-	pushed := lowGrip(base().at(-8, 3).lean(-2).squash(103, 98).
-		legs(-12, 12).knees(10, 14).nod(3).fade(50), 12, 80, 160)
-	back := stance.at(-4, 3)
+	pushed := lowGrip(base().at(-4, 3).lean(0).squash(103, 98).
+		legs(-12, 12).knees(10, 14).shoulders(4, 2, 0, 0).fade(50), -42, 118, 212)
+	back := stance.at(2, 3)
 	return def("guard-hit-anim", 16,
 		k(0, stance, true), k(4, pushed, false), k(8, back, true), k(16, stance, true))
 }

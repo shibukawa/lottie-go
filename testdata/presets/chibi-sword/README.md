@@ -92,6 +92,13 @@ ones that end up horizontal (slide) or flat on the floor (death) sweep
 it further back on the way down, and a turn sweeps it through vertical
 so the mirror has something symmetric to land on.
 
+Every sword pose also passes an eyes-up rule: head angle is relative to
+the torso, so a deep forward lean would drag the face down with it, and
+a hero staring at their own feet reads as beaten no matter what the rest
+of the pose is doing. The neck gives the lean back, keeping the head a
+little above the horizon; poses that deliberately look further up are
+left alone.
+
 The five weapon clips set the blade per pose instead.
 
 - slash -> slash-2 — firing slash during slash chains the follow-up, and
@@ -107,16 +114,28 @@ The five weapon clips set the blade per pose instead.
   straight out from the shoulder beside the head down to the hilt
   instead of folding, the hilt itself forward of the chest, and the
   blade carried nearer the horizontal — an arm folded back with the
-  blade hanging steeply off it wastes most of its length. The leading
-  knee folds deep under all of it, which is where the weight reads
-  from. slash-2 is the same shape heavier — blade hauled fully
-  vertical, a bigger step, the body squashing on impact.
-- thrust — the lunging stab. The blade stays LEVEL while the hands push
-  forward from the hip, and the distance comes from the lunge and the
-  blade's own length: the arms cannot extend without tearing the second
-  hand off the hilt.
-- guard / guard-hit — block with the weapon: hands at the belly, blade
-  stood up in front, which covers torso and head at this blade length.
+  blade hanging steeply off it wastes most of its length — and the near
+  shoulder itself driven forward under the head's base, with the far one
+  giving ground behind it. That last one is not decoration: once the arm
+  is straight, rotation has nothing left to give, and the root is the
+  only thing that can still travel. The leading knee folds deep under
+  all of it, which is where the weight reads from. slash-2 answers it
+  from the other direction: a rising cut. The blade drops behind to
+  horizontal while the knees fold under it, then comes up through the
+  front and finishes high and forward. Two downward cuts back to back
+  read as the same attack played twice, however different the numbers
+  are; up after down is a combo.
+- thrust — the lunging stab. The blade stays LEVEL throughout, and the
+  point goes out on the ARMS as much as the body: the near shoulder
+  drives forward, the far elbow tucks at the waist and its forearm
+  drives the hilt out past the chest, so the whole weapon ends up ahead
+  of the character rather than the blade alone. The body travels less
+  than it might, because the tip would otherwise run off the canvas.
+- guard / guard-hit — block with the weapon, held out in FRONT: a guard
+  whose hilt sits behind the body's own centerline covers nothing and
+  reads as flinching away rather than meeting the hit. The blade rises
+  forward rather than straight up, since a head this size is wide
+  enough that a vertical blade in front of it just crosses the face.
 - kick and jump-kick are inherited unchanged; there are no punches,
   since a two-handed swordsman never lets go of the hilt to throw one.
 
