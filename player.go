@@ -420,7 +420,9 @@ func (p *Player) fireLoops(n int) {
 }
 
 // clampFrame confines f to the active range, wrapping when looping. It does
-// not report completion; that belongs to advance.
+// not report completion, nor pause: a seek that lands on the boundary holds
+// there, and the next Update runs off the end and lets advance finish —
+// otherwise a scrub to 100% would silently stop without OnComplete.
 func (p *Player) clampFrame(f float64) float64 {
 	in, out := p.bounds()
 	if f < in {
@@ -433,7 +435,6 @@ func (p *Player) clampFrame(f float64) float64 {
 		} else {
 			// Hold on the final renderable moment.
 			f = out
-			p.playing = false
 		}
 	}
 	return f

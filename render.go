@@ -802,6 +802,17 @@ func (r *renderer) applyMasks(content *ebiten.Image, masks []maskNode, lt float6
 	sharedPool.put(coverageBase)
 }
 
+// additiveBlend sums source into destination (clamped by the buffer), the
+// accumulation After Effects uses for 'a' masks.
+var additiveBlend = ebiten.Blend{
+	BlendFactorSourceRGB:        ebiten.BlendFactorOne,
+	BlendFactorSourceAlpha:      ebiten.BlendFactorOne,
+	BlendFactorDestinationRGB:   ebiten.BlendFactorOne,
+	BlendFactorDestinationAlpha: ebiten.BlendFactorOne,
+	BlendOperationRGB:           ebiten.BlendOperationAdd,
+	BlendOperationAlpha:         ebiten.BlendOperationAdd,
+}
+
 // renderCoverage fills the combined mask shapes into coverage, whose bounds
 // must be positioned so that mat lands the shapes inside it. Masks apply in
 // order to an accumulating coverage: add unions, subtract erases, intersect
@@ -837,6 +848,9 @@ func (r *renderer) renderCoverage(coverage *ebiten.Image, masks []maskNode, lt f
 			switch m.mode {
 			case 'a':
 				op.ColorScale.Scale(float32(alpha), float32(alpha), float32(alpha), float32(alpha))
+				// After Effects sums additive masks: two 50% masks
+				// overlap to 100%, not source-over's 75%.
+				op.Blend = additiveBlend
 			case 's':
 				op.ColorScale.ScaleAlpha(float32(alpha))
 				op.Blend = ebiten.BlendDestinationOut
@@ -865,6 +879,8 @@ func (r *renderer) renderCoverage(coverage *ebiten.Image, masks []maskNode, lt f
 		var cop ebiten.DrawImageOptions
 		cop.GeoM.Translate(float64(b.Min.X), float64(b.Min.Y))
 		switch m.mode {
+		case 'a':
+			cop.Blend = additiveBlend
 		case 's':
 			cop.Blend = ebiten.BlendDestinationOut
 		case 'i':
@@ -1122,14 +1138,16 @@ func (r *renderer) styleCmd(n *shapeNode, f float64, opacity float64, start, end
 	if len(c) > 3 {
 		ca = c[3]
 	}
-	// Some exporters write colors as 0..255.
-	if cr > 1 || cg > 1 || cb > 1 {
-		cr /= 255
-		cg /= 255
-		cb /= 255
-		if ca > 1 {
-			ca /= 255
-		}
+	// Some exporters write colors as 0..255; the divisor was decided at
+	// build time from the authored keyframes (colorDivisors), so an eased
+	// overshoot past 1.0 on an interpolated frame is left alone.
+	if n.colorDiv > 1 {
+		cr /= n.colorDiv
+		cg /= n.colorDiv
+		cb /= n.colorDiv
+	}
+	if n.alphaDiv > 1 {
+		ca /= n.alphaDiv
 	}
 	alpha := clamp01(ca * opacity * clamp01(n.opacity.scalarAt(f, 100)/100))
 	return drawCmd{

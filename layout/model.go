@@ -764,9 +764,16 @@ func (m *Model) SetNodeStart(i int, sec float64) {
 	if i < 0 || i >= len(m.scene.Nodes) {
 		return
 	}
-	m.scene.Nodes[i].Start = max(0, round2(sec))
+	// The upper clamp keeps a typo in the start field from stretching the
+	// timeline (and its per-frame tick loop) to astronomical spans.
+	m.scene.Nodes[i].Start = min(max(0, round2(sec)), maxSceneSeconds)
 	m.touchLight()
 }
+
+// maxSceneSeconds bounds entrance times and scrub targets: an hour is far
+// beyond any cutscene, and small enough that replay-based seeking and the
+// timeline's second ticks stay affordable.
+const maxSceneSeconds = 3600
 
 // CommitNodeStart applies a finished timeline drag.
 func (m *Model) CommitNodeStart() { m.touch() }
@@ -1189,7 +1196,7 @@ func (m *Model) SeekScene(sec float64) {
 	if sp == nil {
 		return
 	}
-	sec = max(0, sec)
+	sec = min(max(0, sec), maxSceneSeconds)
 	sp.Restart()
 	if m.viewPhase != "" {
 		sp.SetPhase(m.viewPhase)

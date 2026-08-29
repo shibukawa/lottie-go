@@ -80,6 +80,15 @@ func (t *trimmer) trimContour(g *geometry, a, b float64) {
 		t.extract(g, a, b)
 		return
 	}
+	if g.bez.Closed {
+		// The wrapped range crosses the contour's seam. On a closed
+		// contour fraction 1 and fraction 0 are the same point, so join
+		// the halves into one continuous subpath — two separate pieces
+		// would meet there with butt caps instead of a stroke join.
+		first := t.extractPart(g, a, 1, nil)
+		t.extractPart(g, 0, b-1, first)
+		return
+	}
 	t.extract(g, a, 1)
 	t.extract(g, 0, b-1)
 }
@@ -117,10 +126,27 @@ func (t *trimmer) trimAcross(geoms []geometry, a, b float64) {
 	}
 	if b <= 1 {
 		emit(a, b)
-	} else {
-		emit(a, 1)
-		emit(0, b-1)
+		return
 	}
+	// When a single closed contour carries the whole length, the wrap
+	// crosses its own seam; join the halves the way trimContour does.
+	single := -1
+	for i := range geoms {
+		if lens[i] > 0 {
+			if single >= 0 {
+				single = -2
+				break
+			}
+			single = i
+		}
+	}
+	if single >= 0 && geoms[single].bez.Closed {
+		first := t.extractPart(&geoms[single], a, 1, nil)
+		t.extractPart(&geoms[single], 0, b-1, first)
+		return
+	}
+	emit(a, 1)
+	emit(0, b-1)
 }
 
 // contourLength measures a contour and caches per-segment lengths.
@@ -248,11 +274,19 @@ func deCasteljauRight(p0, p1, p2, p3 [2]float64, u float64) (q0, q1, q2, q3 [2]f
 // extract appends the [f0,f1] arc-length fraction range of the contour to
 // t.out as a new open contour.
 func (t *trimmer) extract(g *geometry, f0, f1 float64) {
+	t.extractPart(g, f0, f1, nil)
+}
+
+// extractPart is extract with an optional continuation: when cont is
+// non-nil the range's segments are appended to that output contour instead
+// of a fresh one, joining at the shared point — how a wrapped trim on a
+// closed contour runs through the seam. It returns the contour written to.
+func (t *trimmer) extractPart(g *geometry, f0, f1 float64, cont *geometry) *geometry {
 	total := t.contourLength(&g.bez)
 	if total <= 0 || f1 <= f0 {
-		return
+		return cont
 	}
-	if f0 <= 0 && f1 >= 1 {
+	if cont == nil && f0 <= 0 && f1 >= 1 {
 		out := t.nextOut(g.mat)
 		out.alpha = g.alpha
 		out.xor = g.xor
@@ -260,7 +294,7 @@ func (t *trimmer) extract(g *geometry, f0, f1 float64) {
 		out.bez.V = append(out.bez.V, g.bez.V...)
 		out.bez.I = append(out.bez.I, g.bez.I...)
 		out.bez.O = append(out.bez.O, g.bez.O...)
-		return
+		return out
 	}
 	lenStart := f0 * total
 	lenEnd := f1 * total
@@ -284,15 +318,18 @@ func (t *trimmer) extract(g *geometry, f0, f1 float64) {
 		acc += l
 	}
 	if startSeg < 0 {
-		return
+		return cont
 	}
 	if endSeg < startSeg {
 		endSeg, endU = startSeg, 1
 	}
 
-	out := t.nextOut(g.mat)
-	out.alpha = g.alpha
-	out.xor = g.xor
+	out := cont
+	if out == nil {
+		out = t.nextOut(g.mat)
+		out.alpha = g.alpha
+		out.xor = g.xor
+	}
 
 	push := func(v, in, o [2]float64) {
 		out.bez.V = append(out.bez.V, v)
@@ -320,4 +357,5 @@ func (t *trimmer) extract(g *geometry, f0, f1 float64) {
 		}
 		push(q3, [2]float64{q2[0] - q3[0], q2[1] - q3[1]}, [2]float64{})
 	}
+	return out
 }

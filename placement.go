@@ -56,7 +56,7 @@ func (p LayerPlacement) Mirrored(axis float64) LayerPlacement {
 // give attachment layers unique names. It reports false when no layer has
 // the name.
 func (a *Animation) LayerPlacement(name string, frame float64) (LayerPlacement, bool) {
-	m, visible, ok := placeLayer(a.layers, name, frame, identityMatrix, true, 0)
+	m, visible, ok := placeLayer(a.layers, name, frame, a.frameRate, identityMatrix, true, 0)
 	if !ok {
 		return LayerPlacement{}, false
 	}
@@ -66,7 +66,7 @@ func (a *Animation) LayerPlacement(name string, frame float64) (LayerPlacement, 
 // placeLayer finds name under layers and composes its world matrix. f is
 // the frame in the current composition's time; entering a precomp remaps
 // it the same way rendering does.
-func placeLayer(layers []*layerNode, name string, f float64, root matrix, visible bool, depth int) (matrix, bool, bool) {
+func placeLayer(layers []*layerNode, name string, f, frameRate float64, root matrix, visible bool, depth int) (matrix, bool, bool) {
 	if depth > 16 {
 		return matrix{}, false, false
 	}
@@ -79,7 +79,7 @@ func placeLayer(layers []*layerNode, name string, f float64, root matrix, visibl
 		if l.typ != 0 || len(l.comp) == 0 {
 			continue
 		}
-		m, vis, ok := placeLayer(l.comp, name, l.localTime(f),
+		m, vis, ok := placeLayer(l.comp, name, l.compTime(l.localTime(f), frameRate), frameRate,
 			root.mul(layerMatrix(l, f, 0)), visible && layerActive(l, f), depth+1)
 		if ok {
 			return m, vis, true
@@ -116,7 +116,7 @@ func decompose(m matrix, visible bool) LayerPlacement {
 // part's outline, or converting a drag back into the layer's parent space —
 // needs the matrix that was actually composed.
 func (a *Animation) LayerTransform(name string, frame float64) (ebiten.GeoM, bool) {
-	m, _, ok := placeLayer(a.layers, name, frame, identityMatrix, true, 0)
+	m, _, ok := placeLayer(a.layers, name, frame, a.frameRate, identityMatrix, true, 0)
 	if !ok {
 		return ebiten.GeoM{}, false
 	}

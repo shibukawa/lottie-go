@@ -141,6 +141,11 @@ func (m *StateMachinePlayer) SetMachine(id string) error {
 	clear(m.hover)
 	clear(m.clickArmed)
 	m.current, m.err = nil, nil
+	// Drop the old machine's clip: if the new initial state is a
+	// GlobalState it would otherwise keep updating and drawing, and its
+	// still-wired callbacks would complete the new machine's interactions.
+	m.player = nil
+	m.completed, m.loopCompleted = false, false
 	clear(m.unsupported)
 
 	if !m.enter(sm.Initial) {

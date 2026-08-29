@@ -66,6 +66,34 @@ type vectorTrack struct {
 
 func staticTrack(v ...float64) *vectorTrack { return &vectorTrack{static: v} }
 
+// colorDivisors inspects a color track's authored values: some exporters
+// write 0..255 channels instead of 0..1. The decision is made here, from
+// the keyframes, rather than per evaluated frame — an eased overshoot past
+// 1.0 mid-segment must not switch the whole color to the 0..255 scale.
+func colorDivisors(tr *vectorTrack) (rgb, alpha float64) {
+	rgb, alpha = 1, 1
+	check := func(v []float64) {
+		for d, x := range v {
+			if d < 3 {
+				if x > 1 {
+					rgb = 255
+				}
+			} else if x > 1 {
+				alpha = 255
+			}
+		}
+	}
+	if tr.keys == nil {
+		check(tr.static)
+		return
+	}
+	for i := range tr.keys {
+		check(tr.keys[i].value)
+		check(tr.keys[i].legacyEnd)
+	}
+	return
+}
+
 func (tr *vectorTrack) isStatic() bool { return tr.keys == nil }
 
 // at evaluates the track at frame f. dst is used as scratch when non-nil.
@@ -90,11 +118,18 @@ func (tr *vectorTrack) at(f float64, dst []float64) []float64 {
 	if k0.hold {
 		return k0.value
 	}
+	// A legacy keyframe's explicit end value takes the place of the next
+	// key's start: a file authored with e_i != s_{i+1} interpolates toward
+	// e_i and jump-cuts at the boundary, as lottie-web does.
+	end := k1.value
+	if k0.legacyEnd != nil {
+		end = k0.legacyEnd
+	}
 	u := (f - k0.t) / (k1.t - k0.t)
 	u = k0.ease.at(u)
 	n := len(k0.value)
-	if len(k1.value) < n {
-		n = len(k1.value)
+	if len(end) < n {
+		n = len(end)
 	}
 	if cap(dst) < n {
 		dst = make([]float64, n)
@@ -104,7 +139,7 @@ func (tr *vectorTrack) at(f float64, dst []float64) []float64 {
 		// Spatial bezier interpolation for position keyframes.
 		for d := 0; d < n; d++ {
 			p0 := k0.value[d]
-			p3 := k1.value[d]
+			p3 := end[d]
 			var c1, c2 float64
 			if d < len(k0.to) {
 				c1 = p0 + k0.to[d]
@@ -122,7 +157,7 @@ func (tr *vectorTrack) at(f float64, dst []float64) []float64 {
 		return dst
 	}
 	for d := 0; d < n; d++ {
-		dst[d] = k0.value[d] + (k1.value[d]-k0.value[d])*u
+		dst[d] = k0.value[d] + (end[d]-k0.value[d])*u
 	}
 	return dst
 }

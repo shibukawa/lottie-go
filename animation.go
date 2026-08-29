@@ -371,6 +371,8 @@ type shapeNode struct {
 	roundness *vectorTrack // rc
 
 	color    *vectorTrack // fl, st
+	colorDiv float64      // fl, st: 1, or 255 for 0..255-scaled colors
+	alphaDiv float64      // fl, st: likewise for the 4th channel
 	opacity  *vectorTrack // fl, st, gf, gs (0..100)
 	width    *vectorTrack // st, gs
 	fillRule int          // fl, gf: 1 nonzero, 2 evenodd
@@ -686,10 +688,10 @@ func (b *builder) buildMasks(raws []rawMask) []maskNode {
 
 func (b *builder) noteLayerExtras(rl *rawLayer) {
 	switch {
-	case rl.Blend == 0 || rl.Blend == 1 || rl.Blend == 2 || rl.Blend == 16:
-		// normal, multiply, screen, add: fixed-function blends
+	case rl.Blend == 0 || rl.Blend == 2 || rl.Blend == 16:
+		// normal, screen, add: fixed-function blends
 	case blendNeedsShader(rl.Blend):
-		// overlay .. exclusion: composited through blendShader
+		// multiply, overlay .. exclusion: composited through blendShader
 	default:
 		// 12-15 (hue, saturation, color, luminosity) and 17 (hard mix)
 		b.anim.note(fmt.Sprintf("blend mode %d", rl.Blend))
@@ -795,13 +797,15 @@ func (b *builder) buildShapeItems(items []rawShapeItem) []*shapeNode {
 					rule = int(vals[0])
 				}
 			}
-			nodes = append(nodes, &shapeNode{
+			n := &shapeNode{
 				kind:     "fl",
 				name:     it.Name,
 				color:    b.vectorProp(it.C, "fill color", []float64{0, 0, 0, 1}),
 				opacity:  b.vectorProp(it.O, "fill opacity", []float64{100}),
 				fillRule: rule,
-			})
+			}
+			n.colorDiv, n.alphaDiv = colorDivisors(n.color)
+			nodes = append(nodes, n)
 		case "st":
 			n := &shapeNode{
 				kind:     "st",
@@ -813,6 +817,7 @@ func (b *builder) buildShapeItems(items []rawShapeItem) []*shapeNode {
 				lineJoin: it.LineJoin,
 				miter:    it.MiterLimit,
 			}
+			n.colorDiv, n.alphaDiv = colorDivisors(n.color)
 			b.buildDashes(n, it)
 			nodes = append(nodes, n)
 		case "gf", "gs":

@@ -792,7 +792,7 @@ func (c *collisionPanel) buildPoseButtons(context *guigui.Context, m *Model, add
 	c.swapChk.SetValue(c.insertSwap)
 	c.swapChk.OnValueChanged(func(context *guigui.Context, v bool) {
 		c.insertSwap = v
-		m.Touch()
+		m.Redraw()
 	})
 	c.swapLbl.SetValue("swap near/far")
 	c.swapLbl.SetScale(0.75)
@@ -859,7 +859,7 @@ func (c *collisionPanel) buildPoseCopy(context *guigui.Context, m *Model) {
 			c.copyClip = item.Value
 			// The keys of the old clip mean nothing in the new one.
 			c.copyKey = 0
-			m.Touch()
+			m.Redraw()
 		}
 	})
 

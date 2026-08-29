@@ -553,6 +553,11 @@ func (sp *ScenePlayer) Restart() {
 	sp.clock = 0
 	sp.focused, sp.hovered, sp.pressed = nil, nil, nil
 	sp.pointerDown = false
+	// From the top means the first phase too, with its timed end re-armed.
+	if len(sp.scene.Phases) > 0 {
+		sp.phase = sp.scene.Phases[0].Name
+	}
+	sp.phaseEnded = false
 	for _, n := range sp.nodes {
 		n.started = n.def.Start <= 0
 		if err := n.start(); err != nil {

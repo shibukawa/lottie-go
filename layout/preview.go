@@ -19,6 +19,7 @@ type sourcePreview struct {
 
 	key     sourceRef
 	keySet  bool
+	src     *lottie.Bundle // the bundle the playback was built from
 	player  *lottie.Player
 	machine *lottie.StateMachinePlayer
 	img     *ebiten.Image
@@ -40,11 +41,20 @@ func (s *sourcePreview) sync(m *Model) {
 		s.keySet, s.player, s.machine, s.img = false, nil, nil, nil
 		return
 	}
+	// The key alone misses a reload replacing the data behind the same
+	// alias, so also check the loaded bundle (or image) is still the one
+	// the playback was built from.
 	if s.keySet && ref == s.key {
-		return
+		if ref.Kind == sourceImage {
+			if img, _ := m.Image(ref.Alias); img == s.img {
+				return
+			}
+		} else if b, ok := m.Bundle(ref.Alias); ok && b == s.src {
+			return
+		}
 	}
 	s.key, s.keySet = ref, true
-	s.player, s.machine, s.img = nil, nil, nil
+	s.player, s.machine, s.img, s.src = nil, nil, nil, nil
 	if ref.Kind == sourceImage {
 		s.img, _ = m.Image(ref.Alias)
 		return
@@ -53,6 +63,7 @@ func (s *sourcePreview) sync(m *Model) {
 	if !ok {
 		return
 	}
+	s.src = b
 	// A bundle previews what a placed node would first show: its initial
 	// machine, or its first clip looped.
 	kind, id, okc := initialContent(b)

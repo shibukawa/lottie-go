@@ -784,6 +784,12 @@ func (d *clipDoc) insertPose(frame float64) bool {
 			}
 			srcKey, _ := keys[src].(map[string]any)
 			nk := copyKey(srcKey, frame)
+			if nk == nil {
+				// The source key carries no value to copy (a legacy
+				// trailing {t} key, or not a map at all); inserting nil
+				// would corrupt the document.
+				continue
+			}
 			at := len(keys)
 			for i, k := range keys {
 				km, _ := k.(map[string]any)
