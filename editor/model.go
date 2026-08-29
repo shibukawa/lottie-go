@@ -193,6 +193,11 @@ func (m *Model) Touch() {
 	m.touch()
 }
 
+// Redraw requests a repaint without recording a document edit — for
+// widget-local state (a checkbox, a picker) that changes what the panes
+// show but not the document itself.
+func (m *Model) Redraw() { m.generation++ }
+
 // blockEdit refuses document mutation in viewer mode, where the disk owns
 // the document and any edit would be silently thrown away by the next
 // auto-reload. Guarding here, in the model, covers every path at once —
@@ -285,13 +290,21 @@ func (m *Model) Open(path string) {
 		m.generation++
 		return
 	}
+	// The clip preview holds a player decoded from the old bundle; drop
+	// it, and re-show the same clip from the new bundle when it survives
+	// the reload — how viewer mode follows edits to a previewed clip.
+	prevClip := m.previewClip
+	m.previewClip, m.clipPlayer = clipRef{}, nil
 	if strings.EqualFold(filepath.Ext(path), ".json") {
 		m.bundle = lottie.NewBundle()
 		m.path = ""
 		m.machineID, m.machine = "", nil
 		m.sources = nil
+		m.resetCollisionSelection()
+		m.resetCollisionCache()
 		m.resetClipDocCache()
 		m.ImportClip(path)
+		m.reshowClip(prevClip)
 		return
 	}
 	f, err := os.Open(path)
@@ -325,8 +338,18 @@ func (m *Model) Open(path string) {
 	if ids := b.StateMachineIDs(); len(ids) > 0 {
 		m.SelectMachine(ids[0])
 	}
+	m.reshowClip(prevClip)
 	m.setStatus("loaded %s (%d clips, %d machines)", path,
 		len(b.AnimationIDs()), len(b.StateMachineIDs()))
+}
+
+// reshowClip restores a clip preview across Open when the new bundle still
+// carries the clip; otherwise the preview stays on the machine.
+func (m *Model) reshowClip(c clipRef) {
+	if c.Anim == "" || !slices.Contains(m.bundle.AnimationIDs(), c.Anim) {
+		return
+	}
+	m.ShowClip(c)
 }
 
 // Save writes the bundle as dotLottie v2.
@@ -822,13 +845,19 @@ func (m *Model) DeleteState(name string) {
 			break
 		}
 	}
-	// Transitions pointing at it would dangle; drop them too.
+	// Transitions pointing at it would dangle; drop them too. If the
+	// selected state's list shrinks, the selected index would silently
+	// name a different transition, so clear it.
 	for i := range m.machine.States {
 		trs := m.machine.States[i].Transitions[:0]
 		for _, tr := range m.machine.States[i].Transitions {
 			if tr.ToState != name {
 				trs = append(trs, tr)
 			}
+		}
+		if m.machine.States[i].Name == m.selectedState &&
+			len(trs) != len(m.machine.States[i].Transitions) {
+			m.selectedTrans = -1
 		}
 		m.machine.States[i].Transitions = trs
 	}
@@ -1037,6 +1066,15 @@ func (m *Model) RenameInput(i int, name string) {
 	old := m.machine.Inputs[i].Name
 	if old == name {
 		return
+	}
+	// Inputs are addressed by name (guards, the values tab), so a
+	// duplicate would make every lookup hit whichever comes first.
+	for j := range m.machine.Inputs {
+		if j != i && m.machine.Inputs[j].Name == name {
+			m.setStatus("an input named %q already exists", name)
+			m.generation++
+			return
+		}
 	}
 	m.machine.Inputs[i].Name = name
 	// Guards refer to inputs by name; keep them pointing at this one.

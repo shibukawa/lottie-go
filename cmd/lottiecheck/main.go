@@ -107,7 +107,10 @@ func checkBundle(path string) ([]renderJob, bool) {
 			ok = false
 			continue
 		}
-		jobs = append(jobs, renderJob{name: id, anim: a})
+		// Prefix the bundle's name: two bundles both holding a "main"
+		// clip must not overwrite each other's renders.
+		base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+		jobs = append(jobs, renderJob{name: base + "-" + id, anim: a})
 	}
 	for _, id := range b.StateMachineIDs() {
 		if _, err := b.StateMachine(id); err != nil {
@@ -203,7 +206,11 @@ func writeAll(dir string, samples int, jobs []renderJob) error {
 			p.SetFrame(frame)
 			dst.Clear()
 			p.Draw(dst, nil)
-			if err := writePNG(dst, filepath.Join(dir, fmt.Sprintf("%s-f%03d.png", j.name, int(frame)))); err != nil {
+			// The sample index keeps names unique: on a short clip several
+			// fractional frames truncate to the same integer, and silently
+			// writing fewer PNGs than asked defeats the visual check.
+			name := fmt.Sprintf("%s-%02d-f%.1f.png", j.name, i, frame)
+			if err := writePNG(dst, filepath.Join(dir, name)); err != nil {
 				return err
 			}
 		}

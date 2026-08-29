@@ -425,6 +425,9 @@ func (m *Model) boxSpan(box, span int) (*lottieresolv.Box, *lottieresolv.Span) {
 // deliberately not re-sorted here — the chart addresses the dragged span
 // by index across the whole drag — so NormalizeSpans runs on release.
 func (m *Model) ShiftSpan(box, span int, delta float64) {
+	if m.blockEdit() {
+		return
+	}
 	_, sp := m.boxSpan(box, span)
 	if sp == nil || delta == 0 {
 		return
@@ -463,6 +466,9 @@ func (m *Model) SetSpanEdge(box, span int, right bool, frame float64) {
 
 // NormalizeSpans restores frame order after a chart drag ends.
 func (m *Model) NormalizeSpans(box int) {
+	if m.blockEdit() {
+		return
+	}
 	t := m.StageTrack()
 	if t == nil || box < 0 || box >= len(t.Boxes) {
 		return
@@ -478,6 +484,9 @@ func round2(v float64) float64 { return math.Round(v*100) / 100 }
 
 // DragHitbox moves the current span by a delta in animation coordinates.
 func (m *Model) DragHitbox(dx, dy float64) {
+	if m.blockEdit() {
+		return
+	}
 	sp := m.SelectedSpan()
 	if sp == nil {
 		return
@@ -490,6 +499,9 @@ func (m *Model) DragHitbox(dx, dy float64) {
 // DragHitboxHandle resizes the current span: a rect grows by the delta, a
 // circle's radius follows the x component.
 func (m *Model) DragHitboxHandle(dx, dy float64) {
+	if m.blockEdit() {
+		return
+	}
 	b := m.SelectedHitbox()
 	sp := m.SelectedSpan()
 	if b == nil || sp == nil {
@@ -616,6 +628,9 @@ func (m *Model) DeleteCPShape() {
 }
 
 func (m *Model) DragCPShape(dx, dy float64) {
+	if m.blockEdit() {
+		return
+	}
 	s := m.SelectedCPShape()
 	if s == nil {
 		return
@@ -633,6 +648,9 @@ func (m *Model) DragCPShape(dx, dy float64) {
 }
 
 func (m *Model) DragCPShapeHandle(dx, dy float64) {
+	if m.blockEdit() {
+		return
+	}
 	s := m.SelectedCPShape()
 	if s == nil {
 		return
@@ -652,6 +670,9 @@ func (m *Model) DragCPShapeHandle(dx, dy float64) {
 // rides the layer's rotation and scale. The bound layer remains the
 // position's source of truth.
 func (m *Model) DragSocket(dx, dy float64) {
+	if m.blockEdit() {
+		return
+	}
 	s := m.SelectedSocket()
 	anim := m.PreviewAnimation()
 	if s == nil || anim == nil {

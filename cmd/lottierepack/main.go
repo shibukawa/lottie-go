@@ -74,12 +74,18 @@ func dumpBundle(src, dir string) error {
 		}
 	}
 	for _, id := range b.AnimationIDs() {
+		if !safeComponent(id) {
+			return fmt.Errorf("lottierepack: refusing unsafe animation id %q", id)
+		}
 		raw, _ := b.AnimationJSON(id)
 		if err := writeIndented(filepath.Join(dir, id+".json"), raw); err != nil {
 			return err
 		}
 	}
 	for _, id := range b.StateMachineIDs() {
+		if !safeComponent(id) {
+			return fmt.Errorf("lottierepack: refusing unsafe machine id %q", id)
+		}
 		sm, err := b.StateMachine(id)
 		if err != nil {
 			return err
@@ -113,7 +119,11 @@ func dumpBundle(src, dir string) error {
 			return err
 		}
 		rc.Close()
-		if err := os.WriteFile(filepath.Join(dir, "parts", path.Base(f.Name)), buf.Bytes(), 0o644); err != nil {
+		name := path.Base(f.Name)
+		if !safeComponent(name) {
+			return fmt.Errorf("lottierepack: refusing unsafe image name %q", f.Name)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "parts", name), buf.Bytes(), 0o644); err != nil {
 			return err
 		}
 	}
@@ -126,6 +136,7 @@ func dumpBundle(src, dir string) error {
 }
 
 func repack(dir, base, out string) error {
+	explicitBase := base != ""
 	if base == "" {
 		if src, err := os.ReadFile(filepath.Join(dir, ".source")); err == nil {
 			base = strings.TrimSpace(string(src))
@@ -137,10 +148,24 @@ func repack(dir, base, out string) error {
 	if out == "" {
 		return fmt.Errorf("lottierepack: nowhere to write; pass -out (or -base, or dump first)")
 	}
+	if base == "" {
+		// The doc's promise: an already-existing output serves as the base.
+		if _, err := os.Stat(out); err == nil {
+			base = out
+		}
+	}
 	b := lottie.NewBundle()
 	if base != "" {
 		data, err := os.ReadFile(base)
-		if err == nil {
+		switch {
+		case err != nil && explicitBase:
+			// A -base that cannot be read must not be silently ignored:
+			// the output would quietly lose the manifest metadata, fonts,
+			// themes and stray files the base was meant to carry over.
+			return fmt.Errorf("lottierepack: base %s: %w", base, err)
+		case err != nil:
+			fmt.Fprintf(os.Stderr, "lottierepack: recorded base %s unreadable (%v); repacking from the directory alone — manifest fields and stray files will not carry over\n", base, err)
+		default:
 			if b, err = lottie.DecodeBundle(bytes.NewReader(data), int64(len(data))); err != nil {
 				return fmt.Errorf("lottierepack: base %s: %w", base, err)
 			}
@@ -212,6 +237,13 @@ func repack(dir, base, out string) error {
 	}
 	fmt.Printf("wrote %s (%d clips, %d bytes)\n", out, len(b.AnimationIDs()), buf.Len())
 	return nil
+}
+
+// safeComponent reports whether a bundle-supplied name is safe to use as a
+// single file-name component. Bundle ids come from zip entry names, and on
+// Windows a '\' in one would escape -dir (path.Base does not split on it).
+func safeComponent(name string) bool {
+	return name != "" && name != "." && name != ".." && !strings.ContainsAny(name, `/\`)
 }
 
 func writeIndented(path string, raw []byte) error {

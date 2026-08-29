@@ -1192,9 +1192,14 @@ func (m *Model) SetPosePartParent(parent int) {
 		m.setStatus("park on a key before re-parenting: the transform is rewritten there")
 		return
 	}
-	oldParent, _ := d.parentOf(m.posePart)
+	oldParent, ok := d.parentOf(m.posePart)
 	if !d.layerHasParent(m.posePart) {
 		oldParent = -1
+	} else if !ok {
+		// The layer names a parent that is not in this clip; corrections
+		// measured against layer 0 in its place would be garbage.
+		m.setStatus("cannot re-parent: the current parent is not in this clip")
+		return
 	}
 	// Every correction is measured against the clip as it is now, so they
 	// are all worked out before the link changes.

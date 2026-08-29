@@ -268,7 +268,13 @@ func (t *timelinePane) Draw(context *guigui.Context, widgetBounds *guigui.Widget
 	ruler := t.rulerBounds(context, b)
 	vector.DrawFilledRect(dst, float32(barX), float32(ruler.Min.Y),
 		float32(barW), float32(ruler.Dy()), pal.track, false)
-	for s := 0.0; s <= span; s++ {
+	// Widen the tick step when a long span would pack them closer than a
+	// few pixels: denser is unreadable and the loop runs every frame.
+	tick := 1.0
+	if pps < 4 {
+		tick = math.Ceil(4 / pps)
+	}
+	for s := 0.0; s <= span; s += tick {
 		x := float32(float64(barX) + s*pps)
 		vector.StrokeLine(dst, x, float32(ruler.Min.Y), x, float32(ruler.Max.Y), 1, pal.tick, false)
 		if h > 0 {

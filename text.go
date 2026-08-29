@@ -331,6 +331,10 @@ func (r *renderer) renderGlyphText(dst *ebiten.Image, tn *textNode, doc *textDoc
 	totals.line = len(lines)
 
 	baseTracking := doc.tracking / 1000 * doc.size
+	// AppendGlyphs positions the first baseline at +HAscent, so pull each
+	// line up by the ascent — the same correction the plain-text path
+	// applies — or the two paths disagree by a whole ascent.
+	ascent := face.Metrics().HAscent
 	var glyphs []text.Glyph
 	for li, line := range lines {
 		if line == "" {
@@ -378,7 +382,7 @@ func (r *renderer) renderGlyphText(dst *ebiten.Image, tn *textNode, doc *textDoc
 		case 2:
 			xoff = -w / 2
 		}
-		local := mat.mul(identityMatrix.translate(xoff, float64(li)*lh))
+		local := mat.mul(identityMatrix.translate(xoff, float64(li)*lh-ascent))
 
 		for gi := range glyphs {
 			g := &glyphs[gi]

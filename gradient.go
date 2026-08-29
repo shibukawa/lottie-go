@@ -101,12 +101,14 @@ func buildGradientStops(g *gradientCmd, data []float64, count int, alpha float64
 		g.colors[1] = [4]float32{0, 0, 0, float32(alpha)}
 		return
 	}
-	if count > maxGradStops {
-		count = maxGradStops
-	}
+	// The alpha tail starts after the file's full color-stop run; slice it
+	// before clamping count, or extra color stops read back as alpha stops.
 	type alphaStop struct{ pos, a float64 }
 	var alphas []alphaStop
 	rest := data[count*4:]
+	if count > maxGradStops {
+		count = maxGradStops
+	}
 	for i := 0; i+1 < len(rest); i += 2 {
 		alphas = append(alphas, alphaStop{rest[i], rest[i+1]})
 	}

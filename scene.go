@@ -612,13 +612,13 @@ func (s *Scene) Validate() []error {
 		if n.Phase != "" && !phases[n.Phase] {
 			errs = append(errs, fmt.Errorf("node %q belongs to unknown phase %q", n.Name, n.Phase))
 		}
-		// A looping link never completes, so anything chained after it
-		// can never play.
-		if n.Playback.Loop && len(n.Playback.Then) > 0 {
+		// An endless loop never completes, so anything chained after it
+		// can never play. A counted loop (LoopCount > 0) does complete.
+		if n.Playback.Loop && n.Playback.LoopCount <= 0 && len(n.Playback.Then) > 0 {
 			errs = append(errs, fmt.Errorf("node %q loops its first clip, so its chain never runs", n.Name))
 		}
 		for i, st := range n.Playback.Then {
-			if st.Loop && i != len(n.Playback.Then)-1 {
+			if st.Loop && st.LoopCount <= 0 && i != len(n.Playback.Then)-1 {
 				errs = append(errs, fmt.Errorf("node %q chain step %d loops, so later steps never run", n.Name, i+1))
 			}
 		}

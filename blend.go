@@ -9,9 +9,12 @@ import (
 
 // blendNeedsShader reports whether the Lottie blend mode reads the backdrop
 // and therefore composites through blendShader rather than a fixed-function
-// ebiten.Blend: 3 overlay, 4 darken, 5 lighten, 6 color dodge, 7 color burn,
-// 8 hard light, 9 soft light, 10 difference, 11 exclusion.
-func blendNeedsShader(bm int) bool { return bm >= 3 && bm <= 11 }
+// ebiten.Blend: 1 multiply, 3 overlay, 4 darken, 5 lighten, 6 color dodge,
+// 7 color burn, 8 hard light, 9 soft light, 10 difference, 11 exclusion.
+// Multiply is here because its W3C form keeps the source visible over a
+// transparent backdrop — the src*(1-dstAlpha) term — which a one-pass
+// fixed-function blend cannot express.
+func blendNeedsShader(bm int) bool { return bm == 1 || bm >= 3 && bm <= 11 }
 
 var (
 	blendShaderOnce sync.Once
@@ -51,7 +54,9 @@ func Fragment(dst vec4, src vec2, color vec4) vec4 {
 	bc := b.rgb / max(b.a, 0.0001)
 	m := int(Mode)
 	var f vec3
-	if m == 3 {
+	if m == 1 {
+		f = bc * sc
+	} else if m == 3 {
 		f = hardLightB(sc, bc)
 	} else if m == 4 {
 		f = min(bc, sc)
