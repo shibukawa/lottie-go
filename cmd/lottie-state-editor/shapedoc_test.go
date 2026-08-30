@@ -104,7 +104,7 @@ func TestSetPropObjStaticAndKeyed(t *testing.T) {
 	if !ok {
 		t.Fatalf("no fill item")
 	}
-	if !d.setPropObj(fill, "c", 0, []float64{0, 0.5, 1}) {
+	if !d.setPropObj(fill, "c", 0, []float64{0, 0.5, 1}, d.times) {
 		t.Fatalf("static color write refused")
 	}
 	// The clip has a pose set (0, 20), so the static write was promoted to
@@ -116,7 +116,7 @@ func TestSetPropObjStaticAndKeyed(t *testing.T) {
 		t.Fatalf("promotion should hold the old value at other keys, got %v ok=%v", v, ok)
 	}
 	// Between keys nothing accepts a write.
-	if d.setPropObj(fill, "c", 10, []float64{0, 0, 0}) {
+	if d.setPropObj(fill, "c", 10, []float64{0, 0, 0}, nil) {
 		t.Fatalf("write between keys must refuse")
 	}
 }
@@ -138,7 +138,7 @@ func TestGradientRampReadWrite(t *testing.T) {
 		}
 		return 0
 	})
-	if !d.setGradientRamp(gf, 0, stops, alphas) {
+	if !d.setGradientRamp(gf, 0, stops, alphas, d.times) {
 		t.Fatalf("ramp write refused")
 	}
 	back, _, _ := gradientRamp(gf, 0)
@@ -298,7 +298,7 @@ func TestClipStillDecodesAfterShapeEdits(t *testing.T) {
 	sh, _ := d.shapeItem(0, []int{0, 0})
 	insertPathVertex(sh, 0, 0.5)
 	fill, _ := d.shapeItem(0, []int{0, 1})
-	d.setPropObj(fill, "c", 0, []float64{0, 1, 0})
+	d.setPropObj(fill, "c", 0, []float64{0, 1, 0}, d.times)
 	d.addShapeLayer("extra")
 	d.insertShapeItem(0, nil, newGroupItem("g", newEllipseItem(0, 0, 40, 40)), 0)
 

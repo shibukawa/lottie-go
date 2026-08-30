@@ -647,6 +647,90 @@ func TestCopyShapeValuesFromNeighbourKeys(t *testing.T) {
 	}
 }
 
+func TestDragAtKeyOnUnposedClipKeysTheMemberThere(t *testing.T) {
+	// The walk clip is not a pose sequence — its chart shows a per-layer
+	// row — and its rect is static. Dragging the rect while parked on one
+	// of the body row's keys used to write the static value, moving every
+	// keyframe at once; it must key the member instead and move that
+	// keyframe alone.
+	m := NewModel()
+	m.Open("../../examples/state-editor/character/character.lottie")
+	if m.Bundle() == nil {
+		t.Fatalf("open: %s", m.Status())
+	}
+	m.ShowClip(clipRef{Anim: "walk-anim"})
+	m.PausePreview()
+	m.SetCollisionTab(colShapes)
+	rows := m.PoseRows()
+	if len(rows) == 0 {
+		t.Fatalf("walk clip should fall back to layer rows")
+	}
+	times := m.PoseRowTimes(rows[0])
+	m.SelectPoseKey(times[1], rows[0])
+	if _, ok := m.SelectedPoseKey(); !ok {
+		t.Fatalf("park failed")
+	}
+	m.SelectShapeNode([]int{0, 0}) // the inner rect
+	before, _ := m.ShapeMemberValue("p")
+	m.MoveShapeGeometry(10, 0)
+
+	data, _ := m.Bundle().AnimationJSON("walk-anim")
+	d, err := newClipDoc("walk-anim", data)
+	if err != nil {
+		t.Fatalf("stored clip: %v", err)
+	}
+	rc, _ := d.shapeItem(0, []int{0, 0})
+	moved, okM := propValueAtObj(rc, "p", times[1])
+	if !okM || moved[0] != before[0]+10 {
+		t.Fatalf("no key with the move at frame %v: %v ok=%v", times[1], moved, okM)
+	}
+	still, okS := propValueAtObj(rc, "p", times[0])
+	if !okS || still[0] != before[0] {
+		t.Fatalf("the other keyframe moved too: %v ok=%v", still, okS)
+	}
+	if got := shapeMemberKeyTimes(rc, "p"); !slices.Equal(got, times) {
+		t.Fatalf("promoted key times = %v, want the row's %v", got, times)
+	}
+}
+
+func TestVertexDragAtKeyPromotesAStaticPath(t *testing.T) {
+	m := shapeModel(t)
+	m.SelectShapeNode([]int{2}) // the static zig path
+	m.SelectPoseKey(0, -1)
+	m.MoveShapeVertex(0, 3, 0)
+	d := storedDoc(t, m)
+	zig, _ := d.shapeItem(0, []int{2})
+	if !pathAnimated(zig) {
+		t.Fatalf("static path not promoted by an edit at a key")
+	}
+	p0, _ := pathAt(zig, 0, false)
+	p20, _ := pathAt(zig, 20, false)
+	if p0.v[0][0] != -57 {
+		t.Fatalf("vertex at the edited key = %v", p0.v[0])
+	}
+	if p20.v[0][0] != -60 {
+		t.Fatalf("the other key moved too: %v", p20.v[0])
+	}
+}
+
+func TestShapeVertexGhostsFollowOnionSkin(t *testing.T) {
+	m := shapeModel(t)
+	m.SelectShapeNode([]int{0, 0})
+	m.SelectPoseKey(0, -1)
+	if got := m.ShapeVertexGhosts(); len(got) != 0 {
+		t.Fatalf("ghosts without the toggle: %d", len(got))
+	}
+	m.SetOnionSkin(true)
+	ghosts := m.ShapeVertexGhosts()
+	if len(ghosts) != 1 || !ghosts[0].next || ghosts[0].frame != 20 {
+		t.Fatalf("ghosts = %+v", ghosts)
+	}
+	// Key 20's first vertex sits at layer (-50, 0), the layer at (100, 100).
+	if len(ghosts[0].pts) != 4 || ghosts[0].pts[0] != [2]float64{50, 100} {
+		t.Fatalf("ghost points = %v", ghosts[0].pts)
+	}
+}
+
 func TestVertexInsertDeleteFromModel(t *testing.T) {
 	m := shapeModel(t)
 	m.SelectShapeNode([]int{0, 0})

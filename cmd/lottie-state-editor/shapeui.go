@@ -118,10 +118,39 @@ func drawShapeOverlay(dst *ebiten.Image, m *Model, tr stageTransform, u float32)
 		drawShapeBox(dst, m, tr, u, live)
 	}
 	if n.ty == "sh" {
+		drawShapeVertexSkin(dst, m, tr, u)
 		drawShapeVertices(dst, m, tr, u, live)
 	}
 	if m.ShapeItemIsGradient() {
 		drawGradGizmo(dst, m, tr, u, live)
+	}
+}
+
+// drawShapeVertexSkin is the onion skin per vertex: the selected path's
+// points at the neighbouring keys as tinted dots — cool behind, warm
+// ahead, the rig overlay's colors — with a hair from each current vertex
+// to its ghost, so how far every point travels reads at a glance.
+func drawShapeVertexSkin(dst *ebiten.Image, m *Model, tr stageTransform, u float32) {
+	ghosts := m.ShapeVertexGhosts()
+	if len(ghosts) == 0 {
+		return
+	}
+	v, _, _, okV := shapeVertexScreen(m, tr)
+	r := max(1.5, handleSize(u)/4)
+	for _, g := range ghosts {
+		clr := rigPrevColor
+		if g.next {
+			clr = rigNextColor
+		}
+		for i, p := range g.pts {
+			x, y := tr.toScreen(p[0], p[1])
+			vector.DrawFilledCircle(dst, x, y, r, clr, true)
+			// The topology invariant keeps vertex i the same point at
+			// every key, so the hair is only drawn while that holds.
+			if okV && len(g.pts) == len(v) {
+				vector.StrokeLine(dst, v[i][0], v[i][1], x, y, max(1, u/32), withAlpha(clr, 0x80), true)
+			}
+		}
 	}
 }
 

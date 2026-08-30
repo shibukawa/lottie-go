@@ -243,17 +243,18 @@ func propAnimatedObj(owner map[string]any, member string) bool {
 	return animated
 }
 
-// setPropObj writes a member at a frame. A static member is promoted to the
-// clip's pose set first when there is one to key against; otherwise the
+// setPropObj writes a member at a frame. A static member is promoted to
+// promoteTimes first when the caller supplies them (the frame must be one
+// of them), holding its old value at every other time; with none, the
 // static value is rewritten, which applies to the whole clip. An animated
 // member with no key at frame refuses — writing between keys would break
 // the one-time-set invariant the same way it would for a pose.
-func (d *clipDoc) setPropObj(owner map[string]any, member string, frame float64, v []float64) bool {
+func (d *clipDoc) setPropObj(owner map[string]any, member string, frame float64, v []float64, promoteTimes []float64) bool {
 	if owner == nil || len(v) == 0 {
 		return false
 	}
 	if !propAnimatedObj(owner, member) {
-		if !d.promoteObj(owner, member) {
+		if !d.promoteObj(owner, member, promoteTimes) {
 			m, ok := propObj(owner[member])
 			if !ok {
 				return false
@@ -283,10 +284,10 @@ func (d *clipDoc) setPropObj(owner map[string]any, member string, frame float64,
 	return true
 }
 
-// promoteObj keys a static member at every pose time holding its current
+// promoteObj keys a static member at every given time holding its current
 // value, exactly as promote does for a layer transform member.
-func (d *clipDoc) promoteObj(owner map[string]any, member string) bool {
-	if owner == nil || !d.posed || len(d.times) == 0 {
+func (d *clipDoc) promoteObj(owner map[string]any, member string, times []float64) bool {
+	if owner == nil || len(times) == 0 {
 		return false
 	}
 	m, ok := propObj(owner[member])
@@ -300,9 +301,37 @@ func (d *clipDoc) promoteObj(owner map[string]any, member string) bool {
 	if !ok {
 		return false
 	}
-	keys := make([]any, 0, len(d.times))
-	for _, t := range d.times {
+	keys := make([]any, 0, len(times))
+	for _, t := range times {
 		keys = append(keys, newKey(t, v))
+	}
+	m["a"] = 1
+	m["k"] = keys
+	d.index()
+	return true
+}
+
+// promotePathObj keys a static path at every given time holding its
+// current shape, so an edit at one key can land there alone.
+func (d *clipDoc) promotePathObj(item map[string]any, times []float64) bool {
+	m, ok := pathOwner(item)
+	if !ok || len(times) == 0 {
+		return false
+	}
+	if _, animated := pathKeys(m); animated {
+		return true
+	}
+	p, ok := parsePathObj(m["k"])
+	if !ok {
+		return false
+	}
+	keys := make([]any, 0, len(times))
+	for _, t := range times {
+		keys = append(keys, map[string]any{
+			"t": t, "s": []any{encodePathObj(p)},
+			"i": map[string]any{"x": []any{0.5}, "y": []any{1.0}},
+			"o": map[string]any{"x": []any{0.5}, "y": []any{0.0}},
+		})
 	}
 	m["a"] = 1
 	m["k"] = keys
@@ -774,7 +803,7 @@ func gradientRamp(item map[string]any, frame float64) ([]gradStop, []gradAlphaSt
 
 // setGradientRamp writes the stops back at a frame, keeping the alpha
 // stops as they are. p follows the color stop count.
-func (d *clipDoc) setGradientRamp(item map[string]any, frame float64, stops []gradStop, alphas []gradAlphaStop) bool {
+func (d *clipDoc) setGradientRamp(item map[string]any, frame float64, stops []gradStop, alphas []gradAlphaStop, promoteTimes []float64) bool {
 	g, ok := item["g"].(map[string]any)
 	if !ok || len(stops) < 2 {
 		return false
@@ -786,7 +815,7 @@ func (d *clipDoc) setGradientRamp(item map[string]any, frame float64, stops []gr
 	for _, a := range alphas {
 		flat = append(flat, round4(a.pos), round4(a.a))
 	}
-	if !d.setPropObj(g, "k", frame, flat) {
+	if !d.setPropObj(g, "k", frame, flat, promoteTimes) {
 		return false
 	}
 	g["p"] = float64(len(stops))

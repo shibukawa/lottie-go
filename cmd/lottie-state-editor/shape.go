@@ -169,8 +169,40 @@ func (m *Model) ShapeMemberWritable(member string) bool {
 	return propIsKeyedObj(item, member, m.shapeEditFrame())
 }
 
+// shapePromoteTimes is where a static member's keys go when an edit at
+// frame should become an animated one: the tick set the chart shows for
+// the edited layer — the clip's pose columns when it has them, the
+// layer's own row otherwise — and only when frame is one of those ticks.
+// An edit at any other frame stays a static, clip-wide write.
+func (m *Model) shapePromoteTimes(frame float64) []float64 {
+	d := m.StageClipDoc()
+	n, ok := m.SelectedShapeNode()
+	if d == nil || !ok {
+		return nil
+	}
+	times := d.times
+	if !d.posed {
+		if l := d.layer(n.layer); l != nil {
+			if lt := l.layerTimes(); len(lt) > 0 {
+				times = lt
+			}
+		}
+	}
+	if !slices.Contains(times, frame) {
+		// Parked on another row's key: the user chose this frame as a
+		// keyframe, so the promoted member gets a key there too.
+		if _, parked := m.SelectedPoseKey(); !parked {
+			return nil
+		}
+		times = append(slices.Clone(times), frame)
+		slices.Sort(times)
+	}
+	return times
+}
+
 // SetShapeMemberValue writes one member at the edit frame, promoting a
-// static member when the clip has a pose set to key against.
+// static member to the visible tick set when the edit lands on a tick —
+// which is what makes a drag at one keyframe move that keyframe alone.
 func (m *Model) SetShapeMemberValue(member string, v []float64) {
 	if m.blockEdit() {
 		return
@@ -180,9 +212,10 @@ func (m *Model) SetShapeMemberValue(member string, v []float64) {
 	if d == nil || !ok {
 		return
 	}
+	frame := m.shapeEditFrame()
 	animated := propAnimatedObj(item, member)
 	pushed := m.snapshotClip()
-	if !d.setPropObj(item, member, m.shapeEditFrame(), v) {
+	if !d.setPropObj(item, member, frame, v, m.shapePromoteTimes(frame)) {
 		if pushed {
 			m.dropLastSnapshot()
 		}
@@ -463,8 +496,9 @@ func (m *Model) writeGradStops(stops []gradStop, follow int) {
 		}
 		return 0
 	})
+	frame := m.shapeEditFrame()
 	pushed := m.snapshotClip()
-	if !d.setGradientRamp(item, m.shapeEditFrame(), stops, alphas) {
+	if !d.setGradientRamp(item, frame, stops, alphas, m.shapePromoteTimes(frame)) {
 		if pushed {
 			m.dropLastSnapshot()
 		}
@@ -608,7 +642,9 @@ func (m *Model) ShapePathWritable() bool {
 	return ok
 }
 
-// setShapePath writes the whole path at the edit frame.
+// setShapePath writes the whole path at the edit frame, promoting a
+// static path to the visible tick set when the edit lands on a tick, the
+// same policy every numeric member follows.
 func (m *Model) setShapePath(p pathData) {
 	if m.blockEdit() {
 		return
@@ -618,8 +654,14 @@ func (m *Model) setShapePath(p pathData) {
 	if d == nil || !ok {
 		return
 	}
+	frame := m.shapeEditFrame()
 	pushed := m.snapshotClip()
-	if !d.setPathAt(item, m.shapeEditFrame(), p) {
+	if !pathAnimated(item) {
+		if times := m.shapePromoteTimes(frame); len(times) > 0 {
+			d.promotePathObj(item, times)
+		}
+	}
+	if !d.setPathAt(item, frame, p) {
 		if pushed {
 			m.dropLastSnapshot()
 		}
@@ -780,6 +822,47 @@ func (m *Model) SetShapePathClosed(closed bool) {
 		return
 	}
 	m.touchClipDoc()
+}
+
+// ---- vertex onion skin ----
+
+// shapeVertexGhost is the selected path's vertices at one neighbouring
+// key, in animation space — the onion skin, per vertex: where each point
+// was and where it is heading, which is most of what a path key decides.
+type shapeVertexGhost struct {
+	frame float64
+	next  bool
+	pts   [][2]float64
+}
+
+// ShapeVertexGhosts follows the onion-skin toggle and its ghost frames.
+func (m *Model) ShapeVertexGhosts() []shapeVertexGhost {
+	n, ok := m.SelectedShapeNode()
+	if !ok || n.ty != "sh" {
+		return nil
+	}
+	item, ok := m.SelectedShapeItem()
+	if !ok {
+		return nil
+	}
+	var out []shapeVertexGhost
+	for _, g := range m.OnionGhosts() {
+		p, okP := pathAt(item, g.frame, true)
+		if !okP {
+			continue
+		}
+		mat, okM := m.shapeSpaceMatrix(n.layer, n.path, g.frame)
+		if !okM {
+			continue
+		}
+		pts := make([][2]float64, len(p.v))
+		for i, v := range p.v {
+			x, y := mat.Apply(v[0], v[1])
+			pts[i] = [2]float64{x, y}
+		}
+		out = append(out, shapeVertexGhost{frame: g.frame, next: g.next, pts: pts})
+	}
+	return out
 }
 
 // ---- whole-shape move and resize ----

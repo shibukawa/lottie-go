@@ -205,11 +205,17 @@ carrying the color the ramp already shows there, drag a stop to move it,
 drag it well off the bar to delete it, and recolor the selected stop in
 the hex field beside its swatch. **type** switches linear and radial.
 
-Editing follows the pose rules exactly. A static value is writable
-anywhere and applies to the whole clip; an animated one is written only
-with the playhead parked on one of its keys — click a tick on the chart —
-and on a preset-style pose clip, touching a static value keys it at every
-pose first. Topology is stricter still: Lottie interpolates a path
+Editing follows the pose rules exactly. An animated value is written only
+with the playhead parked on one of its keys — click a tick on the chart.
+A static value edited **on a tick** is keyed first: it gains a key at
+every tick of its row (holding its old value), and the edit lands at the
+parked one alone — which is how a shape starts animating: park on a
+keyframe, drag, park on the next, drag again, and the motion between
+them interpolates. A static value edited anywhere else stays static and
+applies to the whole clip. With **onion skin** on, a selected path also
+shows its vertices at the neighbouring keys — cool behind, warm ahead,
+with a hair from each vertex to its ghost — so how far every point
+travels reads at a glance. Topology is stricter still: Lottie interpolates a path
 vertex-wise, so inserting or deleting a vertex rewrites **every** key of
 that path at once, keeping them in step. Shape keys ride the pose
 columns: retiming, +Pose, Delete and ease all carry them along.
