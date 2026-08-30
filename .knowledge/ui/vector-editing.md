@@ -9,11 +9,12 @@ pane. Implemented (cmd/lottie-state-editor/shapeui.go, shapeinspector.go). Follo
 ui:keyframe-editing set: a tab owns the stage overlay, a list pane
 mirrors the stage selection, and a selection-driven form edits values.
 
-Implementation deviations: the item tree sits beside the key chart in
-the strip, not under it — a full-width list squeezed the stage to
-nothing at the default split; the layer picker rides the tool row; the
-gradient stop's color edits in a hex-plus-swatch row (no popup picker);
-alpha stops are not on the ramp yet.
+Implementation deviations: the layer picker, the item tree and the
+structure buttons head the inspector pane — like ui:keyframe-editing
+list.parts — instead of living in the strip, which has no height to
+spare (user 2026-08-30); the strip keeps only the key chart and the tool
+row. The gradient stop's color edits in a hex-plus-swatch row (no popup
+picker); alpha stops are not on the ramp yet.
 
 ```yaml
 ui:

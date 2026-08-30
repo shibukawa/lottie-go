@@ -398,17 +398,13 @@ func shapeCursorShape(m *Model, tr stageTransform, u float32, cx, cy int) (ebite
 
 // ---- panel ----
 
-// buildShapePanel is the Shapes tab's strip: the tool row, the layer
-// picker, the tree, and the structure buttons.
+// buildShapePanel is the Shapes tab's strip: only the tool row — the
+// layer picker, the tree and the structure buttons live at the top of the
+// inspector pane (shapeinspector.go), the way the Parts list does for
+// poses, so the strip keeps its height for the chart and the stage.
 func (c *collisionPanel) buildShapePanel(context *guigui.Context, m *Model, adder *guigui.ChildAdder) {
-	for _, w := range []guigui.Widget{
-		&c.shapeTools, &c.shapeFinish, &c.shapeLayerSel, &c.shapeAddLayer, &c.shapeDelLayer,
-		&c.shapeList,
-		&c.shapeAddGr, &c.shapeAddFl, &c.shapeAddSt, &c.shapeAddGf, &c.shapeAddTm, &c.shapeAddRd,
-		&c.shapeFront, &c.shapeBack, &c.shapeDelItem,
-	} {
-		adder.AddWidget(w)
-	}
+	adder.AddWidget(&c.shapeTools)
+	adder.AddWidget(&c.shapeFinish)
 	editable := m.StageClipDoc() != nil && !m.Viewer()
 
 	c.shapeToolItems = c.shapeToolItems[:0]
@@ -435,108 +431,6 @@ func (c *collisionPanel) buildShapePanel(context *guigui.Context, m *Model, adde
 	c.shapeFinish.SetText("Finish")
 	c.shapeFinish.OnDown(func(context *guigui.Context) { m.CommitPen(false) })
 	context.SetEnabled(&c.shapeFinish, m.PenActive() && len(m.PenPoints()) >= 2)
-
-	layers := m.ShapeLayers()
-	c.shapeLayerItems = c.shapeLayerItems[:0]
-	d := m.StageClipDoc()
-	for _, i := range layers {
-		name := ""
-		if d != nil {
-			name = d.layers[i].name
-		}
-		if name == "" {
-			name = "(unnamed layer)"
-		}
-		c.shapeLayerItems = append(c.shapeLayerItems, basicwidget.SelectItem[int]{Text: name, Value: i})
-	}
-	c.shapeLayerSel.SetItems(c.shapeLayerItems)
-	if sel := m.SelectedShapeLayer(); sel >= 0 {
-		c.shapeLayerSel.SelectItemByValue(sel)
-	}
-	c.shapeLayerSel.OnItemSelected(func(context *guigui.Context, index int) {
-		if it, ok := c.shapeLayerSel.ItemByIndex(index); ok && it.Value != m.SelectedShapeLayer() {
-			m.SelectShapeLayer(it.Value)
-		}
-	})
-	context.SetEnabled(&c.shapeLayerSel, len(layers) > 0)
-
-	c.shapeAddLayer.SetText("+Layer")
-	c.shapeAddLayer.OnDown(func(context *guigui.Context) { m.AddShapeLayerAction() })
-	context.SetEnabled(&c.shapeAddLayer, editable)
-	c.shapeDelLayer.SetText("−Layer")
-	c.shapeDelLayer.OnDown(func(context *guigui.Context) { m.DeleteShapeLayerAction() })
-	context.SetEnabled(&c.shapeDelLayer, editable && m.SelectedShapeLayer() >= 0)
-
-	c.buildShapeTree(context, m)
-
-	// New style items join the selected item's group; geometry comes from
-	// the stage tools, where it lands where it is clicked.
-	add := func(btn *basicwidget.Button, text, kind string) {
-		btn.SetText(text)
-		btn.OnDown(func(context *guigui.Context) { m.AddShapeItemAction(kind) })
-		context.SetEnabled(btn, editable && m.SelectedShapeLayer() >= 0)
-	}
-	add(&c.shapeAddGr, "+Group", "gr")
-	add(&c.shapeAddFl, "+Fill", "fl")
-	add(&c.shapeAddSt, "+Stroke", "st")
-	add(&c.shapeAddGf, "+Grad", "gf")
-	add(&c.shapeAddTm, "+Trim", "tm")
-	add(&c.shapeAddRd, "+Round", "rd")
-
-	_, hasSel := m.SelectedShapeNode()
-	c.shapeFront.SetText("▲")
-	c.shapeFront.OnDown(func(context *guigui.Context) { m.MoveShapeItemAction(-1) })
-	c.shapeBack.SetText("▼")
-	c.shapeBack.OnDown(func(context *guigui.Context) { m.MoveShapeItemAction(1) })
-	c.shapeDelItem.SetText("Delete")
-	c.shapeDelItem.OnDown(func(context *guigui.Context) { m.DeleteShapeItemAction() })
-	for _, w := range []guigui.Widget{&c.shapeFront, &c.shapeBack, &c.shapeDelItem} {
-		context.SetEnabled(w, editable && hasSel)
-	}
-}
-
-// buildShapeTree lists the selected layer's items, indented by depth, and
-// keeps the selection in step with the stage.
-func (c *collisionPanel) buildShapeTree(context *guigui.Context, m *Model) {
-	nodes := m.ShapeNodes()
-	c.shapeItems = c.shapeItems[:0]
-	selRow := -1
-	sel, hasSel := m.SelectedShapeNode()
-	for i, n := range nodes {
-		indent := ""
-		for range n.depth {
-			indent += "   "
-		}
-		text := shapeItemLabel(n.ty)
-		if n.name != "" {
-			text = n.name + " · " + text
-		}
-		c.shapeItems = append(c.shapeItems, basicwidget.ListItem[int]{
-			Text: indent + text, Value: i,
-		})
-		if hasSel && slicesEqualInt(n.path, sel.path) {
-			selRow = i
-		}
-	}
-	c.shapeList.SetItems(c.shapeItems)
-	if selRow >= 0 {
-		c.shapeList.SelectItemByValue(selRow)
-		if c.shapeShownPlus1 != selRow+1 {
-			c.shapeList.EnsureItemVisibleByIndex(selRow)
-			c.shapeShownPlus1 = selRow + 1
-		}
-	} else {
-		c.shapeShownPlus1 = 0
-	}
-	c.shapeList.OnItemSelected(func(context *guigui.Context, index int) {
-		if index < 0 || index >= len(nodes) {
-			return
-		}
-		if sel, ok := m.SelectedShapeNode(); ok && slicesEqualInt(nodes[index].path, sel.path) {
-			return
-		}
-		m.SelectShapeNode(nodes[index].path)
-	})
 }
 
 func slicesEqualInt(a, b []int) bool {

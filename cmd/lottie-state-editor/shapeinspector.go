@@ -86,6 +86,35 @@ var shapeVertexFields = []struct {
 type shapeInspector struct {
 	guigui.DefaultWidget
 
+	// The layer picker and the item tree head the pane, like the Parts
+	// list heads the pose pane: the strip under the stage has no height to
+	// spare, and the tree is what most selection starts from.
+	treeTitle     basicwidget.Text
+	layerSel      basicwidget.Select[int]
+	layerItems    []basicwidget.SelectItem[int]
+	addLayerBtn   basicwidget.Button
+	delLayerBtn   basicwidget.Button
+	treeList      basicwidget.List[int]
+	treeItems     []basicwidget.ListItem[int]
+	treeShown     int // last row scrolled to, plus one
+	addGrBtn      basicwidget.Button
+	addFlBtn      basicwidget.Button
+	addStBtn      basicwidget.Button
+	addGfBtn      basicwidget.Button
+	addTmBtn      basicwidget.Button
+	addRdBtn      basicwidget.Button
+	frontBtn      basicwidget.Button
+	backBtn       basicwidget.Button
+	delItemBtn    basicwidget.Button
+	layerRow      guigui.LinearLayout
+	layerRowItems []guigui.LinearLayoutItem
+	addRow1       guigui.LinearLayout
+	addRow1Items  []guigui.LinearLayoutItem
+	addRow2       guigui.LinearLayout
+	addRow2Items  []guigui.LinearLayoutItem
+	moveRow       guigui.LinearLayout
+	moveRowItems  []guigui.LinearLayoutItem
+
 	title      basicwidget.Text
 	nameLabel  basicwidget.Text
 	nameInput  basicwidget.TextInput
@@ -146,6 +175,19 @@ func (p *shapeInspector) Build(context *guigui.Context, adder *guigui.ChildAdder
 	if m == nil {
 		return nil
 	}
+	adder.AddWidget(&p.treeTitle)
+	adder.AddWidget(&p.layerSel)
+	adder.AddWidget(&p.addLayerBtn)
+	adder.AddWidget(&p.delLayerBtn)
+	adder.AddWidget(&p.treeList)
+	for _, w := range []guigui.Widget{
+		&p.addGrBtn, &p.addFlBtn, &p.addStBtn, &p.addGfBtn, &p.addTmBtn, &p.addRdBtn,
+		&p.frontBtn, &p.backBtn, &p.delItemBtn,
+	} {
+		adder.AddWidget(w)
+	}
+	p.buildTreeSection(context, m)
+
 	adder.AddWidget(&p.title)
 	adder.AddWidget(&p.form)
 	adder.AddWidget(&p.undoBtn)
@@ -212,6 +254,110 @@ func (p *shapeInspector) Build(context *guigui.Context, adder *guigui.ChildAdder
 	tabOrder(context, p.tabFields...)
 	p.form.SetItems(p.formItems)
 	return nil
+}
+
+// buildTreeSection wires the layer picker, the item tree and the
+// structure buttons that head the pane.
+func (p *shapeInspector) buildTreeSection(context *guigui.Context, m *Model) {
+	setBold(&p.treeTitle, "Shapes")
+	editable := m.StageClipDoc() != nil && !m.Viewer()
+
+	layers := m.ShapeLayers()
+	p.layerItems = p.layerItems[:0]
+	d := m.StageClipDoc()
+	for _, i := range layers {
+		name := ""
+		if d != nil {
+			name = d.layers[i].name
+		}
+		if name == "" {
+			name = "(unnamed layer)"
+		}
+		p.layerItems = append(p.layerItems, basicwidget.SelectItem[int]{Text: name, Value: i})
+	}
+	p.layerSel.SetItems(p.layerItems)
+	if sel := m.SelectedShapeLayer(); sel >= 0 {
+		p.layerSel.SelectItemByValue(sel)
+	}
+	p.layerSel.OnItemSelected(func(context *guigui.Context, index int) {
+		if it, ok := p.layerSel.ItemByIndex(index); ok && it.Value != m.SelectedShapeLayer() {
+			m.SelectShapeLayer(it.Value)
+		}
+	})
+	context.SetEnabled(&p.layerSel, len(layers) > 0)
+
+	p.addLayerBtn.SetText("+Layer")
+	p.addLayerBtn.OnDown(func(context *guigui.Context) { m.AddShapeLayerAction() })
+	context.SetEnabled(&p.addLayerBtn, editable)
+	p.delLayerBtn.SetText("−Layer")
+	p.delLayerBtn.OnDown(func(context *guigui.Context) { m.DeleteShapeLayerAction() })
+	context.SetEnabled(&p.delLayerBtn, editable && m.SelectedShapeLayer() >= 0)
+
+	// The tree, indented by depth, selection shared with the stage both
+	// ways.
+	nodes := m.ShapeNodes()
+	p.treeItems = p.treeItems[:0]
+	selRow := -1
+	sel, hasSel := m.SelectedShapeNode()
+	for i, n := range nodes {
+		indent := ""
+		for range n.depth {
+			indent += "   "
+		}
+		text := shapeItemLabel(n.ty)
+		if n.name != "" {
+			text = n.name + " · " + text
+		}
+		p.treeItems = append(p.treeItems, basicwidget.ListItem[int]{
+			Text: indent + text, Value: i,
+		})
+		if hasSel && slicesEqualInt(n.path, sel.path) {
+			selRow = i
+		}
+	}
+	p.treeList.SetItems(p.treeItems)
+	if selRow >= 0 {
+		p.treeList.SelectItemByValue(selRow)
+		if p.treeShown != selRow+1 {
+			p.treeList.EnsureItemVisibleByIndex(selRow)
+			p.treeShown = selRow + 1
+		}
+	} else {
+		p.treeShown = 0
+	}
+	p.treeList.OnItemSelected(func(context *guigui.Context, index int) {
+		if index < 0 || index >= len(nodes) {
+			return
+		}
+		if sel, ok := m.SelectedShapeNode(); ok && slicesEqualInt(nodes[index].path, sel.path) {
+			return
+		}
+		m.SelectShapeNode(nodes[index].path)
+	})
+
+	// New style items join the selected item's group; geometry comes from
+	// the stage tools, where it lands where it is clicked.
+	add := func(btn *basicwidget.Button, text, kind string) {
+		btn.SetText(text)
+		btn.OnDown(func(context *guigui.Context) { m.AddShapeItemAction(kind) })
+		context.SetEnabled(btn, editable && m.SelectedShapeLayer() >= 0)
+	}
+	add(&p.addGrBtn, "+Group", "gr")
+	add(&p.addFlBtn, "+Fill", "fl")
+	add(&p.addStBtn, "+Stroke", "st")
+	add(&p.addGfBtn, "+Grad", "gf")
+	add(&p.addTmBtn, "+Trim", "tm")
+	add(&p.addRdBtn, "+Round", "rd")
+
+	p.frontBtn.SetText("▲ Front")
+	p.frontBtn.OnDown(func(context *guigui.Context) { m.MoveShapeItemAction(-1) })
+	p.backBtn.SetText("▼ Back")
+	p.backBtn.OnDown(func(context *guigui.Context) { m.MoveShapeItemAction(1) })
+	p.delItemBtn.SetText("Delete")
+	p.delItemBtn.OnDown(func(context *guigui.Context) { m.DeleteShapeItemAction() })
+	for _, w := range []guigui.Widget{&p.frontBtn, &p.backBtn, &p.delItemBtn} {
+		context.SetEnabled(w, editable && hasSel)
+	}
 }
 
 func (p *shapeInspector) hintText(m *Model) string {
@@ -460,8 +606,54 @@ func (p *shapeInspector) WriteStateKey(context *guigui.Context, w *guigui.StateK
 
 func (p *shapeInspector) layout(context *guigui.Context) guigui.LinearLayout {
 	u := basicwidget.UnitSize(context)
+
+	p.layerRowItems = slices.Delete(p.layerRowItems, 0, len(p.layerRowItems))
+	p.layerRowItems = append(p.layerRowItems,
+		guigui.LinearLayoutItem{Widget: &p.layerSel, Size: guigui.FlexibleSize(2)},
+		guigui.LinearLayoutItem{Widget: &p.addLayerBtn, Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Widget: &p.delLayerBtn, Size: guigui.FlexibleSize(1)},
+	)
+	p.layerRow = guigui.LinearLayout{
+		Direction: guigui.LayoutDirectionHorizontal, Items: p.layerRowItems, Gap: u / 4,
+	}
+
+	p.addRow1Items = slices.Delete(p.addRow1Items, 0, len(p.addRow1Items))
+	p.addRow1Items = append(p.addRow1Items,
+		guigui.LinearLayoutItem{Widget: &p.addGrBtn, Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Widget: &p.addFlBtn, Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Widget: &p.addStBtn, Size: guigui.FlexibleSize(1)},
+	)
+	p.addRow1 = guigui.LinearLayout{
+		Direction: guigui.LayoutDirectionHorizontal, Items: p.addRow1Items, Gap: u / 4,
+	}
+	p.addRow2Items = slices.Delete(p.addRow2Items, 0, len(p.addRow2Items))
+	p.addRow2Items = append(p.addRow2Items,
+		guigui.LinearLayoutItem{Widget: &p.addGfBtn, Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Widget: &p.addTmBtn, Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Widget: &p.addRdBtn, Size: guigui.FlexibleSize(1)},
+	)
+	p.addRow2 = guigui.LinearLayout{
+		Direction: guigui.LayoutDirectionHorizontal, Items: p.addRow2Items, Gap: u / 4,
+	}
+
+	p.moveRowItems = slices.Delete(p.moveRowItems, 0, len(p.moveRowItems))
+	p.moveRowItems = append(p.moveRowItems,
+		guigui.LinearLayoutItem{Widget: &p.frontBtn, Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Widget: &p.backBtn, Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Widget: &p.delItemBtn, Size: guigui.FlexibleSize(1)},
+	)
+	p.moveRow = guigui.LinearLayout{
+		Direction: guigui.LayoutDirectionHorizontal, Items: p.moveRowItems, Gap: u / 4,
+	}
+
 	p.items = slices.Delete(p.items, 0, len(p.items))
 	p.items = append(p.items,
+		guigui.LinearLayoutItem{Widget: &p.treeTitle, Size: guigui.FixedSize(u)},
+		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &p.layerRow},
+		guigui.LinearLayoutItem{Widget: &p.treeList, Size: guigui.FixedSize(6 * u)},
+		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &p.moveRow},
+		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &p.addRow1},
+		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &p.addRow2},
 		guigui.LinearLayoutItem{Widget: &p.title, Size: guigui.FixedSize(u)},
 		guigui.LinearLayoutItem{Widget: &p.form},
 		guigui.LinearLayoutItem{Widget: &p.undoBtn, Size: guigui.FixedSize(u)},

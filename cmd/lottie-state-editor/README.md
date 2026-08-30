@@ -149,12 +149,16 @@ writing a value at a frame the other tracks have no key at.
 
 The **Shapes** tab edits vector artwork: the shape layers of the clip on
 stage — imported UI assets, the generated samples, or layers drawn from
-scratch. Pick a layer from the dropdown (or **+Layer** to start an empty
-one, **−Layer** to remove it), and its item tree appears beside the key
-chart, indented the way the document nests it: groups, paths, primitives,
-fills, strokes, gradients, and modifiers, in paint order. Clicking a shape
-on the stage selects it in the tree and back. Unknown item kinds are
-listed but left inert — they survive saving untouched.
+scratch. Choosing the tab opens the **Shapes** section at the top of the
+right pane, the way Poses opens the Parts list: a layer picker (with
+**+Layer** to start an empty one and **−Layer** to remove it) over the
+layer's item tree, indented the way the document nests it — groups,
+paths, primitives, fills, strokes, gradients, and modifiers, in paint
+order. Clicking a shape on the stage selects it in the tree and back,
+switching the layer with it when the click landed on another layer's
+artwork. Unknown item kinds are listed but left inert — they survive
+saving untouched. The strip under the stage keeps only the key chart and
+the tool row, so the stage keeps its height.
 
 The tool row picks the gesture. **Select** drags what is already there:
 the selected path shows square vertices (the selected one carries its
@@ -164,10 +168,10 @@ splits the segment under the click. Elsewhere **Pen** draws a new path
 click by click — closing on the first vertex commits it, **Finish**
 commits it open — and **Rect** / **Ellipse** / **Star** drop a primitive
 where clicked. New geometry arrives in its own group with a grey fill,
-selected and ready to restyle. **+Fill**, **+Stroke**, **+Grad**,
-**+Trim**, **+Round** and **+Group** add items to the selected item's
-group; **▲ ▼** move an item within its group (the tree is the paint
-order), **Delete** removes it, subtree included.
+selected and ready to restyle. Under the tree, **+Fill**, **+Stroke**,
+**+Grad**, **+Trim**, **+Round** and **+Group** add items to the selected
+item's group; **▲ Front / ▼ Back** move an item within its group (the
+tree is the paint order), **Delete** removes it, subtree included.
 
 Gradients edit the Flash way. On the stage the selected gradient shows
 its transform gizmo — drag the square (start / center), the circle (end:
