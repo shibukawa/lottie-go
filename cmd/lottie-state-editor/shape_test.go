@@ -509,6 +509,144 @@ func TestGeometryInsertsIntoTheSelectedGroup(t *testing.T) {
 	}
 }
 
+func TestCopyPasteAndDuplicateShapeItems(t *testing.T) {
+	m := shapeModel(t)
+
+	// Copy the blob group, paste it into the card group.
+	m.SelectShapeNode([]int{0})
+	m.CopyShapeItem()
+	if !m.CanPasteShapeItem() {
+		t.Fatalf("clipboard empty after copy")
+	}
+	m.SelectShapeNode([]int{1})
+	m.PasteShapeItem()
+	d := storedDoc(t, m)
+	pasted, ok := d.shapeItem(0, []int{1, 0})
+	if !ok {
+		t.Fatalf("nothing pasted into the card group")
+	}
+	if ty, _ := pasted["ty"].(string); ty != "gr" {
+		t.Fatalf("pasted item = %v", ty)
+	}
+	if nm, _ := pasted["nm"].(string); nm != "blob" {
+		t.Fatalf("pasted name = %q", nm)
+	}
+	// The paste is a deep copy: editing it leaves the original alone.
+	m.SelectShapeNode([]int{1, 0, 1}) // the pasted blob's fill
+	m.SelectPoseKey(0, -1)
+	m.SetShapeColorHex("#00ff00")
+	d = storedDoc(t, m)
+	orig, _ := d.shapeItem(0, []int{0, 1})
+	if v, ok := propStaticObj(orig, "c"); !ok || v[0] != 1 {
+		t.Fatalf("editing the paste changed the original: %v ok=%v", v, ok)
+	}
+
+	// Duplicate lands beside its source in the same group.
+	m.SelectShapeNode([]int{1, 1}) // the card's rect (shifted by the paste)
+	before := len(storedDoc(t, m).shapeTree(0))
+	m.DuplicateShapeItem()
+	d = storedDoc(t, m)
+	if got := len(d.shapeTree(0)); got != before+1 {
+		t.Fatalf("tree grew by %d", got-before)
+	}
+	twin, _ := d.shapeItem(0, []int{1, 1})
+	next, _ := d.shapeItem(0, []int{1, 2})
+	if ty, _ := twin["ty"].(string); ty != "rc" {
+		t.Fatalf("twin = %v", ty)
+	}
+	if ty, _ := next["ty"].(string); ty != "rc" {
+		t.Fatalf("original not beside the twin: %v", ty)
+	}
+
+	// The clipboard survives switching clips, so a group copied here
+	// pastes into another clip.
+	if err := m.Bundle().SetAnimation("other", []byte(vectorClipJSON)); err != nil {
+		t.Fatalf("second clip: %v", err)
+	}
+	m.ShowClip(clipRef{Anim: "other"})
+	m.PausePreview()
+	m.SelectShapeLayer(0)
+	if !m.CanPasteShapeItem() {
+		t.Fatalf("clipboard lost across clips")
+	}
+	m.SelectShapeNode(nil)
+	m.PasteShapeItem()
+	data, _ := m.Bundle().AnimationJSON("other")
+	d2, err := newClipDoc("other", data)
+	if err != nil {
+		t.Fatalf("other clip unparsable: %v", err)
+	}
+	if item, ok := d2.shapeItem(0, []int{0}); !ok {
+		t.Fatalf("nothing pasted into the other clip")
+	} else if nm, _ := item["nm"].(string); nm != "blob" {
+		t.Fatalf("pasted into other clip = %q", nm)
+	}
+}
+
+func TestPrimitiveGripsHideBetweenKeys(t *testing.T) {
+	m := shapeModel(t)
+	// Animate the card rect's size by parking and editing at a key, so the
+	// member gains keys at 0 and 20.
+	m.SelectShapeNode([]int{1, 0})
+	m.SelectPoseKey(0, -1)
+	m.SetShapeMemberComponent("s", 0, 90)
+	if !shapeEditLive(m) {
+		t.Fatalf("parked on a key must be live")
+	}
+	// Between the keys nothing is writable, so the grips must not offer a
+	// drag.
+	m.PreviewSeek(10)
+	if shapeEditLive(m) {
+		t.Fatalf("between keys must not be live")
+	}
+}
+
+func TestCopyShapeValuesFromNeighbourKeys(t *testing.T) {
+	m := shapeModel(t)
+
+	// The path's vertex copies from the key next door: at key 20 vertex 0
+	// sits at (-50, 0), at key 0 at (-40, 0).
+	m.SelectShapeNode([]int{0, 0})
+	m.SelectPoseKey(20, -1)
+	m.SelectShapeVert(0)
+	v, at, ok := m.ShapeVertexAdjacentValue(0, -1)
+	if !ok || at != 0 || v != -40 {
+		t.Fatalf("vertex neighbour = %v at %v ok=%v", v, at, ok)
+	}
+	if _, _, ok := m.ShapeVertexAdjacentValue(0, +1); ok {
+		t.Fatalf("there is no key after 20")
+	}
+	m.CopyShapeVertexFromAdjacent(0, -1)
+	d := storedDoc(t, m)
+	sh, _ := d.shapeItem(0, []int{0, 0})
+	p20, _ := pathAt(sh, 20, false)
+	if p20.v[0][0] != -40 {
+		t.Fatalf("vertex after copy = %v", p20.v[0])
+	}
+
+	// A member copies the same way once it animates: keying the rect's
+	// size promotes it, then key 20 pulls key 0's value back.
+	m.SelectShapeNode([]int{1, 0})
+	m.SelectPoseKey(0, -1)
+	m.SetShapeMemberComponent("s", 0, 90)
+	m.SelectPoseKey(20, -1)
+	adj, at, ok := m.ShapeAdjacentValue("s", -1)
+	if !ok || at != 0 || adj[0] != 90 {
+		t.Fatalf("member neighbour = %v at %v ok=%v", adj, at, ok)
+	}
+	m.CopyShapeValueFromAdjacent("s", 0, -1)
+	d = storedDoc(t, m)
+	rc, _ := d.shapeItem(0, []int{1, 0})
+	if v, ok := propValueAtObj(rc, "s", 20); !ok || v[0] != 90 {
+		t.Fatalf("member after copy = %v ok=%v", v, ok)
+	}
+	// A static member reports no neighbours: it already equals them.
+	m.SelectShapeNode([]int{0, 1})
+	if _, _, ok := m.ShapeAdjacentValue("c", -1); ok {
+		t.Fatalf("a static member has no neighbour keys")
+	}
+}
+
 func TestVertexInsertDeleteFromModel(t *testing.T) {
 	m := shapeModel(t)
 	m.SelectShapeNode([]int{0, 0})

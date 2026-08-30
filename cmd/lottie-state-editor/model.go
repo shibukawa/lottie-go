@@ -133,6 +133,9 @@ type Model struct {
 	shapeTool     shapeTool
 	penPts        [][2]float64
 	penActive     bool
+	// shapeClipboard holds a deep copy of one copied item, so it can be
+	// pasted into any group of any clip for as long as the editor runs.
+	shapeClipboard map[string]any
 
 	// Clip edits are undoable on their own stack; a drag writes on every
 	// mouse move, so it collapses into one step between Begin and End.

@@ -260,7 +260,7 @@ func TestShapeStructureEdits(t *testing.T) {
 	if len(d.shapeLayerIndices()) != 2 {
 		t.Fatalf("layers = %v", d.shapeLayerIndices())
 	}
-	if !d.insertShapeItem(0, nil, newGroupItem("g", newRectItem(0, 0, 10, 10))) {
+	if !d.insertShapeItem(0, nil, newGroupItem("g", newRectItem(0, 0, 10, 10)), 0) {
 		t.Fatalf("insert into fresh layer refused")
 	}
 	nodes := d.shapeTree(0)
@@ -300,7 +300,7 @@ func TestClipStillDecodesAfterShapeEdits(t *testing.T) {
 	fill, _ := d.shapeItem(0, []int{0, 1})
 	d.setPropObj(fill, "c", 0, []float64{0, 1, 0})
 	d.addShapeLayer("extra")
-	d.insertShapeItem(0, nil, newGroupItem("g", newEllipseItem(0, 0, 40, 40)))
+	d.insertShapeItem(0, nil, newGroupItem("g", newEllipseItem(0, 0, 40, 40)), 0)
 
 	data, err := d.encode()
 	if err != nil {

@@ -181,6 +181,16 @@ ready to restyle. **+Fill**, **+Stroke**, **+Grad**, **+Trim**,
 way; **▲ Front / ▼ Back** move an item within its group (the tree is the
 paint order), **Delete** removes it, subtree included.
 
+**Copy** / **Paste** / **Duplicate** multiply what is already there.
+Copy takes the selected item, subtree and keyframes included, into the
+editor's own clipboard; Paste drops a fresh copy into the current group —
+of any layer, or any clip, since the clipboard lives as long as the
+editor — and Duplicate is the one-click twin, landing right on top of its
+source in the same group, selected and ready to drag aside. The grips
+follow the park rule everywhere: an animated shape shows its corner
+markers only while the playhead sits on one of its keys, so a drag is
+never offered where the write would be refused.
+
 Gradients edit the Flash way. On the stage the selected gradient shows
 its transform gizmo — drag the square (start / center), the circle (end:
 rotation and length in one handle) or the diamond (the whole gradient).

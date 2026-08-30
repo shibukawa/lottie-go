@@ -207,6 +207,121 @@ func (m *Model) SetShapeMemberComponent(member string, comp int, v float64) {
 	m.SetShapeMemberValue(member, next)
 }
 
+// adjacentTime finds the nearest time before (dir < 0) or after (dir > 0)
+// frame in a key time list.
+func adjacentTime(times []float64, frame float64, dir int) (float64, bool) {
+	adj, found := 0.0, false
+	for _, t := range times {
+		if dir < 0 {
+			if t < frame && (!found || t > adj) {
+				adj, found = t, true
+			}
+		} else {
+			if t > frame && (!found || t < adj) {
+				adj, found = t, true
+			}
+		}
+	}
+	return adj, found
+}
+
+// shapeMemberKeyTimes lists one member's key times, empty when static.
+func shapeMemberKeyTimes(item map[string]any, member string) []float64 {
+	keys, ok := propKeys(item[member])
+	if !ok {
+		return nil
+	}
+	out := make([]float64, 0, len(keys))
+	for _, k := range keys {
+		km, ok := k.(map[string]any)
+		if !ok {
+			continue
+		}
+		if t, ok := jsonNum(km["t"]); ok {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// ShapeAdjacentValue reads what a member holds at its own key one step
+// from the selected one — the pose pane's neighbour-copy source, for
+// shapes. A static member has no neighbours: it already equals them.
+func (m *Model) ShapeAdjacentValue(member string, dir int) ([]float64, float64, bool) {
+	item, ok := m.SelectedShapeItem()
+	frame, okF := m.SelectedPoseKey()
+	if !ok || !okF {
+		return nil, 0, false
+	}
+	adj, found := adjacentTime(shapeMemberKeyTimes(item, member), frame, dir)
+	if !found {
+		return nil, 0, false
+	}
+	v, okV := propValueAtObj(item, member, adj)
+	return v, adj, okV
+}
+
+// CopyShapeValueFromAdjacent sets one component of a member to what it is
+// at the neighbouring key, exactly as the pose fields' copy buttons do.
+func (m *Model) CopyShapeValueFromAdjacent(member string, comp, dir int) {
+	adj, _, okA := m.ShapeAdjacentValue(member, dir)
+	cur, okC := m.ShapeMemberValue(member)
+	if !okA || !okC || comp >= len(adj) || comp >= len(cur) || adj[comp] == cur[comp] {
+		return
+	}
+	next := slices.Clone(cur)
+	next[comp] = adj[comp]
+	m.SetShapeMemberValue(member, next)
+}
+
+// vertexComp reads one number of a path's vertex: 0/1 the point, 2/3 the
+// in handle, 4/5 the out handle — the same order the pane's rows use.
+func vertexComp(p pathData, idx, comp int) (float64, bool) {
+	if idx < 0 || idx >= len(p.v) {
+		return 0, false
+	}
+	switch comp {
+	case 0, 1:
+		return p.v[idx][comp], true
+	case 2, 3:
+		return p.i[idx][comp-2], true
+	case 4, 5:
+		return p.o[idx][comp-4], true
+	}
+	return 0, false
+}
+
+// ShapeVertexAdjacentValue reads the selected vertex's number at the
+// path's neighbouring key. Topology agrees across keys by construction,
+// so the vertex index means the same point there.
+func (m *Model) ShapeVertexAdjacentValue(comp, dir int) (float64, float64, bool) {
+	item, ok := m.SelectedShapeItem()
+	frame, okF := m.SelectedPoseKey()
+	if !ok || !okF || m.selShapeVert < 0 {
+		return 0, 0, false
+	}
+	adj, found := adjacentTime(shapeMemberKeyTimes(item, "ks"), frame, dir)
+	if !found {
+		return 0, 0, false
+	}
+	p, okP := pathAt(item, adj, false)
+	if !okP {
+		return 0, 0, false
+	}
+	v, okV := vertexComp(p, m.selShapeVert, comp)
+	return v, adj, okV
+}
+
+// CopyShapeVertexFromAdjacent pulls one vertex number from the key next
+// door.
+func (m *Model) CopyShapeVertexFromAdjacent(comp, dir int) {
+	v, _, ok := m.ShapeVertexAdjacentValue(comp, dir)
+	if !ok {
+		return
+	}
+	m.SetShapeVertexValue(comp, v)
+}
+
 // ShapeColorHex reads a fill or stroke color as #rrggbb.
 func (m *Model) ShapeColorHex() (string, bool) {
 	v, ok := m.ShapeMemberValue("c")
@@ -944,7 +1059,7 @@ func (m *Model) AddShapeItemAction(kind string) {
 	}
 	target := m.shapeInsertTarget()
 	pushed := m.snapshotClip()
-	if !d.insertShapeItem(layer, target, item) {
+	if !d.insertShapeItem(layer, target, item, 0) {
 		if pushed {
 			m.dropLastSnapshot()
 		}
@@ -996,6 +1111,80 @@ func (m *Model) MoveShapeItemAction(delta int) {
 		return
 	}
 	m.selShapePath[len(m.selShapePath)-1] += delta
+	m.touchClipDoc()
+}
+
+// ---- copy, paste, duplicate ----
+
+// CopyShapeItem takes a deep copy of the selected item — its subtree
+// included — so it can be pasted anywhere, another clip included. The
+// clipboard is the editor's own, not the OS's.
+func (m *Model) CopyShapeItem() {
+	item, ok := m.SelectedShapeItem()
+	if !ok {
+		return
+	}
+	m.shapeClipboard, _ = deepCopyJSON(item).(map[string]any)
+	n, _ := m.SelectedShapeNode()
+	m.setStatus("copied %s", shapeItemLabel(n.ty))
+	m.generation++
+}
+
+// CanPasteShapeItem reports whether the clipboard holds an item.
+func (m *Model) CanPasteShapeItem() bool { return m.shapeClipboard != nil }
+
+// PasteShapeItem inserts a copy of the clipboard into the current group —
+// the selected group, or the group of the selected item, or the layer
+// root — in front, and selects it. Pasting again pastes another copy.
+func (m *Model) PasteShapeItem() {
+	if m.blockEdit() || m.shapeClipboard == nil {
+		return
+	}
+	d := m.StageClipDoc()
+	layer := m.SelectedShapeLayer()
+	if d == nil || layer < 0 {
+		return
+	}
+	item, _ := deepCopyJSON(m.shapeClipboard).(map[string]any)
+	target := m.shapeInsertTarget()
+	pushed := m.snapshotClip()
+	if !d.insertShapeItem(layer, target, item, 0) {
+		if pushed {
+			m.dropLastSnapshot()
+		}
+		return
+	}
+	m.selShapePath = append(slices.Clone(target), 0)
+	m.selShapeVert = -1
+	m.touchClipDoc()
+}
+
+// DuplicateShapeItem copies the selected item in place: the twin lands
+// right on top of it in the same group, selected, ready to drag aside.
+func (m *Model) DuplicateShapeItem() {
+	if m.blockEdit() {
+		return
+	}
+	d := m.StageClipDoc()
+	n, ok := m.SelectedShapeNode()
+	if !ok {
+		return
+	}
+	item, okI := d.shapeItem(n.layer, n.path)
+	if !okI {
+		return
+	}
+	twin, _ := deepCopyJSON(item).(map[string]any)
+	at := n.path[len(n.path)-1]
+	pushed := m.snapshotClip()
+	if !d.insertShapeItem(n.layer, n.path[:len(n.path)-1], twin, at) {
+		if pushed {
+			m.dropLastSnapshot()
+		}
+		return
+	}
+	m.selShapePath = append(slices.Clone(n.path[:len(n.path)-1]), at)
+	m.selShapeVert = -1
 	m.touchClipDoc()
 }
 
@@ -1275,7 +1464,7 @@ func (m *Model) CommitPen(closed bool) {
 	p.o = make([][2]float64, len(p.v))
 	group := newGroupItem("path", newPathItem(p), newFillItem(0.5, 0.5, 0.5))
 	pushed := m.snapshotClip()
-	if !d.insertShapeItem(layer, nil, group) {
+	if !d.insertShapeItem(layer, nil, group, 0) {
 		if pushed {
 			m.dropLastSnapshot()
 		}
@@ -1326,7 +1515,7 @@ func (m *Model) DropShapePrimitive(tool shapeTool, ax, ay float64) {
 	}
 	group := newGroupItem(name, item, newFillItem(0.5, 0.5, 0.5))
 	pushed := m.snapshotClip()
-	if !d.insertShapeItem(layer, nil, group) {
+	if !d.insertShapeItem(layer, nil, group, 0) {
 		if pushed {
 			m.dropLastSnapshot()
 		}

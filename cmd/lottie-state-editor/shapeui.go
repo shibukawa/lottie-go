@@ -53,15 +53,24 @@ func shapeVertexScreen(m *Model, tr stageTransform) (v, in, out [][2]float32, ok
 	return v, in, out, true
 }
 
-// shapeEditLive reports whether grips should respond: the value is static,
-// or a key is parked under the playhead.
+// shapeEditLive reports whether grips should respond — and show at all:
+// the members a drag writes are static, or hold a key under the parked
+// playhead. Between the keys of an animated shape the corner markers stay
+// hidden rather than offering a drag that would only be refused.
 func shapeEditLive(m *Model) bool {
 	n, ok := m.SelectedShapeNode()
 	if !ok || m.Viewer() {
 		return false
 	}
-	if n.ty == "sh" {
+	switch n.ty {
+	case "sh":
 		return m.ShapePathWritable()
+	case "rc", "el":
+		return m.ShapeMemberWritable("p") && m.ShapeMemberWritable("s")
+	case "sr":
+		return m.ShapeMemberWritable("p") && m.ShapeMemberWritable("or")
+	case "gf", "gs":
+		return m.ShapeMemberWritable("s") && m.ShapeMemberWritable("e")
 	}
 	return true
 }

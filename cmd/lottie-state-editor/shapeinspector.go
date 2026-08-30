@@ -110,6 +110,11 @@ type shapeInspector struct {
 	frontBtn      basicwidget.Button
 	backBtn       basicwidget.Button
 	delItemBtn    basicwidget.Button
+	copyBtn       basicwidget.Button
+	pasteBtn      basicwidget.Button
+	dupBtn        basicwidget.Button
+	clipRow       guigui.LinearLayout
+	clipRowItems  []guigui.LinearLayoutItem
 	layerRow      guigui.LinearLayout
 	layerRowItems []guigui.LinearLayoutItem
 	addRow1       guigui.LinearLayout
@@ -154,9 +159,9 @@ type shapeInspector struct {
 	joinItems []basicwidget.SelectItem[int]
 
 	numLabels  guigui.WidgetSlice[*basicwidget.Text]
-	numInputs  guigui.WidgetSlice[*basicwidget.TextInput]
+	numRows    guigui.WidgetSlice[*poseFieldRow]
 	vertLabels guigui.WidgetSlice[*basicwidget.Text]
-	vertInputs guigui.WidgetSlice[*basicwidget.TextInput]
+	vertRows   guigui.WidgetSlice[*poseFieldRow]
 
 	undoBtn basicwidget.Button
 	hint    basicwidget.Text
@@ -190,6 +195,7 @@ func (p *shapeInspector) Build(context *guigui.Context, adder *guigui.ChildAdder
 		&p.addGrBtn, &p.addFlBtn, &p.addStBtn, &p.addGfBtn, &p.addTmBtn, &p.addRdBtn,
 		&p.addShBtn, &p.addRcBtn, &p.addElBtn, &p.addSrBtn,
 		&p.frontBtn, &p.backBtn, &p.delItemBtn,
+		&p.copyBtn, &p.pasteBtn, &p.dupBtn,
 	} {
 		adder.AddWidget(w)
 	}
@@ -372,6 +378,18 @@ func (p *shapeInspector) buildTreeSection(context *guigui.Context, m *Model) {
 	for _, w := range []guigui.Widget{&p.frontBtn, &p.backBtn, &p.delItemBtn} {
 		context.SetEnabled(w, editable && hasSel)
 	}
+
+	// The clipboard is the editor's own and lives for the session, so a
+	// copied group pastes into another layer — or another clip.
+	p.copyBtn.SetText("Copy")
+	p.copyBtn.OnDown(func(context *guigui.Context) { m.CopyShapeItem() })
+	context.SetEnabled(&p.copyBtn, hasSel)
+	p.pasteBtn.SetText("Paste")
+	p.pasteBtn.OnDown(func(context *guigui.Context) { m.PasteShapeItem() })
+	context.SetEnabled(&p.pasteBtn, editable && m.CanPasteShapeItem() && m.SelectedShapeLayer() >= 0)
+	p.dupBtn.SetText("Duplicate")
+	p.dupBtn.OnDown(func(context *guigui.Context) { m.DuplicateShapeItem() })
+	context.SetEnabled(&p.dupBtn, editable && hasSel)
 }
 
 func (p *shapeInspector) hintText(m *Model) string {
@@ -548,24 +566,17 @@ func (p *shapeInspector) buildPathRows(context *guigui.Context, m *Model, adder 
 	)
 
 	p.vertLabels.SetLen(len(shapeVertexFields))
-	p.vertInputs.SetLen(len(shapeVertexFields))
+	p.vertRows.SetLen(len(shapeVertexFields))
 	for i, f := range shapeVertexFields {
-		lb, in := p.vertLabels.At(i), p.vertInputs.At(i)
+		lb, row := p.vertLabels.At(i), p.vertRows.At(i)
 		adder.AddWidget(lb)
-		adder.AddWidget(in)
+		adder.AddWidget(row)
 		label(lb, f.label)
-		val := ""
+		in := &row.text
+		val, cur := "", 0.0
 		if hasVert {
-			var v float64
-			switch f.comp {
-			case 0, 1:
-				v = pd.v[sel][f.comp]
-			case 2, 3:
-				v = pd.i[sel][f.comp-2]
-			default:
-				v = pd.o[sel][f.comp-4]
-			}
-			val = strconv.FormatFloat(v, 'g', -1, 64)
+			cur, _ = vertexComp(pd, sel, f.comp)
+			val = strconv.FormatFloat(cur, 'g', -1, 64)
 		}
 		in.SetValue(val)
 		in.OnValueChanged(func(context *guigui.Context, text string, committed bool) {
@@ -578,24 +589,56 @@ func (p *shapeInspector) buildPathRows(context *guigui.Context, m *Model, adder 
 		})
 		context.SetEnabled(in, writable && hasVert)
 		p.tabFields = append(p.tabFields, in)
-		p.formItems = append(p.formItems, basicwidget.FormItem{PrimaryWidget: lb, SecondaryWidget: in})
+		wireAdjacentCopy(context, row, writable && hasVert, cur,
+			func(dir int) (float64, float64, bool) { return m.ShapeVertexAdjacentValue(f.comp, dir) },
+			func(dir int) { m.CopyShapeVertexFromAdjacent(f.comp, dir) })
+		p.formItems = append(p.formItems, basicwidget.FormItem{PrimaryWidget: lb, SecondaryWidget: row})
 	}
 }
 
-// buildNumericRows are the generic {a, k} members of the item kind.
+// wireAdjacentCopy hooks one row's prev/next buttons to a neighbour-key
+// source, the way the pose fields copy — enabled exactly where the frame
+// differs from that neighbour.
+func wireAdjacentCopy(context *guigui.Context, row *poseFieldRow, writable bool, cur float64,
+	read func(dir int) (float64, float64, bool), copyFn func(dir int)) {
+	for dir, btn := range map[int]*basicwidget.Button{-1: &row.prev, +1: &row.next} {
+		tip := &row.prevTip
+		side := "previous"
+		if dir > 0 {
+			tip = &row.nextTip
+			side = "next"
+		}
+		adj, at, adjOK := read(dir)
+		btn.OnDown(func(context *guigui.Context) { copyFn(dir) })
+		context.SetEnabled(btn, writable && adjOK && adj != cur)
+		if adjOK {
+			tip.SetText(fmt.Sprintf("Copy from the %s key (frame %s)",
+				side, strconv.FormatFloat(at, 'f', -1, 64)))
+		} else {
+			tip.SetText("No " + side + " key to copy from")
+		}
+	}
+}
+
+// buildNumericRows are the generic {a, k} members of the item kind. Each
+// row carries the pose pane's neighbour-copy buttons: a shape parameter,
+// like a pose, is mostly its value at the key next door with a nudge.
 func (p *shapeInspector) buildNumericRows(context *guigui.Context, m *Model, adder *guigui.ChildAdder, kind string, editable bool) {
 	fields := shapeFieldsByKind[kind]
 	p.numLabels.SetLen(len(fields))
-	p.numInputs.SetLen(len(fields))
+	p.numRows.SetLen(len(fields))
 	for i, f := range fields {
-		lb, in := p.numLabels.At(i), p.numInputs.At(i)
+		lb, row := p.numLabels.At(i), p.numRows.At(i)
 		adder.AddWidget(lb)
-		adder.AddWidget(in)
+		adder.AddWidget(row)
 		label(lb, f.label)
+		in := &row.text
 		v, ok := m.ShapeMemberValue(f.member)
 		writable := editable && ok && len(v) >= f.dim && m.ShapeMemberWritable(f.member)
+		cur := 0.0
 		if ok && len(v) > f.comp {
-			in.SetValue(strconv.FormatFloat(v[f.comp], 'g', -1, 64))
+			cur = v[f.comp]
+			in.SetValue(strconv.FormatFloat(cur, 'g', -1, 64))
 		} else {
 			in.SetValue("")
 		}
@@ -609,7 +652,16 @@ func (p *shapeInspector) buildNumericRows(context *guigui.Context, m *Model, add
 		})
 		context.SetEnabled(in, writable)
 		p.tabFields = append(p.tabFields, in)
-		p.formItems = append(p.formItems, basicwidget.FormItem{PrimaryWidget: lb, SecondaryWidget: in})
+		wireAdjacentCopy(context, row, writable, cur,
+			func(dir int) (float64, float64, bool) {
+				adj, at, ok := m.ShapeAdjacentValue(f.member, dir)
+				if !ok || len(adj) <= f.comp {
+					return 0, 0, false
+				}
+				return adj[f.comp], at, true
+			},
+			func(dir int) { m.CopyShapeValueFromAdjacent(f.member, f.comp, dir) })
+		p.formItems = append(p.formItems, basicwidget.FormItem{PrimaryWidget: lb, SecondaryWidget: row})
 	}
 }
 
@@ -671,12 +723,23 @@ func (p *shapeInspector) layout(context *guigui.Context) guigui.LinearLayout {
 		Direction: guigui.LayoutDirectionHorizontal, Items: p.moveRowItems, Gap: u / 4,
 	}
 
+	p.clipRowItems = slices.Delete(p.clipRowItems, 0, len(p.clipRowItems))
+	p.clipRowItems = append(p.clipRowItems,
+		guigui.LinearLayoutItem{Widget: &p.copyBtn, Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Widget: &p.pasteBtn, Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Widget: &p.dupBtn, Size: guigui.FlexibleSize(1)},
+	)
+	p.clipRow = guigui.LinearLayout{
+		Direction: guigui.LayoutDirectionHorizontal, Items: p.clipRowItems, Gap: u / 4,
+	}
+
 	p.items = slices.Delete(p.items, 0, len(p.items))
 	p.items = append(p.items,
 		guigui.LinearLayoutItem{Widget: &p.treeTitle, Size: guigui.FixedSize(u)},
 		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &p.layerRow},
 		guigui.LinearLayoutItem{Widget: &p.treeList, Size: guigui.FixedSize(6 * u)},
 		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &p.moveRow},
+		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &p.clipRow},
 		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &p.geomRow},
 		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &p.addRow1},
 		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &p.addRow2},

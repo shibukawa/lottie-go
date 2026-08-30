@@ -904,9 +904,9 @@ func (d *clipDoc) addShapeLayer(name string) (int, bool) {
 }
 
 // insertShapeItem places an item into a container: the layer's own shapes
-// array when groupPath is empty, or a group's it array. New items go first,
-// which is on top.
-func (d *clipDoc) insertShapeItem(layer int, groupPath []int, item map[string]any) bool {
+// array when groupPath is empty, or a group's it array. at is the index it
+// lands on, clamped; 0 is the front, which is on top.
+func (d *clipDoc) insertShapeItem(layer int, groupPath []int, item map[string]any, at int) bool {
 	if len(groupPath) == 0 {
 		arr, ok := d.layerShapes(layer)
 		if !ok {
@@ -915,7 +915,7 @@ func (d *clipDoc) insertShapeItem(layer int, groupPath []int, item map[string]an
 		l := d.layer(layer)
 		raw, _ := d.root["layers"].([]any)
 		lm, _ := raw[l.index].(map[string]any)
-		lm["shapes"] = slices.Insert(arr, 0, any(item))
+		lm["shapes"] = slices.Insert(arr, min(max(at, 0), len(arr)), any(item))
 		return true
 	}
 	group, ok := d.shapeItem(layer, groupPath)
@@ -929,7 +929,7 @@ func (d *clipDoc) insertShapeItem(layer int, groupPath []int, item map[string]an
 	if !ok {
 		return false
 	}
-	group["it"] = slices.Insert(it, 0, any(item))
+	group["it"] = slices.Insert(it, min(max(at, 0), len(it)), any(item))
 	return true
 }
 
