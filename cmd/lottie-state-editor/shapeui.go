@@ -6,6 +6,7 @@ import (
 	"github.com/guigui-gui/guigui"
 	"github.com/guigui-gui/guigui/basicwidget"
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/vector"
 )
 
@@ -392,6 +393,10 @@ func shapeGripAt(m *Model, tr stageTransform, u float32, cx, cy int) (stageDragK
 // handleShapeInput is the stage's Shapes branch: the pen and primitive
 // tools place things, the select tool grabs grips and picks geometry.
 func (s *previewStage) handleShapeInput(context *guigui.Context, m *Model, tr stageTransform, cx, cy int) guigui.HandleInputResult {
+	// A click on the stage moves the keyboard focus here, so the Delete
+	// key deletes what the stage has selected — and stops the moment a
+	// text field takes the focus back.
+	context.SetFocused(s, true)
 	u := float32(basicwidget.UnitSize(context))
 	ax, ay := tr.toAnim(cx, cy)
 	switch m.ShapeTool() {
@@ -456,6 +461,32 @@ func (s *previewStage) dragShapeStep(m *Model, dx, dy float64) {
 	case dragShapeMoveGeom:
 		m.MoveShapeGeometry(ix, iy)
 	}
+}
+
+// HandleButtonInput is the stage's keyboard path, which exists for one
+// key: Delete (or Backspace, the key macOS labels delete) removes what
+// the stage has selected — the picked vertex when there is one, the
+// selected item otherwise. It only fires while the stage itself holds the
+// focus, which a stage click grants and a text field takes back, so
+// editing a number never deletes a shape.
+func (s *previewStage) HandleButtonInput(context *guigui.Context, widgetBounds *guigui.WidgetBounds) guigui.HandleInputResult {
+	m := s.model(context)
+	if m == nil || !m.ShapesVisible() || !context.IsFocused(s) {
+		return guigui.HandleInputResult{}
+	}
+	if !inpututil.IsKeyJustPressed(ebiten.KeyDelete) &&
+		!inpututil.IsKeyJustPressed(ebiten.KeyBackspace) {
+		return guigui.HandleInputResult{}
+	}
+	if _, ok := m.SelectedShapeNode(); !ok {
+		return guigui.HandleInputResult{}
+	}
+	if m.SelectedShapeVert() >= 0 {
+		m.DeleteShapeVertex()
+	} else {
+		m.DeleteShapeItemAction()
+	}
+	return guigui.HandleInputByWidget(s)
 }
 
 // shapeCursorShape reports the cursor for the Shapes tab.

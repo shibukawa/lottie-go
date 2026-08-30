@@ -53,7 +53,8 @@ deviations:
   - the pen draws corner vertices only; curves are made afterwards by dragging the vertex's handles or Smooth/Corner. Drag-while-placing bezier authoring is not built
   - primitives drop at a fixed default size where clicked; sizing is done afterwards on the stage — the selected geometry shows a box whose corners resize about the opposite corner and whose inside drags the whole shape (user 2026-08-30: numbers alone were not an editor)
   - geometry also inserts from the tree (+Path/+Rect/+Ellipse/+Star into the selected group at its origin), because choosing the place in the structure first is often the intent (user 2026-08-30); the stage tools stay for placing by click
-  - items copy, paste and duplicate through an editor-session clipboard (deep copies, subtree and keys included; pastes across layers and clips) — buttons, since the editor has no keyboard input path (user 2026-08-30)
+  - items copy, paste and duplicate through an editor-session clipboard (deep copies, subtree and keys included; pastes across layers and clips) — buttons, since the editor had no keyboard input path (user 2026-08-30)
+  - the stage gained its first keyboard path (user 2026-08-31): Delete/Backspace removes the selected vertex or item, gated on the stage holding focus — a stage click grants it, a text field takes it back — so typing never deletes
   - the box corner markers hide while an animated shape's playhead is between keys (user 2026-08-30): a grip must not offer a drag the park rule would refuse
   - the radial gradient's focal point (h/a) edits numerically, not by a stage marker yet
   - gradient alpha stops are preserved and honored but not editable on the ramp; color stops only

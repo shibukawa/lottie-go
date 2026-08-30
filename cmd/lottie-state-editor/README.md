@@ -180,7 +180,12 @@ the stage tools arrives in its own group with a grey fill, selected and
 ready to restyle. **+Fill**, **+Stroke**, **+Grad**, **+Trim**,
 **+Round** and **+Group** add items to the selected item's group the same
 way; **▲ Front / ▼ Back** move an item within its group (the tree is the
-paint order), **Delete** removes it, subtree included.
+paint order), **Delete** removes it, subtree included. The **Delete key**
+(Backspace on a Mac keyboard) does the same from the stage: it removes
+the selected vertex when one is picked, the selected item otherwise. It
+listens only while the stage holds the keyboard focus — a stage click
+grants it, a text field takes it back — so editing a number never
+deletes a shape.
 
 **Copy** / **Paste** / **Duplicate** multiply what is already there.
 Copy takes the selected item, subtree and keyframes included, into the
