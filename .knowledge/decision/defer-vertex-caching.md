@@ -9,7 +9,7 @@ policy:performance-caching until measurements demand it. Buffer pooling +
 Path.Reset() alone meets metric:performance-targets with wide margin.
 
 ```yaml
-measured: 2026-08-20, Apple M3, examples/stress (CC0 mixed workload:
+measured: 2026-08-20, Apple M3, examples/lottie/stress (CC0 mixed workload:
   precomp, gradient, trim, matte)
 results:
   - players: 5

@@ -28,7 +28,7 @@ func readClip(t *testing.T, parts ...string) *clipDoc {
 
 func presetClip(t *testing.T, name string) *clipDoc {
 	t.Helper()
-	return readClip(t, "testdata", "presets", "chibi-male", name)
+	return readClip(t, "examples", "state-editor", "presets", "chibi-male", name)
 }
 
 // A preset clip is a pose sequence: every animated property shares one set
@@ -52,7 +52,7 @@ func TestClipDocPoseSequence(t *testing.T) {
 // path is real. If this ever starts passing as posed, the per-layer rows
 // have lost their only test subject.
 func TestClipDocFallsBackWhenTimesDisagree(t *testing.T) {
-	d := readClip(t, "testdata", "editor", "character", "walk-anim.json")
+	d := readClip(t, "examples", "state-editor", "character", "walk-anim.json")
 	if d.posed {
 		t.Errorf("walk-anim reads as a pose sequence; expected disagreeing key times")
 	}
@@ -64,7 +64,7 @@ func TestClipDocFallsBackWhenTimesDisagree(t *testing.T) {
 // Re-encoding an untouched clip must reproduce it byte for byte. Presets are
 // committed JSON, so any drift here shows up as diff noise on every save.
 func TestClipDocRoundTripsUnchanged(t *testing.T) {
-	path := filepath.Join("..", "..", "testdata", "presets", "chibi-male", "punch-anim.json")
+	path := filepath.Join("..", "..", "examples", "state-editor", "presets", "chibi-male", "punch-anim.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)

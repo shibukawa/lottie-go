@@ -627,7 +627,7 @@ func TestSceneValidateChain(t *testing.T) {
 	}
 }
 
-const testFontPath = "examples/stopwatch/assets/LuckiestGuy-Regular.ttf"
+const testFontPath = "examples/lottie/stopwatch/assets/LuckiestGuy-Regular.ttf"
 
 // assetScene is one image node and one right-anchored text node.
 func assetScene(t *testing.T) *ScenePlayer {

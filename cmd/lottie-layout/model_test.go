@@ -417,7 +417,7 @@ func TestImageAndTextPlacement(t *testing.T) {
 	if m.SelectedNode().Kind == lottie.SceneNodeText {
 		t.Fatal("text node placed without a font")
 	}
-	fontAbs, err := filepath.Abs(filepath.Join("..", testFontPathRel))
+	fontAbs, err := filepath.Abs(filepath.Join("..", "..", testFontPathRel))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -438,7 +438,7 @@ func TestImageAndTextPlacement(t *testing.T) {
 	}
 }
 
-const testFontPathRel = "examples/stopwatch/assets/LuckiestGuy-Regular.ttf"
+const testFontPathRel = "examples/lottie/stopwatch/assets/LuckiestGuy-Regular.ttf"
 
 func TestRemoveBundleKeepsNodesAsProblems(t *testing.T) {
 	m, _ := testModel(t)

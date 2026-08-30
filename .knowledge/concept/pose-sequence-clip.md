@@ -5,7 +5,7 @@ title: Pose-Sequence Clip Structure
 ---
 
 The shape requirement:animation-presets clips actually have in JSON, measured
-over all 38 clips of testdata/presets. requirement:keyframe-timeline and
+over all 38 clips of examples/state-editor/presets. requirement:keyframe-timeline and
 requirement:pose-editing rest on it.
 
 ```yaml
@@ -25,6 +25,6 @@ holds: flipTrack writes hold keyframes for discrete swaps (limb sides trading, v
 serialization: generated clips are key-sorted, because cmd/lottie-state-editor/genpresets builds them from map[string]any; a map round-trip reproduces that order, so rewriting a preset produces no ordering diff
 ```
 
-Imported clips need not share this. testdata/editor/* — the editor's own
+Imported clips need not share this. examples/state-editor/* — the editor's own
 samples — hold two distinct time sets in 5 of 10 clips, so the fallback path
 in requirement:keyframe-timeline is exercised, not theoretical.

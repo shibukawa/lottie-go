@@ -18,11 +18,11 @@ approaches:  # orthogonal; implement in this order
 deferred: per-layer content cache for playing-but-static subtrees; needs
   geometry-equality keys and matte-source recursion, revisit after 1+2
 acceptance:
-  - pixel output identical to golden frames (examples/gpuprobe -compare)
+  - pixel output identical to golden frames (examples/lottie/gpuprobe -compare)
   - draws constant in animation count for cached/batched paths
   - every gated path falls back to the recursive renderer; correctness
     never depends on the optimization applying
-  - no regression in examples/stress p99 (metric:performance-targets)
+  - no regression in examples/lottie/stress p99 (metric:performance-targets)
 motivation: draw calls cost most on WebGL/mobile; desktop draw time is
   already within budget
 ```

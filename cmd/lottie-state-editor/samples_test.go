@@ -6,12 +6,12 @@ import (
 	"testing"
 )
 
-// The committed samples under testdata/editor are the first thing anyone
+// The committed samples under examples/state-editor are the first thing anyone
 // opens, so they have to load clean and be drivable. Regenerate them with
 // `go run ./gensamples` if these fail after a change.
 
 func sampleDir(name string) string {
-	return filepath.Join("..", "..", "testdata", "editor", name)
+	return filepath.Join("..", "..", "examples", "state-editor", name)
 }
 
 func openSample(t *testing.T, dir, file string) *Model {

@@ -58,10 +58,10 @@ deviations:
   - the pane names the cmd/lottie-state-editor/genpresets joint beside the layer (upper-arm-near -> arms(near)), which is the transcription aid the probe role asks for
   - core gained api:layer-placement LayerTransform: the decomposed placement folds a mirror into a half turn, so an outline drawn from it lands wrong on a flipped part
 role:
-  decided: for testdata/presets the editor is a probe, not the source of truth. cmd/lottie-state-editor/genpresets keeps authoring those clips; a pose found by dragging is transcribed back into its clips.go pose values by hand
+  decided: for examples/state-editor/presets the editor is a probe, not the source of truth. cmd/lottie-state-editor/genpresets keeps authoring those clips; a pose found by dragging is transcribed back into its clips.go pose values by hand
   consequence_readout: the numeric field is the deliverable, not a convenience. Show rotation in degrees, the unit the generator's pose fields already use, so a value reads straight across
   consequence_naming: name the joint beside the layer where a rig slot maps to a pose field (upper-arm-near -> armN), so transcription does not need the rig table open
-  consequence_save: saving over an in-repo preset writes work the next generator run discards; warn on save when the bundle path is under testdata/presets
+  consequence_save: saving over an in-repo preset writes work the next generator run discards; warn on save when the bundle path is under examples/state-editor/presets
   not_doing: emitting Go literals the generator can paste — the mapping would have to track clips.go, and hand transcription is cheap at 2..7 poses per clip
   unaffected: a bundle copied into a game has no generator behind it, so edits there are simply the source of truth
 open:

@@ -1,6 +1,6 @@
 ---
 name: lottie-character-preset
-description: Customize and extend lottie-go character animation presets (the raster cutout rigs under testdata/presets, e.g. chibi-male). Use this whenever the user wants to change a game character's appearance (new outfit, colors, a samurai / knight / robot / enemy variant), tweak or retime a motion (walk, run, attack, jump), add a brand-new animation clip, wire character animations into a game via the state machine, or produce a new character .lottie from a preset — even when they never say "preset" or "Lottie": any character-animation editing request in a project that uses lottie-go belongs to this skill. Also use it to diagnose why a Lottie file fails or renders wrong in lottie-go.
+description: Customize and extend lottie-go character animation presets (the raster cutout rigs under examples/state-editor/presets, e.g. chibi-male). Use this whenever the user wants to change a game character's appearance (new outfit, colors, a samurai / knight / robot / enemy variant), tweak or retime a motion (walk, run, attack, jump), add a brand-new animation clip, wire character animations into a game via the state machine, or produce a new character .lottie from a preset — even when they never say "preset" or "Lottie": any character-animation editing request in a project that uses lottie-go belongs to this skill. Also use it to diagnose why a Lottie file fails or renders wrong in lottie-go.
 ---
 
 # lottie-go character presets
@@ -8,7 +8,7 @@ description: Customize and extend lottie-go character animation presets (the ras
 A preset is a complete, game-ready character: one `.lottie` bundle holding
 ~20 clips (idle/walk/run/jump/attacks/guard/hurt/death), the part images
 they share, and a wired state machine a game drives by verbs
-(`sm.Fire("jump")`). Presets live in `testdata/presets/` of the lottie-go
+(`sm.Fire("jump")`). Presets live in `examples/state-editor/presets/` of the lottie-go
 repository and are meant to be copied into a game and customized:
 
 - `chibi-male` — 2.5 heads, unarmed, 19 clips. The base rig.

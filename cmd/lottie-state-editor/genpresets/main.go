@@ -1,5 +1,5 @@
 // Command genpresets writes the character animation presets under
-// testdata/presets. Presets are the templates AI-assisted workflows start
+// examples/state-editor/presets. Presets are the templates AI-assisted workflows start
 // from (see .knowledge requirement:animation-presets): raster cutout rigs
 // whose part images are the contract a design swap must honor, with every
 // clip and the state machine wired so a customized copy is game-ready.
@@ -23,7 +23,7 @@ import (
 )
 
 func main() {
-	out := flag.String("out", filepath.Join("..", "..", "testdata", "presets"), "output directory")
+	out := flag.String("out", filepath.Join("..", "..", "examples", "state-editor", "presets"), "output directory")
 	flag.Parse()
 	if err := run(*out); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -34,7 +34,7 @@ func main() {
 func run(out string) error {
 	// The default output is relative to the editor directory. Running from
 	// elsewhere (genpresets/ itself is the classic slip) would silently
-	// create a second testdata tree, so refuse unless the target exists.
+	// create a second sample tree, so refuse unless the target exists.
 	if _, err := os.Stat(out); err != nil {
 		return fmt.Errorf("output directory %s not found: run from cmd/lottie-state-editor (go run ./genpresets) or pass -out", out)
 	}

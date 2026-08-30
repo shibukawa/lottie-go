@@ -44,7 +44,7 @@ func TestTemplateMatchesPreset(t *testing.T) {
 			t.Fatal(err)
 		}
 		if !bytes.Equal(data, disk) {
-			t.Errorf("%s: embedded template drifted from testdata/presets; run `go run ./genpresets`", name)
+			t.Errorf("%s: embedded template drifted from examples/state-editor/presets; run `go run ./genpresets`", name)
 		}
 	}
 }

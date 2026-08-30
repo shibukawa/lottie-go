@@ -4,7 +4,7 @@
 // PRESS START prompt wired to a callback.
 //
 //	go run ./examples/layout/opening-animation           # from the repo root
-//	go run ./layout examples/layout/opening-animation/assets/opening.scene.json
+//	go run ./cmd/lottie-layout examples/layout/opening-animation/assets/opening.scene.json
 //
 // The second command opens the same scene in the layout editor.
 package main

@@ -10,14 +10,14 @@ import (
 	lottie "github.com/shibukawa/lottie-go"
 )
 
-// The committed preset under testdata/presets is the template the AI
+// The committed preset under examples/state-editor/presets is the template the AI
 // customization workflow starts from, so beyond loading clean it must
 // decode with zero unsupported features — that emptiness is the baseline
 // the workflow's own validation compares against. Regenerate with
 // `go run ./genpresets` if these fail after a change.
 
 func presetPath(name string) string {
-	return filepath.Join("..", "..", "testdata", "presets", name, name+".lottie")
+	return filepath.Join("..", "..", "examples", "state-editor", "presets", name, name+".lottie")
 }
 
 // settle ticks until the machine reaches want, for following one-shot

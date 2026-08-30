@@ -8,7 +8,7 @@ Built with [Guigui](https://github.com/guigui-gui/guigui). It is a separate
 Go module, so the `lottie-go` library itself never pulls in a GUI toolkit.
 
 ```bash
-cd cmd/lottie-state-editor && go run . ../../testdata/editor/character/character.lottie
+cd cmd/lottie-state-editor && go run . ../../examples/state-editor/character/character.lottie
 ```
 
 The path argument is optional; **New…**, **Open…**, **Save As…**, and
@@ -165,7 +165,7 @@ clickable for exactly that reason. It is the intended way to watch AI
 edits land live:
 
 ```bash
-cd cmd/lottie-state-editor && go run . -viewer ../../testdata/presets/chibi-male/chibi-male.lottie
+cd cmd/lottie-state-editor && go run . -viewer ../../examples/state-editor/presets/chibi-male/chibi-male.lottie
 ```
 
 The editor is its own module and depends on a released `lottie-go`, so it
@@ -187,7 +187,7 @@ builds from this checkout until the next library release.
 
 ## Samples
 
-`testdata/editor/` holds three generated bundles — a platformer character,
+`examples/state-editor/` holds three generated bundles — a platformer character,
 a marker-segmented spritesheet, and a combo whose clips chain end to end.
 See its README for what each one demonstrates. Regenerate them with:
 

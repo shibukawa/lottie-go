@@ -8,7 +8,7 @@ use (
 	.
 	./cmd/lottie-layout
 	./cmd/lottie-state-editor
-	./examples/motioncomic/gen
+	./examples/lottie/motioncomic/gen
 	./plugin/physics/cp
 	./plugin/physics/resolv
 )

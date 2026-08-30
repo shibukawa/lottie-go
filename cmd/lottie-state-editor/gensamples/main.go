@@ -1,5 +1,5 @@
 // Command gensamples writes the editor's sample bundles under
-// testdata/editor. The samples are generated rather than downloaded so their
+// examples/state-editor. The samples are generated rather than downloaded so their
 // licensing is unambiguous: every clip here is authored in this repository.
 //
 //	go run ./gensamples
@@ -24,7 +24,7 @@ import (
 const editorExtraKey = "x-lottie-go-editor"
 
 func main() {
-	out := flag.String("out", filepath.Join("..", "..", "testdata", "editor"), "output directory")
+	out := flag.String("out", filepath.Join("..", "..", "examples", "state-editor"), "output directory")
 	flag.Parse()
 	if err := run(*out); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -293,7 +293,7 @@ authored in this repository, so there is no third-party licensing to track.
 
 Open a bundle with:
 
-    cd cmd/lottie-state-editor && go run . ../../testdata/editor/character/character.lottie
+    cd cmd/lottie-state-editor && go run . ../../examples/state-editor/character/character.lottie
 
 ## Naming
 

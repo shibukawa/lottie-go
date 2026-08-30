@@ -4,7 +4,7 @@ type: metric
 title: GPU Draw Cost Baseline
 ---
 
-Measured 2026-08-26, Apple M3, 512x512 screen, examples/gpuprobe with the
+Measured 2026-08-26, Apple M3, 512x512 screen, examples/lottie/gpuprobe with the
 ebitenginedebug command log (requirement:verification). Explains where draw
 calls go per concept:ebitengine-draw-batching.
 
