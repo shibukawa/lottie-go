@@ -402,6 +402,10 @@ func (p *shapeInspector) hintText(m *Model) string {
 		return "Cannot edit on the stage: " + m.ShapeLayerNameProblem() +
 			". Rename the layer; typed values still work."
 	}
+	if m.PenActive() {
+		return "Click to add points. Click the first point or right-click to " +
+			"close the path; Finish commits it open."
+	}
 	if _, ok := m.SelectedShapeNode(); !ok {
 		return "Click a shape on the stage or a row in the tree. The Pen and " +
 			"primitive tools draw into the selected layer."

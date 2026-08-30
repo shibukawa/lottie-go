@@ -168,9 +168,10 @@ A path adds the finer controls: square vertices drag individually (the
 selected one carries its bezier handle pins — drag them to bend the
 curve, **Smooth / Corner** toggles the tangents), and **Pen** on the
 outline of the selected path splits the segment under the click.
-Elsewhere **Pen** draws a new path click by click — closing on the first
-vertex commits it, **Finish** commits it open — and **Rect** /
-**Ellipse** / **Star** drop a primitive where clicked.
+Elsewhere **Pen** draws a new path click by click — clicking the first
+vertex again or **right-clicking** closes it (the last point joins the
+first), **Finish** commits it open — and **Rect** / **Ellipse** /
+**Star** drop a primitive where clicked.
 
 Geometry also inserts from the tree, without touching the stage tools:
 **+Path**, **+Rect**, **+Ellipse** and **+Star** drop into the selected

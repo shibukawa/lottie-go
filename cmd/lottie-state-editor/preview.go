@@ -420,6 +420,15 @@ func (s *previewStage) HandlePointingInput(context *guigui.Context, widgetBounds
 		}
 		return guigui.HandleInputByWidget(s)
 	}
+	// A right click ends the pen where it is: the last point joins the
+	// first and the path commits closed — the way vector tools end a
+	// polygon without hunting for the exact start vertex. Too few points
+	// to enclose anything commits open instead.
+	if m.ShapesVisible() && m.PenActive() && widgetBounds.IsHitAtCursor() &&
+		inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
+		m.CommitPen(len(m.PenPoints()) >= 3)
+		return guigui.HandleInputByWidget(s)
+	}
 	if !widgetBounds.IsHitAtCursor() || !inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 		return guigui.HandleInputResult{}
 	}

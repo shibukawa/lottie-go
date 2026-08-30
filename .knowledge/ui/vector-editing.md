@@ -28,7 +28,7 @@ ui:
     kind: buttons
     id: row.shapetools
     columns: [Select, Pen, Rect, Ellipse, Star]
-    state: one active tool; Select is the default and Escape returns to it. Pen commits on closing the path or on tool switch
+    state: one active tool; Select is the default. Pen closes and commits on clicking the first vertex or on a right click anywhere (the last point joins the first — user 2026-08-31); Finish commits open, tool switch cancels
     why: a mode row is new to the editor — every other tab is single-gesture. Drawing needs it; keep it to this tab
   tree:
     kind: list
