@@ -60,6 +60,11 @@ type clipLayer struct {
 
 	ks    map[string]any
 	keyed map[string][]float64
+
+	// shapeTimes is the union of the layer's animated shape-item members
+	// (shapedoc.go). Shape keys join the pose columns: they show on the
+	// timeline, and the column operations move them with everything else.
+	shapeTimes []float64
 }
 
 // newClipDoc parses one clip. A document whose layers are not an array is
@@ -144,6 +149,16 @@ func (d *clipDoc) index() {
 			sets = append(sets, ts)
 		}
 		d.layers = append(d.layers, l)
+	}
+	// Shape layers can animate members far below ks; their key times join
+	// the same pool, or the timeline would show a vector clip as empty.
+	for i := range d.layers {
+		if d.layers[i].ty != 4 {
+			continue
+		}
+		shapeSets := d.shapeKeyTimes(i)
+		d.layers[i].shapeTimes, _ = poseSet(shapeSets)
+		sets = append(sets, shapeSets...)
 	}
 	d.times, d.posed = poseSet(sets)
 }
@@ -536,6 +551,9 @@ func (d *clipDoc) retime(from, to float64, layer int) (float64, bool) {
 			for p := range d.layers[i].keyed {
 				d.moveKey(i, p, from, to)
 			}
+			d.eachShapeProp(i, func(owner map[string]any, member string) {
+				moveKeyProp(owner[member], from, to)
+			})
 		}
 	} else {
 		l := d.layer(layer)
@@ -545,6 +563,9 @@ func (d *clipDoc) retime(from, to float64, layer int) (float64, bool) {
 		for p := range l.keyed {
 			d.moveKey(layer, p, from, to)
 		}
+		d.eachShapeProp(layer, func(owner map[string]any, member string) {
+			moveKeyProp(owner[member], from, to)
+		})
 	}
 	d.index()
 	return to, true
@@ -612,12 +633,15 @@ func (d *clipDoc) outPoint() float64 {
 // properties. A layer whose properties disagree is rare, but the row must
 // still show every tick that can be selected.
 func (l *clipLayer) layerTimes() []float64 {
-	if len(l.keyed) == 0 {
+	if len(l.keyed) == 0 && len(l.shapeTimes) == 0 {
 		return nil
 	}
-	sets := make([][]float64, 0, len(l.keyed))
+	sets := make([][]float64, 0, len(l.keyed)+1)
 	for _, ts := range l.keyed {
 		sets = append(sets, ts)
+	}
+	if len(l.shapeTimes) > 0 {
+		sets = append(sets, l.shapeTimes)
 	}
 	times, _ := poseSet(sets)
 	return times
@@ -674,7 +698,7 @@ func (d *clipDoc) parentName(i int) (string, bool) {
 func (d *clipDoc) animatedLayers() []int {
 	var out []int
 	for i := range d.layers {
-		if len(d.layers[i].keyed) > 0 {
+		if len(d.layers[i].keyed) > 0 || len(d.layers[i].shapeTimes) > 0 {
 			out = append(out, i)
 		}
 	}
@@ -802,6 +826,11 @@ func (d *clipDoc) insertPose(frame float64) bool {
 			m["k"] = slices.Insert(keys, at, any(nk))
 			changed = true
 		}
+		d.eachShapeProp(li, func(owner map[string]any, member string) {
+			if insertKeyProp(owner[member], frame) {
+				changed = true
+			}
+		})
 	}
 	if changed {
 		d.index()
@@ -868,6 +897,11 @@ func (d *clipDoc) deletePose(frame float64) bool {
 			m["k"] = slices.Delete(keys, i, i+1)
 			changed = true
 		}
+		d.eachShapeProp(li, func(owner map[string]any, member string) {
+			if deleteKeyProp(owner[member], frame) {
+				changed = true
+			}
+		})
 	}
 	if changed {
 		d.index()
@@ -950,6 +984,11 @@ func (d *clipDoc) setPoseEase(frame float64, eased bool) bool {
 			}
 			changed = true
 		}
+		d.eachShapeProp(li, func(owner map[string]any, member string) {
+			if setEaseProp(owner[member], frame, eased) {
+				changed = true
+			}
+		})
 	}
 	return changed
 }

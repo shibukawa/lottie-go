@@ -53,6 +53,7 @@ func (m *Model) StageClipDoc() *clipDoc {
 func (m *Model) resetClipDocCache() {
 	m.clipDocs = map[string]*clipDoc{}
 	m.clearPoseSelection()
+	m.clearShapeSelection()
 }
 
 func (m *Model) clearPoseSelection() {
@@ -149,7 +150,13 @@ func (m *Model) SelectPoseKey(frame float64, layer int) {
 	if layer >= 0 {
 		m.posePart = layer
 	}
-	m.setInspect(inspectPose)
+	// On the Shapes tab a key is parked to edit shape values, so the pane
+	// that must stay up is the shape one.
+	if m.CollisionTab() == colShapes {
+		m.setInspect(inspectShape)
+	} else {
+		m.setInspect(inspectPose)
+	}
 	m.generation++
 }
 

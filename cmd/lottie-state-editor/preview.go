@@ -130,6 +130,9 @@ type previewStage struct {
 	dragKind   stageDragKind
 	lastCursor image.Point
 
+	// The vertex or handle a shape drag is carrying (shapeui.go).
+	shapeDragIdx int
+
 	// panMoved separates a pan from a click that hit nothing: both start the
 	// same way, and only the release can tell them apart.
 	panMoved bool
@@ -188,6 +191,12 @@ const (
 	dragSocket
 	dragPosePart
 	dragPoseJoint
+	dragShapeVertex
+	dragShapeHandleIn
+	dragShapeHandleOut
+	dragShapeGradS
+	dragShapeGradE
+	dragShapeGradBoth
 )
 
 type stageDrag int
@@ -311,6 +320,8 @@ func (s *previewStage) Draw(context *guigui.Context, widgetBounds *guigui.Widget
 	switch {
 	case m.PosesVisible():
 		drawPoseOverlay(dst, m, tr, u)
+	case m.ShapesVisible():
+		drawShapeOverlay(dst, m, tr, u)
 	case m.OverlayVisible():
 		drawCollisionOverlay(dst, m, tr, u)
 	}
@@ -387,6 +398,10 @@ func (s *previewStage) HandlePointingInput(context *guigui.Context, widgetBounds
 		case dragPoseJoint:
 			m.MovePosePart(dx, dy)
 			return guigui.HandleInputByWidget(s)
+		case dragShapeVertex, dragShapeHandleIn, dragShapeHandleOut,
+			dragShapeGradS, dragShapeGradE, dragShapeGradBoth:
+			s.dragShapeStep(m, dx, dy)
+			return guigui.HandleInputByWidget(s)
 		}
 		switch {
 		case s.dragMode == dragResize && s.dragKind == dragBody:
@@ -409,6 +424,9 @@ func (s *previewStage) HandlePointingInput(context *guigui.Context, widgetBounds
 	s.lastCursor = image.Pt(cx, cy)
 	if m.PosesVisible() {
 		return s.handlePoseInput(context, m, tr, cx, cy)
+	}
+	if m.ShapesVisible() {
+		return s.handleShapeInput(context, m, tr, cx, cy)
 	}
 	// The grip belongs to the current selection, so it is tested before the
 	// shapes: a tiny handle would be unreachable under a big sibling.
@@ -473,6 +491,9 @@ func (s *previewStage) deselectAll(m *Model) {
 	if m.SelectedPosePart() >= 0 {
 		m.SelectPosePart(-1)
 	}
+	if _, ok := m.SelectedShapeNode(); ok {
+		m.SelectShapeNode(nil)
+	}
 }
 
 func (s *previewStage) CursorShape(context *guigui.Context, widgetBounds *guigui.WidgetBounds) (ebiten.CursorShapeType, bool) {
@@ -493,6 +514,9 @@ func (s *previewStage) CursorShape(context *guigui.Context, widgetBounds *guigui
 	cx, cy := ebiten.CursorPosition()
 	if m.PosesVisible() {
 		return poseCursorShape(m, tr, float32(basicwidget.UnitSize(context)), cx, cy)
+	}
+	if m.ShapesVisible() {
+		return shapeCursorShape(m, tr, float32(basicwidget.UnitSize(context)), cx, cy)
 	}
 	if hx, hy, ok := handleAt(m, tr); ok {
 		half := handleSize(float32(basicwidget.UnitSize(context)))/2 + 2

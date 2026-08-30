@@ -147,6 +147,46 @@ last change, counting a whole drag as one step. Editing is only possible
 while the playhead sits on a key; scrubbing away ends it rather than
 writing a value at a frame the other tracks have no key at.
 
+The **Shapes** tab edits vector artwork: the shape layers of the clip on
+stage — imported UI assets, the generated samples, or layers drawn from
+scratch. Pick a layer from the dropdown (or **+Layer** to start an empty
+one, **−Layer** to remove it), and its item tree appears beside the key
+chart, indented the way the document nests it: groups, paths, primitives,
+fills, strokes, gradients, and modifiers, in paint order. Clicking a shape
+on the stage selects it in the tree and back. Unknown item kinds are
+listed but left inert — they survive saving untouched.
+
+The tool row picks the gesture. **Select** drags what is already there:
+the selected path shows square vertices (the selected one carries its
+bezier handle pins — drag them to bend the curve, **Smooth / Corner**
+toggles the tangents), and **Pen** on the outline of the selected path
+splits the segment under the click. Elsewhere **Pen** draws a new path
+click by click — closing on the first vertex commits it, **Finish**
+commits it open — and **Rect** / **Ellipse** / **Star** drop a primitive
+where clicked. New geometry arrives in its own group with a grey fill,
+selected and ready to restyle. **+Fill**, **+Stroke**, **+Grad**,
+**+Trim**, **+Round** and **+Group** add items to the selected item's
+group; **▲ ▼** move an item within its group (the tree is the paint
+order), **Delete** removes it, subtree included.
+
+Gradients edit the Flash way. On the stage the selected gradient shows
+its transform gizmo — drag the square (start / center), the circle (end:
+rotation and length in one handle) or the diamond (the whole gradient).
+In the pane, the **ramp** is the color bar: click under it to add a stop
+carrying the color the ramp already shows there, drag a stop to move it,
+drag it well off the bar to delete it, and recolor the selected stop in
+the hex field beside its swatch. **type** switches linear and radial.
+
+Editing follows the pose rules exactly. A static value is writable
+anywhere and applies to the whole clip; an animated one is written only
+with the playhead parked on one of its keys — click a tick on the chart —
+and on a preset-style pose clip, touching a static value keys it at every
+pose first. Topology is stricter still: Lottie interpolates a path
+vertex-wise, so inserting or deleting a vertex rewrites **every** key of
+that path at once, keeping them in step. Shape keys ride the pose
+columns: retiming, +Pose, Delete and ease all carry them along.
+**Undo shape edit** shares the clip-edit stack with the pose tab.
+
 `-viewer` starts **viewer mode**: the editor watches every file the
 document was loaded from — the `.lottie` bundle (whose images travel
 inside it), or a loose clip `.json` plus anything imported after — and

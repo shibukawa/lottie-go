@@ -116,6 +116,8 @@ func (m *Model) CollisionTab() colTab {
 		return colSockets
 	case colPoses:
 		return colPoses
+	case colShapes:
+		return colShapes
 	}
 	return colSegment
 }
@@ -126,6 +128,16 @@ func (m *Model) SetCollisionTab(t colTab) {
 	// part list with it rather than waiting for something to be selected.
 	if t == colPoses {
 		m.setInspect(inspectPose)
+	}
+	// The Shapes tab likewise: its pane carries the layer picker that every
+	// shape edit starts from.
+	if t == colShapes {
+		m.setInspect(inspectShape)
+		if m.SelectedShapeLayer() < 0 {
+			if ls := m.ShapeLayers(); len(ls) > 0 {
+				m.selShapeLayer = ls[0]
+			}
+		}
 	}
 	m.generation++
 }
@@ -149,7 +161,8 @@ func (m *Model) SocketsVisible() bool {
 // OverlayVisible reports whether any overlay group shows, which is what
 // the stage checks before drawing or hit-testing at all.
 func (m *Model) OverlayVisible() bool {
-	return m.HitboxesVisible() || m.BodyVisible() || m.SocketsVisible() || m.PosesVisible()
+	return m.HitboxesVisible() || m.BodyVisible() || m.SocketsVisible() ||
+		m.PosesVisible() || m.ShapesVisible()
 }
 
 // stageFrameLimit is the last meaningful frame of the stage animation;

@@ -220,6 +220,10 @@ type inspectorContent struct {
 	parentItems     []basicwidget.SelectItem[int]
 	jdragItems      []basicwidget.SelectItem[bool]
 
+	// Shape pane (shapeinspector.go), a widget of its own: the per-kind
+	// forms would double this struct otherwise.
+	shapePane shapeInspector
+
 	selectedGuard int
 
 	transItems     []basicwidget.ListItem[int]
@@ -291,6 +295,8 @@ func (c *inspectorContent) Build(context *guigui.Context, adder *guigui.ChildAdd
 		adder.AddWidget(&c.poseUndo)
 		adder.AddWidget(&c.poseHint)
 		c.buildPosePane(context, m, adder)
+	case inspectShape:
+		adder.AddWidget(&c.shapePane)
 	case inspectConfig:
 		adder.AddWidget(&c.cfgTitle)
 		adder.AddWidget(&c.cfgForm)
@@ -1048,6 +1054,10 @@ func (c *inspectorContent) layout(context *guigui.Context) guigui.LinearLayout {
 			guigui.LinearLayoutItem{Widget: &c.poseForm},
 			guigui.LinearLayoutItem{Widget: &c.poseUndo, Size: guigui.FixedSize(u)},
 			guigui.LinearLayoutItem{Widget: &c.poseHint, Size: guigui.FixedSize(2 * u)},
+		)
+	case inspectShape:
+		c.items = append(c.items,
+			guigui.LinearLayoutItem{Widget: &c.shapePane},
 		)
 	case inspectConfig:
 		c.items = append(c.items,

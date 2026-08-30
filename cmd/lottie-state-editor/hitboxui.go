@@ -333,6 +333,7 @@ type colTab int
 const (
 	colSegment colTab = iota
 	colPoses
+	colShapes
 	colHitboxes
 	colBody
 	colSockets
@@ -401,6 +402,32 @@ type collisionPanel struct {
 	addSockBtns guigui.WidgetSlice[*basicwidget.Button]
 	delSock     basicwidget.Button
 
+	// Shapes tab (shapeui.go): the drawing tools, the layer picker, the
+	// item tree and the structure buttons.
+	shapeTools      basicwidget.SegmentedControl[shapeTool]
+	shapeToolItems  []basicwidget.SegmentedControlItem[shapeTool]
+	shapeFinish     basicwidget.Button
+	shapeLayerSel   basicwidget.Select[int]
+	shapeLayerItems []basicwidget.SelectItem[int]
+	shapeAddLayer   basicwidget.Button
+	shapeDelLayer   basicwidget.Button
+	shapeList       basicwidget.List[int]
+	shapeItems      []basicwidget.ListItem[int]
+	shapeShownPlus1 int
+	shapeAddGr      basicwidget.Button
+	shapeAddFl      basicwidget.Button
+	shapeAddSt      basicwidget.Button
+	shapeAddGf      basicwidget.Button
+	shapeAddTm      basicwidget.Button
+	shapeAddRd      basicwidget.Button
+	shapeFront      basicwidget.Button
+	shapeBack       basicwidget.Button
+	shapeDelItem    basicwidget.Button
+	shapeRow2       guigui.LinearLayout
+	shapeRow2Item   []guigui.LinearLayoutItem
+	shapeMain       guigui.LinearLayout
+	shapeMainItem   []guigui.LinearLayoutItem
+
 	tabItems  []basicwidget.SegmentedControlItem[colTab]
 	bodyItems []basicwidget.ListItem[int]
 	sockItems []basicwidget.ListItem[int]
@@ -424,7 +451,7 @@ func (c *collisionPanel) model(context *guigui.Context) *Model {
 // availableTabs is the tab set the physics config leaves standing. The
 // segment overview and sockets are always there.
 func availableTabs(m *Model) []colTab {
-	out := []colTab{colSegment, colPoses}
+	out := []colTab{colSegment, colPoses, colShapes}
 	if m.ResolvEnabled() {
 		out = append(out, colHitboxes)
 	}
@@ -498,6 +525,7 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 		text := map[colTab]string{
 			colSegment:  "Segment",
 			colPoses:    "Poses",
+			colShapes:   "Shapes",
 			colHitboxes: "Hitbox (resolv)",
 			colBody:     "Body (cp)",
 			colSockets:  "Sockets",
@@ -524,6 +552,11 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 		// Where the clip's keyframes are, and which one an edit lands on.
 		adder.AddWidget(&c.poses)
 		c.buildPoseButtons(context, m, adder)
+	case colShapes:
+		// The same key chart: shape edits park on a key the same way pose
+		// edits do, so the way to select one is the same chart.
+		adder.AddWidget(&c.poses)
+		c.buildShapePanel(context, m, adder)
 	case colHitboxes:
 		adder.AddWidget(&c.chart)
 		for _, w := range []guigui.Widget{&c.addRect, &c.addCircle, &c.addWin, &c.delBox} {
@@ -668,6 +701,15 @@ func (c *collisionPanel) layout(context *guigui.Context) guigui.LinearLayout {
 			guigui.LinearLayoutItem{Widget: &c.poseLenLabel, Size: guigui.FixedSize(3 * u)},
 			guigui.LinearLayoutItem{Widget: &c.poseLenInput, Size: guigui.FixedSize(2 * u)},
 		)
+	case colShapes:
+		c.btnRowItems = append(c.btnRowItems,
+			guigui.LinearLayoutItem{Widget: &c.shapeTools, Size: guigui.FixedSize(12 * u)},
+			guigui.LinearLayoutItem{Widget: &c.shapeFinish, Size: guigui.FixedSize(2 * u)},
+			guigui.LinearLayoutItem{Size: guigui.FlexibleSize(1)},
+			guigui.LinearLayoutItem{Widget: &c.shapeLayerSel, Size: guigui.FixedSize(5 * u)},
+			guigui.LinearLayoutItem{Widget: &c.shapeAddLayer, Size: guigui.FixedSize(5 * u / 2)},
+			guigui.LinearLayoutItem{Widget: &c.shapeDelLayer, Size: guigui.FixedSize(5 * u / 2)},
+		)
 	case colHitboxes:
 		c.btnRowItems = append(c.btnRowItems,
 			guigui.LinearLayoutItem{Widget: &c.addRect, Size: guigui.FixedSize(2 * u)},
@@ -725,6 +767,21 @@ func (c *collisionPanel) layout(context *guigui.Context) guigui.LinearLayout {
 		c.items = append(c.items, guigui.LinearLayoutItem{Widget: &c.timeline})
 	case colPoses:
 		c.items = append(c.items, guigui.LinearLayoutItem{Widget: &c.poses})
+	case colShapes:
+		// The tree shares the chart's row: the panel already stacks two
+		// button rows, and a full-width list under the chart would squeeze
+		// the stage to nothing at the default split.
+		c.shapeMainItem = slices.Delete(c.shapeMainItem, 0, len(c.shapeMainItem))
+		c.shapeMainItem = append(c.shapeMainItem,
+			guigui.LinearLayoutItem{Widget: &c.poses, Size: guigui.FlexibleSize(1)},
+			guigui.LinearLayoutItem{Widget: &c.shapeList, Size: guigui.FixedSize(9 * u)},
+		)
+		c.shapeMain = guigui.LinearLayout{
+			Direction: guigui.LayoutDirectionHorizontal, Items: c.shapeMainItem, Gap: u / 4,
+		}
+		c.items = append(c.items,
+			guigui.LinearLayoutItem{Size: guigui.FixedSize(4 * u), Layout: &c.shapeMain},
+		)
 	case colHitboxes:
 		c.items = append(c.items, guigui.LinearLayoutItem{Widget: &c.chart})
 	case colBody:
@@ -736,6 +793,28 @@ func (c *collisionPanel) layout(context *guigui.Context) guigui.LinearLayout {
 	if tab != colSegment {
 		c.items = append(c.items,
 			guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.btnRow},
+		)
+	}
+	if tab == colShapes {
+		// The structure buttons: what joins the tree, and where in it.
+		c.shapeRow2Item = slices.Delete(c.shapeRow2Item, 0, len(c.shapeRow2Item))
+		for _, w := range []*basicwidget.Button{
+			&c.shapeAddGr, &c.shapeAddFl, &c.shapeAddSt, &c.shapeAddGf, &c.shapeAddTm, &c.shapeAddRd,
+		} {
+			c.shapeRow2Item = append(c.shapeRow2Item,
+				guigui.LinearLayoutItem{Widget: w, Size: guigui.FlexibleSize(1)})
+		}
+		c.shapeRow2Item = append(c.shapeRow2Item,
+			guigui.LinearLayoutItem{Size: guigui.FlexibleSize(1)},
+			guigui.LinearLayoutItem{Widget: &c.shapeFront, Size: guigui.FixedSize(3 * u / 2)},
+			guigui.LinearLayoutItem{Widget: &c.shapeBack, Size: guigui.FixedSize(3 * u / 2)},
+			guigui.LinearLayoutItem{Widget: &c.shapeDelItem, Size: guigui.FixedSize(5 * u / 2)},
+		)
+		c.shapeRow2 = guigui.LinearLayout{
+			Direction: guigui.LayoutDirectionHorizontal, Items: c.shapeRow2Item, Gap: u / 4,
+		}
+		c.items = append(c.items,
+			guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.shapeRow2},
 		)
 	}
 	if tab == colPoses {

@@ -43,7 +43,7 @@ func applyScreenshotSetup(m *Model) {
 			m.ShowClip(clipRef{Anim: v})
 		case "tab":
 			if tab, ok := map[string]colTab{
-				"segment": colSegment, "poses": colPoses,
+				"segment": colSegment, "poses": colPoses, "shapes": colShapes,
 				"hitbox": colHitboxes, "body": colBody, "sockets": colSockets,
 			}[v]; ok {
 				m.SetCollisionTab(tab)
@@ -55,6 +55,29 @@ func applyScreenshotSetup(m *Model) {
 		case "part":
 			if i, ok := m.PosePartIndex(v); ok {
 				m.SelectPosePart(i)
+			}
+		case "shape":
+			// A dotted item path into the selected shape layer's tree,
+			// e.g. shape=0.1 is the second child of the first group.
+			var path []int
+			for _, seg := range strings.Split(v, ".") {
+				if i, err := strconv.Atoi(seg); err == nil {
+					path = append(path, i)
+				}
+			}
+			if len(path) > 0 {
+				m.SelectShapeNode(path)
+			}
+		case "vert":
+			if i, err := strconv.Atoi(v); err == nil {
+				m.SelectShapeVert(i)
+			}
+		case "tool":
+			if tool, ok := map[string]shapeTool{
+				"select": toolSelect, "pen": toolPen,
+				"rect": toolRect, "ellipse": toolEllipse, "star": toolStar,
+			}[v]; ok {
+				m.SetShapeTool(tool)
 			}
 		case "onion":
 			m.SetOnionSkin(v == "1" || v == "true")

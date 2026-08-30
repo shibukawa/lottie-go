@@ -31,6 +31,7 @@ const (
 	inspectCPShape
 	inspectSocket
 	inspectPose
+	inspectShape
 	inspectConfig
 )
 
@@ -122,6 +123,17 @@ type Model struct {
 	poseLayer int
 	posePart  int
 
+	// Shape editing (see shape.go). The selection is a layer plus the index
+	// path of one item in its tree; the tool is the Shapes tab's active
+	// gesture, and the pen accumulates points until it commits.
+	selShapeLayer int
+	selShapePath  []int
+	selShapeVert  int
+	selGradStop   int
+	shapeTool     shapeTool
+	penPts        [][2]float64
+	penActive     bool
+
 	// Clip edits are undoable on their own stack; a drag writes on every
 	// mouse move, so it collapses into one step between Begin and End.
 	clipUndo       []clipSnapshot
@@ -164,6 +176,9 @@ func NewModel() *Model {
 		selSocket:     -1,
 		poseLayer:     -1,
 		posePart:      -1,
+		selShapeLayer: -1,
+		selShapeVert:  -1,
+		selGradStop:   -1,
 		trackCache:    map[string]*lottieresolv.Track{},
 		clipDocs:      map[string]*clipDoc{},
 		dialog:        make(chan dialogResult, 1),
@@ -1333,9 +1348,13 @@ func (m *Model) ShowClip(c clipRef) {
 	// The counts describe what is on the stage, so switching clips starts
 	// them over rather than carrying the last clip's tally forward.
 	m.resetMarkerHits()
-	m.previewClip, m.clipPlayer = c, p
 	// The hitbox selection indexed the previous stage's track, and the pose
-	// selection indexed its layers and key times.
+	// and shape selections indexed its layers and key times. A re-show of
+	// the same clip keeps the shape selection: parking a key does that.
+	if m.previewClip.Anim != c.Anim {
+		m.clearShapeSelection()
+	}
+	m.previewClip, m.clipPlayer = c, p
 	m.selBox = -1
 	m.clearPoseSelection()
 	m.setStatus("previewing %s", c.Label())
@@ -1351,6 +1370,7 @@ func (m *Model) ShowMachine() {
 	m.resetMarkerHits()
 	m.selBox = -1
 	m.clearPoseSelection()
+	m.clearShapeSelection()
 	m.generation++
 }
 
