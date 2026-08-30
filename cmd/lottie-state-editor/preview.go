@@ -197,6 +197,8 @@ const (
 	dragShapeGradS
 	dragShapeGradE
 	dragShapeGradBoth
+	dragShapeCorner
+	dragShapeMoveGeom
 )
 
 type stageDrag int
@@ -399,7 +401,8 @@ func (s *previewStage) HandlePointingInput(context *guigui.Context, widgetBounds
 			m.MovePosePart(dx, dy)
 			return guigui.HandleInputByWidget(s)
 		case dragShapeVertex, dragShapeHandleIn, dragShapeHandleOut,
-			dragShapeGradS, dragShapeGradE, dragShapeGradBoth:
+			dragShapeGradS, dragShapeGradE, dragShapeGradBoth,
+			dragShapeCorner, dragShapeMoveGeom:
 			s.dragShapeStep(m, dx, dy)
 			return guigui.HandleInputByWidget(s)
 		}

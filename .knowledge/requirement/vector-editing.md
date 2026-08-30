@@ -51,7 +51,8 @@ undo: the existing clip-edit stack; one step per drag or tree operation, Begin/E
 rig_direction: a vector rig is shape layers parented like image parts. Pose editing on such a rig means the pose tab learns to drag shape layers by their ks — today it picks image layers only (requirement:pose-editing scope). Preset library stays raster (requirement:animation-presets); vector rigs are new bundles, not a preset migration
 deviations:
   - the pen draws corner vertices only; curves are made afterwards by dragging the vertex's handles or Smooth/Corner. Drag-while-placing bezier authoring is not built
-  - primitives drop at a fixed default size where clicked and are then edited by parameters; there is no drag-to-size
+  - primitives drop at a fixed default size where clicked; sizing is done afterwards on the stage — the selected geometry shows a box whose corners resize about the opposite corner and whose inside drags the whole shape (user 2026-08-30: numbers alone were not an editor)
+  - geometry also inserts from the tree (+Path/+Rect/+Ellipse/+Star into the selected group at its origin), because choosing the place in the structure first is often the intent (user 2026-08-30); the stage tools stay for placing by click
   - the radial gradient's focal point (h/a) edits numerically, not by a stage marker yet
   - gradient alpha stops are preserved and honored but not editable on the ramp; color stops only
   - editing an animated member between its keys is refused with a park hint, mirroring pose editing, rather than auto-keying

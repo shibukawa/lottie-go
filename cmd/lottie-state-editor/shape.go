@@ -667,6 +667,160 @@ func (m *Model) SetShapePathClosed(closed bool) {
 	m.touchClipDoc()
 }
 
+// ---- whole-shape move and resize ----
+
+// The selected geometry drags as one thing too: inside it moves it, the
+// corners of its box resize it about the opposite corner. Vertices stay
+// the finer control for paths; these are the coarse gestures every other
+// editor answers a shape with.
+
+// ShapeBounds is the selected geometry's box in its own item space.
+func (m *Model) ShapeBounds() (lo, hi [2]float64, ok bool) {
+	n, okN := m.SelectedShapeNode()
+	if !okN {
+		return lo, hi, false
+	}
+	frame := m.shapeEditFrame()
+	item, okI := m.SelectedShapeItem()
+	if !okI {
+		return lo, hi, false
+	}
+	switch n.ty {
+	case "sh":
+		p, okP := pathAt(item, frame, true)
+		if !okP || len(p.v) == 0 {
+			return lo, hi, false
+		}
+		pts := flattenPath(p, 8)
+		lo, hi = pts[0], pts[0]
+		for _, pt := range pts {
+			lo[0], lo[1] = min(lo[0], pt[0]), min(lo[1], pt[1])
+			hi[0], hi[1] = max(hi[0], pt[0]), max(hi[1], pt[1])
+		}
+		return lo, hi, true
+	case "rc", "el":
+		pos, okP := propValueNearObj(item, "p", frame)
+		size, okS := propValueNearObj(item, "s", frame)
+		if !okP || !okS || len(pos) < 2 || len(size) < 2 {
+			return lo, hi, false
+		}
+		return [2]float64{pos[0] - size[0]/2, pos[1] - size[1]/2},
+			[2]float64{pos[0] + size[0]/2, pos[1] + size[1]/2}, true
+	case "sr":
+		pos, okP := propValueNearObj(item, "p", frame)
+		or, okR := propValueNearObj(item, "or", frame)
+		if !okP || !okR || len(pos) < 2 || len(or) == 0 {
+			return lo, hi, false
+		}
+		return [2]float64{pos[0] - or[0], pos[1] - or[0]},
+			[2]float64{pos[0] + or[0], pos[1] + or[0]}, true
+	}
+	return lo, hi, false
+}
+
+// MoveShapeGeometry drags the whole selected geometry by an item-space
+// delta: a primitive by its center, a path by every vertex at once.
+func (m *Model) MoveShapeGeometry(dx, dy float64) {
+	n, ok := m.SelectedShapeNode()
+	if !ok {
+		return
+	}
+	switch n.ty {
+	case "sh":
+		p, ok := m.ShapePath()
+		if !ok {
+			return
+		}
+		for i := range p.v {
+			p.v[i][0] = round2(p.v[i][0] + dx)
+			p.v[i][1] = round2(p.v[i][1] + dy)
+		}
+		m.setShapePath(p)
+	case "rc", "el", "sr":
+		cur, ok := m.ShapeMemberValue("p")
+		if !ok || len(cur) < 2 {
+			return
+		}
+		m.SetShapeMemberValue("p", []float64{round2(cur[0] + dx), round2(cur[1] + dy)})
+	}
+}
+
+// shapeCorner names the four box corners: 0 top-left, 1 top-right,
+// 2 bottom-right, 3 bottom-left, in item space.
+func shapeCornerPoint(lo, hi [2]float64, corner int) [2]float64 {
+	switch corner {
+	case 0:
+		return lo
+	case 1:
+		return [2]float64{hi[0], lo[1]}
+	case 2:
+		return hi
+	}
+	return [2]float64{lo[0], hi[1]}
+}
+
+// ResizeShapeGeometry drags one box corner by an item-space delta; the
+// opposite corner holds still, which is what a corner grab means.
+func (m *Model) ResizeShapeGeometry(corner int, dx, dy float64) {
+	n, okN := m.SelectedShapeNode()
+	lo, hi, ok := m.ShapeBounds()
+	if !okN || !ok {
+		return
+	}
+	drag := shapeCornerPoint(lo, hi, corner)
+	fixed := shapeCornerPoint(lo, hi, (corner+2)%4)
+	oldW, oldH := drag[0]-fixed[0], drag[1]-fixed[1]
+	if oldW == 0 || oldH == 0 {
+		return
+	}
+	// The scale never crosses zero: shrinking to a sliver is an edit,
+	// flipping under the cursor is an accident.
+	sx := (drag[0] + dx - fixed[0]) / oldW
+	sy := (drag[1] + dy - fixed[1]) / oldH
+	sx, sy = max(sx, 0.01), max(sy, 0.01)
+	switch n.ty {
+	case "sh":
+		p, ok := m.ShapePath()
+		if !ok {
+			return
+		}
+		for i := range p.v {
+			p.v[i][0] = round2(fixed[0] + (p.v[i][0]-fixed[0])*sx)
+			p.v[i][1] = round2(fixed[1] + (p.v[i][1]-fixed[1])*sy)
+			p.i[i][0], p.i[i][1] = round2(p.i[i][0]*sx), round2(p.i[i][1]*sy)
+			p.o[i][0], p.o[i][1] = round2(p.o[i][0]*sx), round2(p.o[i][1]*sy)
+		}
+		m.setShapePath(p)
+	case "rc", "el":
+		pos, okP := m.ShapeMemberValue("p")
+		size, okS := m.ShapeMemberValue("s")
+		if !okP || !okS || len(pos) < 2 || len(size) < 2 {
+			return
+		}
+		m.SetShapeMemberValue("s", []float64{round2(size[0] * sx), round2(size[1] * sy)})
+		m.SetShapeMemberValue("p", []float64{
+			round2(fixed[0] + (pos[0]-fixed[0])*sx),
+			round2(fixed[1] + (pos[1]-fixed[1])*sy),
+		})
+	case "sr":
+		// A star has one radius, so the corner drag scales it uniformly.
+		k := (sx + sy) / 2
+		pos, okP := m.ShapeMemberValue("p")
+		if !okP || len(pos) < 2 {
+			return
+		}
+		for _, member := range []string{"or", "ir"} {
+			if r, ok := m.ShapeMemberValue(member); ok && len(r) > 0 {
+				m.SetShapeMemberValue(member, []float64{round2(r[0] * k)})
+			}
+		}
+		m.SetShapeMemberValue("p", []float64{
+			round2(fixed[0] + (pos[0]-fixed[0])*k),
+			round2(fixed[1] + (pos[1]-fixed[1])*k),
+		})
+	}
+}
+
 // ---- structure: layers and items ----
 
 // AddShapeLayerAction creates a fresh, empty shape layer in front and
@@ -760,6 +914,15 @@ func (m *Model) AddShapeItemAction(kind string) {
 	switch kind {
 	case "gr":
 		item = newGroupItem("group")
+	case "sh":
+		// A diamond, not a square: it reads as "placeholder to reshape"
+		// rather than as a rect that should have been an rc.
+		item = newPathItem(pathData{
+			closed: true,
+			v:      [][2]float64{{0, -50}, {50, 0}, {0, 50}, {-50, 0}},
+			i:      make([][2]float64, 4),
+			o:      make([][2]float64, 4),
+		})
 	case "fl":
 		item = newFillItem(0.5, 0.5, 0.5)
 	case "st":

@@ -103,6 +103,10 @@ type shapeInspector struct {
 	addGfBtn      basicwidget.Button
 	addTmBtn      basicwidget.Button
 	addRdBtn      basicwidget.Button
+	addShBtn      basicwidget.Button
+	addRcBtn      basicwidget.Button
+	addElBtn      basicwidget.Button
+	addSrBtn      basicwidget.Button
 	frontBtn      basicwidget.Button
 	backBtn       basicwidget.Button
 	delItemBtn    basicwidget.Button
@@ -112,6 +116,8 @@ type shapeInspector struct {
 	addRow1Items  []guigui.LinearLayoutItem
 	addRow2       guigui.LinearLayout
 	addRow2Items  []guigui.LinearLayoutItem
+	geomRow       guigui.LinearLayout
+	geomRowItems  []guigui.LinearLayoutItem
 	moveRow       guigui.LinearLayout
 	moveRowItems  []guigui.LinearLayoutItem
 
@@ -182,6 +188,7 @@ func (p *shapeInspector) Build(context *guigui.Context, adder *guigui.ChildAdder
 	adder.AddWidget(&p.treeList)
 	for _, w := range []guigui.Widget{
 		&p.addGrBtn, &p.addFlBtn, &p.addStBtn, &p.addGfBtn, &p.addTmBtn, &p.addRdBtn,
+		&p.addShBtn, &p.addRcBtn, &p.addElBtn, &p.addSrBtn,
 		&p.frontBtn, &p.backBtn, &p.delItemBtn,
 	} {
 		adder.AddWidget(w)
@@ -348,6 +355,13 @@ func (p *shapeInspector) buildTreeSection(context *guigui.Context, m *Model) {
 	add(&p.addGfBtn, "+Grad", "gf")
 	add(&p.addTmBtn, "+Trim", "tm")
 	add(&p.addRdBtn, "+Round", "rd")
+	// Geometry inserts here too: pick the place in the tree and drop the
+	// shape into it, then move and resize it on the stage. The stage tools
+	// remain for placing by click.
+	add(&p.addShBtn, "+Path", "sh")
+	add(&p.addRcBtn, "+Rect", "rc")
+	add(&p.addElBtn, "+Ellipse", "el")
+	add(&p.addSrBtn, "+Star", "sr")
 
 	p.frontBtn.SetText("▲ Front")
 	p.frontBtn.OnDown(func(context *guigui.Context) { m.MoveShapeItemAction(-1) })
@@ -382,8 +396,9 @@ func (p *shapeInspector) hintText(m *Model) string {
 		return "Drag the square (start), circle (end) or diamond (both) on the " +
 			"stage. Click under the ramp to add a stop; drag a stop off the bar to delete it."
 	}
-	return "Drag vertices on the stage; the selected vertex shows its bezier " +
-		"handles. Alt is not needed — the Smooth/Corner button toggles the tangents."
+	return "Drag inside the shape to move it, a box corner to resize it. On a " +
+		"path, vertices drag too; the selected one shows its bezier handles, " +
+		"and Smooth/Corner toggles the tangents."
 }
 
 // buildColorRow is the solid color of a fill or stroke.
@@ -635,6 +650,16 @@ func (p *shapeInspector) layout(context *guigui.Context) guigui.LinearLayout {
 	p.addRow2 = guigui.LinearLayout{
 		Direction: guigui.LayoutDirectionHorizontal, Items: p.addRow2Items, Gap: u / 4,
 	}
+	p.geomRowItems = slices.Delete(p.geomRowItems, 0, len(p.geomRowItems))
+	p.geomRowItems = append(p.geomRowItems,
+		guigui.LinearLayoutItem{Widget: &p.addShBtn, Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Widget: &p.addRcBtn, Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Widget: &p.addElBtn, Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Widget: &p.addSrBtn, Size: guigui.FlexibleSize(1)},
+	)
+	p.geomRow = guigui.LinearLayout{
+		Direction: guigui.LayoutDirectionHorizontal, Items: p.geomRowItems, Gap: u / 4,
+	}
 
 	p.moveRowItems = slices.Delete(p.moveRowItems, 0, len(p.moveRowItems))
 	p.moveRowItems = append(p.moveRowItems,
@@ -652,6 +677,7 @@ func (p *shapeInspector) layout(context *guigui.Context) guigui.LinearLayout {
 		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &p.layerRow},
 		guigui.LinearLayoutItem{Widget: &p.treeList, Size: guigui.FixedSize(6 * u)},
 		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &p.moveRow},
+		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &p.geomRow},
 		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &p.addRow1},
 		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &p.addRow2},
 		guigui.LinearLayoutItem{Widget: &p.title, Size: guigui.FixedSize(u)},

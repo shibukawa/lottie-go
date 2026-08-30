@@ -161,17 +161,25 @@ saving untouched. The strip under the stage keeps only the key chart and
 the tool row, so the stage keeps its height.
 
 The tool row picks the gesture. **Select** drags what is already there:
-the selected path shows square vertices (the selected one carries its
-bezier handle pins — drag them to bend the curve, **Smooth / Corner**
-toggles the tangents), and **Pen** on the outline of the selected path
-splits the segment under the click. Elsewhere **Pen** draws a new path
-click by click — closing on the first vertex commits it, **Finish**
-commits it open — and **Rect** / **Ellipse** / **Star** drop a primitive
-where clicked. New geometry arrives in its own group with a grey fill,
-selected and ready to restyle. Under the tree, **+Fill**, **+Stroke**,
-**+Grad**, **+Trim**, **+Round** and **+Group** add items to the selected
-item's group; **▲ Front / ▼ Back** move an item within its group (the
-tree is the paint order), **Delete** removes it, subtree included.
+the selected geometry shows its box, and dragging inside moves the whole
+shape while a box corner resizes it about the opposite corner — the press
+that picks a shape starts carrying it, so select-and-move is one gesture.
+A path adds the finer controls: square vertices drag individually (the
+selected one carries its bezier handle pins — drag them to bend the
+curve, **Smooth / Corner** toggles the tangents), and **Pen** on the
+outline of the selected path splits the segment under the click.
+Elsewhere **Pen** draws a new path click by click — closing on the first
+vertex commits it, **Finish** commits it open — and **Rect** /
+**Ellipse** / **Star** drop a primitive where clicked.
+
+Geometry also inserts from the tree, without touching the stage tools:
+**+Path**, **+Rect**, **+Ellipse** and **+Star** drop into the selected
+item's group at its origin, ready to drag into place. New geometry from
+the stage tools arrives in its own group with a grey fill, selected and
+ready to restyle. **+Fill**, **+Stroke**, **+Grad**, **+Trim**,
+**+Round** and **+Group** add items to the selected item's group the same
+way; **▲ Front / ▼ Back** move an item within its group (the tree is the
+paint order), **Delete** removes it, subtree included.
 
 Gradients edit the Flash way. On the stage the selected gradient shows
 its transform gizmo — drag the square (start / center), the circle (end:

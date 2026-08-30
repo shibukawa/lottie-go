@@ -104,11 +104,61 @@ func drawShapeOverlay(dst *ebiten.Image, m *Model, tr stageTransform, u float32)
 			}
 		}
 	}
+	if isShapeGeometry(n.ty) {
+		drawShapeBox(dst, m, tr, u, live)
+	}
 	if n.ty == "sh" {
 		drawShapeVertices(dst, m, tr, u, live)
 	}
 	if m.ShapeItemIsGradient() {
 		drawGradGizmo(dst, m, tr, u, live)
+	}
+}
+
+// shapeBoxScreen maps the selected geometry's box corners to the screen.
+func shapeBoxScreen(m *Model, tr stageTransform) ([4][2]float32, bool) {
+	n, okN := m.SelectedShapeNode()
+	lo, hi, ok := m.ShapeBounds()
+	if !okN || !ok {
+		return [4][2]float32{}, false
+	}
+	g, okG := m.shapeSpaceMatrix(n.layer, n.path, m.stageFrame())
+	if !okG {
+		return [4][2]float32{}, false
+	}
+	var out [4][2]float32
+	for c := range 4 {
+		p := shapeCornerPoint(lo, hi, c)
+		ax, ay := g.Apply(p[0], p[1])
+		sx, sy := tr.toScreen(ax, ay)
+		out[c] = [2]float32{sx, sy}
+	}
+	return out, true
+}
+
+// drawShapeBox frames the selected geometry and marks its four corner
+// grips: dragging a corner resizes about the opposite one, dragging
+// inside the shape moves it whole.
+func drawShapeBox(dst *ebiten.Image, m *Model, tr stageTransform, u float32, live bool) {
+	box, ok := shapeBoxScreen(m, tr)
+	if !ok {
+		return
+	}
+	clr := shapeIdleColor
+	if live {
+		clr = shapeColor
+	}
+	for c := range 4 {
+		a, b := box[c], box[(c+1)%4]
+		vector.StrokeLine(dst, a[0], a[1], b[0], b[1], max(1, u/28), withAlpha(clr, 0x99), true)
+	}
+	if !live {
+		return
+	}
+	r := handleSize(u) / 2
+	for c := range 4 {
+		vector.DrawFilledRect(dst, box[c][0]-r, box[c][1]-r, r*2, r*2, shapeVertFill, true)
+		vector.StrokeRect(dst, box[c][0]-r, box[c][1]-r, r*2, r*2, max(1, u/20), shapeVertEdge, true)
 	}
 }
 
@@ -318,6 +368,15 @@ func shapeGripAt(m *Model, tr stageTransform, u float32, cx, cy int) (stageDragK
 			}
 		}
 	}
+	// The box corners come after the vertices: on a path the vertex is the
+	// finer control and wins where they coincide.
+	if box, ok := shapeBoxScreen(m, tr); ok {
+		for c := range 4 {
+			if hit(box[c]) {
+				return dragShapeCorner, c, true
+			}
+		}
+	}
 	return 0, 0, false
 }
 
@@ -352,6 +411,12 @@ func (s *previewStage) handleShapeInput(context *guigui.Context, m *Model, tr st
 	}
 	if layer, path, ok := m.ShapeAt(ax, ay, float64(handleSize(u))/tr.scale); ok {
 		m.SelectShape(layer, path)
+		// Selecting and moving are one gesture: the press that picked a
+		// shape starts carrying it, the way every drawing tool works.
+		if shapeEditLive(m) {
+			s.dragMode, s.dragKind = dragMove, dragShapeMoveGeom
+			m.BeginPoseEdit()
+		}
 		return guigui.HandleInputByWidget(s)
 	}
 	return s.beginPan()
@@ -377,6 +442,10 @@ func (s *previewStage) dragShapeStep(m *Model, dx, dy float64) {
 		m.MoveShapeGradPoint("e", ix, iy)
 	case dragShapeGradBoth:
 		m.MoveShapeGradPoint("both", ix, iy)
+	case dragShapeCorner:
+		m.ResizeShapeGeometry(s.shapeDragIdx, ix, iy)
+	case dragShapeMoveGeom:
+		m.MoveShapeGeometry(ix, iy)
 	}
 }
 
@@ -386,11 +455,17 @@ func shapeCursorShape(m *Model, tr stageTransform, u float32, cx, cy int) (ebite
 	case toolPen, toolRect, toolEllipse, toolStar:
 		return ebiten.CursorShapeCrosshair, true
 	}
-	if _, _, ok := shapeGripAt(m, tr, u, cx, cy); ok && shapeEditLive(m) {
+	if kind, _, ok := shapeGripAt(m, tr, u, cx, cy); ok && shapeEditLive(m) {
+		if kind == dragShapeCorner {
+			return ebiten.CursorShapeNWSEResize, true
+		}
 		return ebiten.CursorShapeMove, true
 	}
 	ax, ay := tr.toAnim(cx, cy)
 	if _, _, ok := m.ShapeAt(ax, ay, float64(handleSize(u))/tr.scale); ok {
+		if shapeEditLive(m) {
+			return ebiten.CursorShapeMove, true
+		}
 		return ebiten.CursorShapePointer, true
 	}
 	return 0, false

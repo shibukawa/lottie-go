@@ -419,6 +419,96 @@ func TestParkingFromMachinePreviewKeepsShapePicking(t *testing.T) {
 	}
 }
 
+func TestMoveAndResizeGeometry(t *testing.T) {
+	m := shapeModel(t)
+
+	// The card rect: center (0, 60), size 80×40 in its item space.
+	m.SelectShapeNode([]int{1, 0})
+	lo, hi, ok := m.ShapeBounds()
+	if !ok || lo != [2]float64{-40, 40} || hi != [2]float64{40, 80} {
+		t.Fatalf("rect bounds = %v %v ok=%v", lo, hi, ok)
+	}
+	m.MoveShapeGeometry(10, -5)
+	if p, _ := m.ShapeMemberValue("p"); p[0] != 10 || p[1] != 55 {
+		t.Fatalf("rect center after move = %v", p)
+	}
+	// Drag the bottom-right corner out by (40, 20): the top-left corner
+	// (-30, 35) holds still, so the size grows by the same amount.
+	m.ResizeShapeGeometry(2, 40, 20)
+	s, _ := m.ShapeMemberValue("s")
+	p, _ := m.ShapeMemberValue("p")
+	if s[0] != 120 || s[1] != 60 {
+		t.Fatalf("rect size after resize = %v", s)
+	}
+	if p[0] != 30 || p[1] != 65 {
+		t.Fatalf("rect center after resize = %v", p)
+	}
+	d := storedDoc(t, m)
+	rc, _ := d.shapeItem(0, []int{1, 0})
+	// The clip is a pose sequence, so the first write promoted the static
+	// members to keys; the edit landed at the stage frame's key.
+	if v, ok := propValueObj(rc, "s", 0); !ok || v[0] != 120 {
+		t.Fatalf("resize did not reach the bundle: %v ok=%v", v, ok)
+	}
+
+	// The animated blob path moves whole, on the selected key only.
+	m.SelectShapeNode([]int{0, 0})
+	m.SelectPoseKey(0, -1)
+	m.MoveShapeGeometry(5, 5)
+	d = storedDoc(t, m)
+	sh, _ := d.shapeItem(0, []int{0, 0})
+	p0, _ := pathAt(sh, 0, false)
+	p20, _ := pathAt(sh, 20, false)
+	if p0.v[0] != [2]float64{-35, 5} {
+		t.Fatalf("path vertex after move = %v", p0.v[0])
+	}
+	if p20.v[0] != [2]float64{-50, 0} {
+		t.Fatalf("the other key moved too: %v", p20.v[0])
+	}
+	// Scaling the path doubles it about the fixed corner; the tangents
+	// scale with it or the curve would flatten.
+	lo, hi, _ = m.ShapeBounds()
+	m.ResizeShapeGeometry(2, hi[0]-lo[0], hi[1]-lo[1])
+	d = storedDoc(t, m)
+	sh, _ = d.shapeItem(0, []int{0, 0})
+	after, _ := pathAt(sh, 0, false)
+	w := func(p pathData) float64 {
+		lo, hi := p.v[0][0], p.v[0][0]
+		for _, v := range p.v {
+			lo, hi = min(lo, v[0]), max(hi, v[0])
+		}
+		return hi - lo
+	}
+	if got := w(after); got < 155 || got > 165 {
+		t.Fatalf("path width after doubling = %v", got)
+	}
+	if after.o[0][1] > -35 {
+		t.Fatalf("tangents did not scale: %v", after.o[0])
+	}
+}
+
+func TestGeometryInsertsIntoTheSelectedGroup(t *testing.T) {
+	m := shapeModel(t)
+	m.SelectShapeNode([]int{0}) // the blob group
+	m.AddShapeItemAction("el")
+	d := storedDoc(t, m)
+	nodes := d.shapeTree(0)
+	if nodes[1].ty != "el" {
+		t.Fatalf("ellipse not inserted into the group: %v", nodes[1].ty)
+	}
+	// A path placeholder inserts the same way and is a real diamond.
+	m.SelectShapeNode([]int{0, 0})
+	m.AddShapeItemAction("sh")
+	d = storedDoc(t, m)
+	item, _ := d.shapeItem(0, []int{0, 0})
+	if ty, _ := item["ty"].(string); ty != "sh" {
+		t.Fatalf("path not inserted: %v", ty)
+	}
+	if p, ok := pathAt(item, 0, true); !ok || len(p.v) != 4 || !p.closed {
+		t.Fatalf("placeholder path = %+v ok=%v", p, ok)
+	}
+}
+
 func TestVertexInsertDeleteFromModel(t *testing.T) {
 	m := shapeModel(t)
 	m.SelectShapeNode([]int{0, 0})
