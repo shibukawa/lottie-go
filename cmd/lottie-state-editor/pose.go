@@ -151,8 +151,14 @@ func (m *Model) SelectPoseKey(frame float64, layer int) {
 		m.posePart = layer
 	}
 	// On the Shapes tab a key is parked to edit shape values, so the pane
-	// that must stay up is the shape one.
+	// that must stay up is the shape one — and the panel must keep offering
+	// a layer, even if switching the stage clip dropped the old selection.
 	if m.CollisionTab() == colShapes {
+		if m.SelectedShapeLayer() < 0 {
+			if ls := m.ShapeLayers(); len(ls) > 0 {
+				m.selShapeLayer = ls[0]
+			}
+		}
 		m.setInspect(inspectShape)
 	} else {
 		m.setInspect(inspectPose)

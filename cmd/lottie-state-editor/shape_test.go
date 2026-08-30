@@ -275,17 +275,78 @@ func TestAddAndDeleteShapeLayerFromModel(t *testing.T) {
 func TestShapePickFindsTopmostGeometry(t *testing.T) {
 	m := shapeModel(t)
 	// The blob is centred on the layer origin, which sits at (100, 100).
-	path, ok := m.ShapeAt(100, 100)
-	if !ok || !slices.Equal(path, []int{0, 0}) {
-		t.Fatalf("pick at the blob = %v ok=%v", path, ok)
+	layer, path, ok := m.ShapeAt(100, 100, 0)
+	if !ok || layer != 0 || !slices.Equal(path, []int{0, 0}) {
+		t.Fatalf("pick at the blob = %d %v ok=%v", layer, path, ok)
 	}
 	// The card rect is at layer (0, 60) → animation (100, 160).
-	path, ok = m.ShapeAt(100, 160)
+	_, path, ok = m.ShapeAt(100, 160, 0)
 	if !ok || !slices.Equal(path, []int{1, 0}) {
 		t.Fatalf("pick at the card = %v ok=%v", path, ok)
 	}
-	if _, ok := m.ShapeAt(5, 5); ok {
+	if _, _, ok := m.ShapeAt(5, 5, 0); ok {
 		t.Fatalf("empty stage must not pick")
+	}
+	// The open zig path has next to no fill area; the outline tolerance is
+	// what makes it reachable. Its first vertex sits at layer (-60, -60) →
+	// animation (40, 40).
+	_, path, ok = m.ShapeAt(40, 43, 4)
+	if !ok || !slices.Equal(path, []int{2}) {
+		t.Fatalf("outline pick at the zig = %v ok=%v", path, ok)
+	}
+}
+
+func TestShapePickCrossesLayersAndParksStay(t *testing.T) {
+	m := NewModel()
+	m.Open("../../examples/state-editor/character/character.lottie")
+	if m.Bundle() == nil {
+		t.Fatalf("open: %s", m.Status())
+	}
+	m.ShowClip(clipRef{Anim: "walk-anim"})
+	m.PausePreview()
+	m.SetCollisionTab(colShapes)
+	if m.SelectedShapeLayer() != 0 {
+		t.Fatalf("expected the body layer selected, got %d", m.SelectedShapeLayer())
+	}
+	// Park on one of the body layer's keys, then pick the shadow — a shape
+	// on the *other* layer. The pick must land and switch the panel's layer
+	// instead of reading as a click on empty stage.
+	rows := m.PoseRows()
+	if len(rows) == 0 {
+		t.Fatalf("no fallback rows on the walk clip")
+	}
+	m.SelectPoseKey(m.PoseRowTimes(rows[0])[0], rows[0])
+	if _, ok := m.SelectedPoseKey(); !ok {
+		t.Fatalf("park did not hold")
+	}
+	d := m.StageClipDoc()
+	shadow := -1
+	for _, i := range d.shapeLayerIndices() {
+		if d.layers[i].name == "shadow" {
+			shadow = i
+		}
+	}
+	if shadow < 0 {
+		t.Fatalf("no shadow layer in the sample")
+	}
+	// The shadow ellipse sits under the feet; probe its layer position.
+	found := false
+	for y := 150.0; y < 200 && !found; y += 2 {
+		for x := 60.0; x < 140 && !found; x += 2 {
+			if layer, _, ok := m.ShapeAt(x, y, 0); ok && layer == shadow {
+				m.SelectShape(layer, []int{0})
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("shadow never picked")
+	}
+	if m.SelectedShapeLayer() != shadow {
+		t.Fatalf("pick did not switch the layer: %d", m.SelectedShapeLayer())
+	}
+	if _, ok := m.SelectedPoseKey(); !ok {
+		t.Fatalf("picking a shape ended the park")
 	}
 }
 
@@ -302,6 +363,59 @@ func TestShapeSegmentAtFindsTheOutline(t *testing.T) {
 	}
 	if _, _, ok := m.ShapeSegmentAt(100, 100, 8); ok {
 		t.Fatalf("center of the blob is not on the outline")
+	}
+}
+
+func TestParkingFromMachinePreviewKeepsShapePicking(t *testing.T) {
+	m := NewModel()
+	m.Open("../../examples/state-editor/character/character.lottie")
+	if m.Bundle() == nil {
+		t.Fatalf("open: %s", m.Status())
+	}
+	// The machine is on stage (Open selects it); enter the Shapes tab and
+	// select something in the active state's clip.
+	if m.Preview() == nil {
+		t.Fatalf("no machine preview")
+	}
+	m.SetCollisionTab(colShapes)
+	layer := m.SelectedShapeLayer()
+	if layer < 0 {
+		t.Fatalf("no layer selected on entering the tab")
+	}
+	m.SelectShapeNode([]int{0, 0})
+
+	// Parking a key switches the stage from the machine to the clip
+	// itself. The document is the same, so the selection must survive and
+	// stage picking must keep working — this was the reported break.
+	if times := m.PoseTimes(); len(times) > 0 {
+		m.SelectPoseKey(times[0], -1)
+	} else if rows := m.PoseRows(); len(rows) > 0 {
+		m.SelectPoseKey(m.PoseRowTimes(rows[0])[0], rows[0])
+	} else {
+		t.Fatalf("no keys at all for the stage clip")
+	}
+	if _, ok := m.SelectedPoseKey(); !ok {
+		t.Fatalf("park did not hold")
+	}
+	if m.PreviewClip().Anim == "" {
+		t.Fatalf("parking did not take the clip on stage")
+	}
+	if m.SelectedShapeLayer() < 0 {
+		t.Fatalf("layer selection was dropped by the park")
+	}
+	if _, ok := m.SelectedShapeNode(); !ok {
+		t.Fatalf("shape selection was dropped by the park")
+	}
+	found := false
+	for y := 20.0; y < 200 && !found; y += 4 {
+		for x := 20.0; x < 200 && !found; x += 4 {
+			if _, _, ok := m.ShapeAt(x, y, 2); ok {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("nothing picks after parking on a key")
 	}
 }
 

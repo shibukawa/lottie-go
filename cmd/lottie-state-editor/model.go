@@ -1349,9 +1349,11 @@ func (m *Model) ShowClip(c clipRef) {
 	// them over rather than carrying the last clip's tally forward.
 	m.resetMarkerHits()
 	// The hitbox selection indexed the previous stage's track, and the pose
-	// and shape selections indexed its layers and key times. A re-show of
-	// the same clip keeps the shape selection: parking a key does that.
-	if m.previewClip.Anim != c.Anim {
+	// and shape selections indexed its layers and key times. The shape
+	// selection survives when the same document stays on stage — parking a
+	// key re-shows the clip a machine was already playing, and clearing
+	// there left every later stage click picking against no layer at all.
+	if m.StageAnimID() != c.Anim {
 		m.clearShapeSelection()
 	}
 	m.previewClip, m.clipPlayer = c, p

@@ -350,8 +350,8 @@ func (s *previewStage) handleShapeInput(context *guigui.Context, m *Model, tr st
 		m.BeginPoseEdit()
 		return guigui.HandleInputByWidget(s)
 	}
-	if path, ok := m.ShapeAt(ax, ay); ok {
-		m.SelectShapeNode(path)
+	if layer, path, ok := m.ShapeAt(ax, ay, float64(handleSize(u))/tr.scale); ok {
+		m.SelectShape(layer, path)
 		return guigui.HandleInputByWidget(s)
 	}
 	return s.beginPan()
@@ -390,7 +390,7 @@ func shapeCursorShape(m *Model, tr stageTransform, u float32, cx, cy int) (ebite
 		return ebiten.CursorShapeMove, true
 	}
 	ax, ay := tr.toAnim(cx, cy)
-	if _, ok := m.ShapeAt(ax, ay); ok {
+	if _, _, ok := m.ShapeAt(ax, ay, float64(handleSize(u))/tr.scale); ok {
 		return ebiten.CursorShapePointer, true
 	}
 	return 0, false

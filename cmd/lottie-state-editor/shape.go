@@ -1353,26 +1353,69 @@ func (m *Model) ShapeSegmentAt(ax, ay, tol float64) (seg int, t float64, ok bool
 }
 
 // ShapeAt picks the topmost geometry item under an animation-space point,
-// walking the tree in paint order.
-func (m *Model) ShapeAt(ax, ay float64) ([]int, bool) {
+// searching every shape layer front to back and each tree in paint order —
+// the pick must not depend on which layer the panel happens to have
+// selected, or a click on the other layer's artwork reads as a miss. tol
+// (animation units) also picks a shape by its outline, which is the only
+// area a stroke-without-fill has.
+func (m *Model) ShapeAt(ax, ay, tol float64) (int, []int, bool) {
+	d := m.StageClipDoc()
+	if d == nil {
+		return 0, nil, false
+	}
 	frame := m.stageFrame()
-	layer := m.SelectedShapeLayer()
-	if layer < 0 {
-		return nil, false
-	}
-	for _, n := range m.ShapeNodes() {
-		if !isShapeGeometry(n.ty) {
+	for _, layer := range d.shapeLayerIndices() {
+		// A layer switched off by opacity is not on the stage, same rule as
+		// the pose pick.
+		if o, ok := d.valueNear(layer, "o", frame); ok && len(o) > 0 && o[0] <= 0 {
 			continue
 		}
-		poly, ok := m.shapeOutline(n.layer, n.path, frame)
-		if !ok || len(poly) < 3 {
-			continue
-		}
-		if pointInPolygonEvenOdd(poly, ax, ay) {
-			return n.path, true
+		for _, n := range d.shapeTree(layer) {
+			if !isShapeGeometry(n.ty) {
+				continue
+			}
+			poly, ok := m.shapeOutline(layer, n.path, frame)
+			if !ok || len(poly) < 2 {
+				continue
+			}
+			if len(poly) >= 3 && pointInPolygonEvenOdd(poly, ax, ay) {
+				return layer, n.path, true
+			}
+			if tol > 0 && distToPolyEdge(poly, ax, ay) <= tol {
+				return layer, n.path, true
+			}
 		}
 	}
-	return nil, false
+	return 0, nil, false
+}
+
+// SelectShape picks one item, switching the panel's layer with it when the
+// pick landed on another layer's artwork.
+func (m *Model) SelectShape(layer int, path []int) {
+	m.selShapeLayer = layer
+	m.SelectShapeNode(path)
+}
+
+// distToPolyEdge is the distance from a point to the nearest edge of a
+// polygon's outline.
+func distToPolyEdge(poly [][2]float64, x, y float64) float64 {
+	best := math.MaxFloat64
+	n := len(poly)
+	for i := range n {
+		a, b := poly[i], poly[(i+1)%n]
+		best = min(best, distToSegment(a, b, x, y))
+	}
+	return best
+}
+
+func distToSegment(a, b [2]float64, x, y float64) float64 {
+	dx, dy := b[0]-a[0], b[1]-a[1]
+	l2 := dx*dx + dy*dy
+	t := 0.0
+	if l2 > 0 {
+		t = min(max(((x-a[0])*dx+(y-a[1])*dy)/l2, 0), 1)
+	}
+	return math.Hypot(x-(a[0]+t*dx), y-(a[1]+t*dy))
 }
 
 // pointInPolygonEvenOdd is the even-odd crossing test, which matches how a
