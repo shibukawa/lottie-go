@@ -20,6 +20,7 @@ numbers: decoded as json.Number, so untouched values re-emit byte for byte; inde
 promotion: keying a static property writes the old value at every pose time first, so the clip stays a pose sequence — the inverse of cmd/lottie-state-editor/genpresets track() collapsing an unchanging track
 dirty: an edit counter separate from the machine-preview generation — ui:editor-shell records that selecting something must not report the preview as edited
 lifecycle: built when a clip becomes the stage clip, dropped on reload, stored back through Bundle.SetAnimation on every edit
+shapes: implemented in cmd/lottie-state-editor/shapedoc.go — a shape layer's nested gr/item tree is addressed as (layer index, item path, member, key), unknown item kinds carried inert, and the layer's shape key times join the pose columns (insert, delete, retime, ease). Path keys carry the topology constraint the flat transform tracks never had: every key of one path property keeps the same vertex count and closure, so vertex insert/delete rewrites every key at once
 ```
 
 Not a new file format: the document is the clip, so data:bundle-layout is
