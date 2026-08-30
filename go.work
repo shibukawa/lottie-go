@@ -6,9 +6,9 @@ go 1.27.0
 
 use (
 	.
-	./editor
+	./cmd/lottie-layout
+	./cmd/lottie-state-editor
 	./examples/motioncomic/gen
-	./layout
 	./plugin/physics/cp
 	./plugin/physics/resolv
 )

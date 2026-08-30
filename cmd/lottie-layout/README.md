@@ -55,7 +55,7 @@ complete worked example — phases, entrance timeline, chained playback,
 text nodes, callbacks — open the game-opening sample:
 
 ```
-go run . ../examples/layout/opening-animation/assets/opening.scene.json
+go run . ../../examples/layout/opening-animation/assets/opening.scene.json
 ```
 
 ## Screenshot mode

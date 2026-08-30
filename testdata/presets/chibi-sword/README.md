@@ -9,13 +9,13 @@ moved by transforms, no shapes, no expressions.
 Open it:
 
 ```bash
-cd editor && go run . ../testdata/presets/chibi-sword/chibi-sword.lottie
+cd cmd/lottie-state-editor && go run . ../../testdata/presets/chibi-sword/chibi-sword.lottie
 ```
 
 Regenerate after editing the generator:
 
 ```bash
-cd editor && go run ./genpresets
+cd cmd/lottie-state-editor && go run ./genpresets
 ```
 
 ## Rig

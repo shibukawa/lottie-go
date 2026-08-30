@@ -4,7 +4,7 @@ type: requirement
 title: Collision Timeline Chart
 ---
 
-Status: implemented (v1, editor/chart.go) — rows per hitbox/window with tag-colored span bars (windows hollow), bar drag moves, edge drag retimes (snap to whole frames, min one frame, resort deferred to release so drag indices hold), header and empty-row press scrubs, every touch pauses first; transport (play/pause, ±1 frame) lives in the chart gutter. Deviations: socket rows omitted — sockets are unkeyed today; the +Rect/+Circle/+Win buttons stay in the strip rather than being replaced by on-chart placement; span geometry stays stepped (the animation-within question remains open). The old span bars on the scrub timeline were removed as redundant. Replace ui:collision-editing's button rows with an After
+Status: implemented (v1, cmd/lottie-state-editor/chart.go) — rows per hitbox/window with tag-colored span bars (windows hollow), bar drag moves, edge drag retimes (snap to whole frames, min one frame, resort deferred to release so drag indices hold), header and empty-row press scrubs, every touch pauses first; transport (play/pause, ±1 frame) lives in the chart gutter. Deviations: socket rows omitted — sockets are unkeyed today; the +Rect/+Circle/+Win buttons stay in the strip rather than being replaced by on-chart placement; span geometry stays stepped (the animation-within question remains open). The old span bars on the scrub timeline were removed as redundant. Replace ui:collision-editing's button rows with an After
 Effects-style time chart: one row per annotation, spans as bars on a frame
 axis, placement by direct manipulation, parameters edited in the selection
 pane (requirement:selection-driven-ui).

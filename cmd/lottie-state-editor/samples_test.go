@@ -11,7 +11,7 @@ import (
 // `go run ./gensamples` if these fail after a change.
 
 func sampleDir(name string) string {
-	return filepath.Join("..", "testdata", "editor", name)
+	return filepath.Join("..", "..", "testdata", "editor", name)
 }
 
 func openSample(t *testing.T, dir, file string) *Model {

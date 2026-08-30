@@ -24,7 +24,7 @@ import (
 const editorExtraKey = "x-lottie-go-editor"
 
 func main() {
-	out := flag.String("out", filepath.Join("..", "testdata", "editor"), "output directory")
+	out := flag.String("out", filepath.Join("..", "..", "testdata", "editor"), "output directory")
 	flag.Parse()
 	if err := run(*out); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -86,7 +86,7 @@ func writeSample(dir, name string, clips map[string]obj, sm *lottie.StateMachine
 	if err := b.SetStateMachine(name, sm); err != nil {
 		return err
 	}
-	b.Manifest().Generator = "lottie-go/editor gensamples"
+	b.Manifest().Generator = "lottie-go/cmd/lottie-state-editor gensamples"
 	if problems := b.Validate(); len(problems) > 0 {
 		return fmt.Errorf("%s: %v", name, problems)
 	}
@@ -293,7 +293,7 @@ authored in this repository, so there is no third-party licensing to track.
 
 Open a bundle with:
 
-    cd editor && go run . ../testdata/editor/character/character.lottie
+    cd cmd/lottie-state-editor && go run . ../../testdata/editor/character/character.lottie
 
 ## Naming
 

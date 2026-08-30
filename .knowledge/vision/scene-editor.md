@@ -17,7 +17,7 @@ scope:
     - game logic; scenes emit named callbacks, the game implements them
     - layout containers, text flow, 9-slice; placement is fixed coordinates
 built_with: system:guigui
-tool_name: layout — ships as the layout/ Go module, a sibling of editor/; scene files save as *.scene.json
+tool_name: layout — ships as the cmd/lottie-layout/ Go module, a sibling of cmd/lottie-state-editor/; scene files save as *.scene.json
 sample: examples/layout/opening-animation — a full game opening (phases, entrance timeline, chained playback, text, callbacks) runnable and editor-openable
 document: data:scene-document
 decided:

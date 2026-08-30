@@ -224,7 +224,7 @@ func TestPoseEditBlockedInViewerMode(t *testing.T) {
 // per layer, and those rows still select and retime.
 func TestPoseFallbackRowsAreUsable(t *testing.T) {
 	m := NewModel()
-	m.Open("../testdata/editor/character/walk-anim.json")
+	m.Open("../../testdata/editor/character/walk-anim.json")
 	if m.StageAnimID() == "" {
 		m.ShowClip(clipRef{Anim: "walk-anim"})
 	}

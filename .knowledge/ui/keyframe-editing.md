@@ -47,7 +47,7 @@ ui:
     kind: list
     id: list.parts
     columns: [part, joint-or-hidden]
-    state: every image layer of the stage clip, front to back; the row note is the editor/genpresets joint, or "hidden" for a part switched off by opacity
+    state: every image layer of the stage clip, front to back; the row note is the cmd/lottie-state-editor/genpresets joint, or "hidden" for a part switched off by opacity
     state: selection is shared with the stage both ways — a row click picks the part, a stage pick highlights and scrolls to the row
     why: a rig layers parts over each other and switches others off, so a stage click can only reach what is on top and visible, which are the parts needing posing least
     action: choosing the Poses tab opens this pane, rather than waiting for something to be selected
@@ -62,9 +62,9 @@ ui:
     state: joint drag picks whether the joint mark carries the part or slides under it
     state: part is the layer's name and is editable; blanks and duplicates are refused, and a socket still bound to the old name is reported
     state: joint is a picker, not a readout — it names the parts as the rig does (arms(near) rather than upper-arm-near), so a pose written in the generator's vocabulary can be followed without translating it. Parts with no joint list by layer name, so it is never a dead end
-    state: ease is a picker over the two curves editor/genpresets writes, and applies to the whole pose column
+    state: ease is a picker over the two curves cmd/lottie-state-editor/genpresets writes, and applies to the whole pose column
     state: values are the ones stored at the key, not interpolated; a static property shows its value with a Keyframe button that promotes it
-    state: rotation in degrees, and the joint row names the editor/genpresets pose field where a rig slot maps to one — this pane is how a probed pose is read back out (requirement:pose-editing role)
+    state: rotation in degrees, and the joint row names the cmd/lottie-state-editor/genpresets pose field where a rig slot maps to one — this pane is how a probed pose is read back out (requirement:pose-editing role)
     state: a hint line carries the rule the stage cannot show — an edit needs a key under the playhead — and names what is missing when nothing is editable
     action: an Undo button takes back the last clip edit, one step per drag
     state: replaces the fixed panel per requirement:selection-driven-ui when a pose or key is selected
@@ -76,7 +76,7 @@ guigui_mapping:
   form.pose: basicwidget.Form, numeric rows via inputrow.go
   tab order: TextInput.OnHandleButtonInput plus Context.SetFocused, the idiom guigui's own examples use
   list.parts: basicwidget.List; EnsureItemVisibleByIndex only when the stage moved the selection, or it would fight a hand-scrolled list
-screenshots: the harness in editor/screenshot.go takes a setup string (clip, tab, key, part), because a pane that only appears under a selection cannot be photographed from a cold start
+screenshots: the harness in cmd/lottie-state-editor/screenshot.go takes a setup string (clip, tab, key, part), because a pane that only appears under a selection cannot be photographed from a cold start
 verified_carried_over:
   - a custom widget must override Measure or the default box clips its Draw
   - a per-frame readout must be written from Tick as well as Build

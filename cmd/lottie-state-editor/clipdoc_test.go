@@ -14,7 +14,7 @@ import (
 
 func readClip(t *testing.T, parts ...string) *clipDoc {
 	t.Helper()
-	path := filepath.Join(append([]string{".."}, parts...)...)
+	path := filepath.Join(append([]string{"..", ".."}, parts...)...)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
@@ -64,7 +64,7 @@ func TestClipDocFallsBackWhenTimesDisagree(t *testing.T) {
 // Re-encoding an untouched clip must reproduce it byte for byte. Presets are
 // committed JSON, so any drift here shows up as diff noise on every save.
 func TestClipDocRoundTripsUnchanged(t *testing.T) {
-	path := filepath.Join("..", "testdata", "presets", "chibi-male", "punch-anim.json")
+	path := filepath.Join("..", "..", "testdata", "presets", "chibi-male", "punch-anim.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)

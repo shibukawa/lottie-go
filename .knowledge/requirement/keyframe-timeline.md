@@ -5,7 +5,7 @@ title: Keyframe Marks on the Timeline
 ---
 
 Status: implemented — the Poses tab of the strip under the stage
-(editor/posechart.go). Show where a clip's keyframes are and make them
+(cmd/lottie-state-editor/posechart.go). Show where a clip's keyframes are and make them
 selectable.
 Today ui:editor-shell's view.timeline draws markers, the played band and the
 playhead, but nothing says a clip holds 5 poses at frames 0/4/7/12/20 — the
@@ -34,7 +34,7 @@ operations:
   swap: trade the pose between the rig's paired limbs, as a pose is inserted or on one already placed. Half a walk cycle is the other half with the legs traded, so the alternative is dialling the same pose in twice
   swap_bound: pairs come from the "-near"/"-far" naming rather than a list, so a rig that grows a slot is paired without being declared. Only properties keyed on both sides trade — a static attach point is rig spec, and trading it would detach the pair. Draw order is untouched; which limb is in front is its own edit
   navigate: jump to the previous or next key — the frames between poses hold nothing to edit
-  ease: per pose, the whole column at once (editor/genpresets 0.4/0.6 against 0.5/0.5). A body arriving softly while its arm arrives linearly reads as a mistake
+  ease: per pose, the whole column at once (cmd/lottie-state-editor/genpresets 0.4/0.6 against 0.5/0.5). A body arriving softly while its arm arrives linearly reads as a mistake
   length: the clip's out point, set together with the layers' own or every part would vanish at the old end; refuses to cut past the last pose
 non_goals:
   - easing curve shapes beyond the generator's two; the pair covers what the presets use

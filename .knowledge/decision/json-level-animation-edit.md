@@ -18,7 +18,7 @@ how:
   - each edit rewrites the JSON, calls SetAnimation, then re-Decodes for the preview, so the stage is drawn by the real renderer
 rejected:
   mutable_core: Animation.SetKeyframe pushes authoring into the runtime and still needs a raw fallback for unmodeled members
-  generator_source: editing editor/genpresets reaches only in-repo presets, never a bundle copied into a game (requirement:pose-editing open)
+  generator_source: editing cmd/lottie-state-editor/genpresets reaches only in-repo presets, never a bundle copied into a game (requirement:pose-editing open)
 stage: an edit has to reach the picture or the drag reads as broken, which is exactly how it read when it did not. A clip on stage is rebuilt in place, holding its frame. A running state machine cannot be rebuilt that way — it owns a player per state and keeps the Animation it decoded when it started, and restarting it on every mouse move is worse than useless — so selecting a pose key switches the stage to the clip itself (requirement:pose-editing park), which a parked playhead needs anyway
 cost: one re-encode and re-Decode per edit. Preset clips are small — 15 layers, 7 key times at most (concept:pose-sequence-clip) — so measure before caching harder; metric:performance-targets budgets the runtime, not the editor
 ```

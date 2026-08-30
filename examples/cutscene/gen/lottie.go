@@ -1,6 +1,6 @@
 package main
 
-// Minimal Lottie document builders, in the style of editor/gensamples: the
+// Minimal Lottie document builders, in the style of cmd/lottie-state-editor/gensamples: the
 // sample is generated rather than downloaded so its licensing is
 // unambiguous. These extend the editor's set with what a cutscene needs —
 // precomps, solids, parenting, bezier paths, stars and strokes.

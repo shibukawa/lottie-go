@@ -197,7 +197,7 @@ sm.OnMarker(func(state string, m lottie.Marker) { play(state, m.Name) })
 A scene arranges many animations and state machines into one screen — a
 game scene or a GUI menu — with positions, overlap, focus order, and input
 bindings. It is a standalone JSON file (`*.scene.json`) referencing one or
-more bundles, authored in the `layout/` tool and played back with the same
+more bundles, authored in the `cmd/lottie-layout/` tool and played back with the same
 runtime:
 
 ```go
@@ -286,10 +286,11 @@ Image and font files are referenced beside the bundles and load through
 image formats come from the binary's blank imports (`image/png`,
 `image/jpeg`, `golang.org/x/image/webp`), as with every image asset.
 
-The layout tool lives in `layout/` (a separate module, like `editor/`):
+The layout tool lives in `cmd/lottie-layout/` (a separate module, like
+`cmd/lottie-state-editor/`):
 
 ```
-go run ./layout my-menu.scene.json
+go run ./cmd/lottie-layout my-menu.scene.json
 ```
 
 It places clips, machines, images, and text from referenced files on a
@@ -375,7 +376,7 @@ packages the whole workflow — rig contract, clip and state-machine
 conventions, the supported subset — as an agent skill: copy it into your
 project's `.claude/skills/` (or point your coding agent at it) and ask
 for "a samurai version of this character" or "a livelier walk". Presets
-regenerate from source with `cd editor && go run ./genpresets`.
+regenerate from source with `cd cmd/lottie-state-editor && go run ./genpresets`.
 
 ## Collision plugins
 

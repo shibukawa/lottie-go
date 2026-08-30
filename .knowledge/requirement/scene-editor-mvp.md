@@ -4,7 +4,7 @@ type: requirement
 title: Scene Editor MVP Scope
 ---
 
-First shippable version of vision:scene-editor. Status: must-list implemented as the `layout/` Go module (tool name layout), a sibling of `editor/` in the workspace; should-list open.
+First shippable version of vision:scene-editor. Status: must-list implemented as the `cmd/lottie-layout/` Go module (tool name layout), a sibling of `cmd/lottie-state-editor/` in the workspace; should-list open.
 
 ```yaml
 must:

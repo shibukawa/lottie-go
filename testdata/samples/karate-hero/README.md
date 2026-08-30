@@ -47,4 +47,4 @@ go run github.com/shibukawa/lottie-go/cmd/lottierepack -dir work -out karate-her
 go run github.com/shibukawa/lottie-go/cmd/lottiecheck karate-hero.lottie
 ```
 
-Watch it live while editing: `cd editor && go run . -viewer ../testdata/samples/karate-hero/karate-hero.lottie`.
+Watch it live while editing: `cd cmd/lottie-state-editor && go run . -viewer ../testdata/samples/karate-hero/karate-hero.lottie`.

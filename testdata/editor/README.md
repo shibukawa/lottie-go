@@ -5,7 +5,7 @@ authored in this repository, so there is no third-party licensing to track.
 
 Open a bundle with:
 
-    cd editor && go run . ../testdata/editor/character/character.lottie
+    cd cmd/lottie-state-editor && go run . ../../testdata/editor/character/character.lottie
 
 ## Naming
 

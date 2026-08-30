@@ -4,7 +4,7 @@ type: ui
 title: Layout Editor Main Window
 ---
 
-Single window over system:guigui, the `layout/` module. Serves requirement:scene-editor-mvp; follows ui:editor-shell conventions (env-published model, generation state keys, zenity dialogs on a goroutine, screenshot via LAYOUT_SCREENSHOT).
+Single window over system:guigui, the `cmd/lottie-layout/` module. Serves requirement:scene-editor-mvp; follows ui:editor-shell conventions (env-published model, generation state keys, zenity dialogs on a goroutine, screenshot via LAYOUT_SCREENSHOT).
 
 ```yaml
 ui:

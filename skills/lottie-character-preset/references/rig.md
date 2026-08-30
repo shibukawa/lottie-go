@@ -83,7 +83,7 @@ a blank-imported WebP decoder handle: PNG and WebP are both fine).
 
 The preset's own art is authored as string art — one character per
 pixel, scaled up — which any agent can write and any diff can review.
-The pattern (from the generator, `editor/genpresets/parts.go`):
+The pattern (from the generator, `cmd/lottie-state-editor/genpresets/parts.go`):
 
 ```go
 art := []string{ // '.' = transparent, letters = palette entries

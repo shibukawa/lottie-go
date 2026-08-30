@@ -8,7 +8,7 @@ Built with [Guigui](https://github.com/guigui-gui/guigui). It is a separate
 Go module, so the `lottie-go` library itself never pulls in a GUI toolkit.
 
 ```bash
-cd editor && go run . ../testdata/editor/character/character.lottie
+cd cmd/lottie-state-editor && go run . ../../testdata/editor/character/character.lottie
 ```
 
 The path argument is optional; **New…**, **Open…**, **Save As…**, and
@@ -20,7 +20,7 @@ opens the result in a NEW editor window, leaving the current one alone. A
 template is written to the chosen path immediately; an empty bundle
 cannot exist as a file (the format wants at least one animation), so that
 window starts blank and its first Save writes the chosen path. Templates
-are embedded at build time from `editor/templates/`, which
+are embedded at build time from `cmd/lottie-state-editor/templates/`, which
 `go run ./genpresets` keeps in sync with the presets.
 
 Every tab carries the same transport — play/pause, −1, +1 — and the row
@@ -165,14 +165,14 @@ clickable for exactly that reason. It is the intended way to watch AI
 edits land live:
 
 ```bash
-cd editor && go run . -viewer ../testdata/presets/chibi-male/chibi-male.lottie
+cd cmd/lottie-state-editor && go run . -viewer ../../testdata/presets/chibi-male/chibi-male.lottie
 ```
 
 The editor is its own module and depends on a released `lottie-go`, so it
 installs like any other command:
 
 ```bash
-go run github.com/shibukawa/lottie-go/editor@latest
+go run github.com/shibukawa/lottie-go/cmd/lottie-state-editor@latest
 ```
 
 The repository root carries a `go.work` that points the editor at the
@@ -192,7 +192,7 @@ a marker-segmented spritesheet, and a combo whose clips chain end to end.
 See its README for what each one demonstrates. Regenerate them with:
 
 ```bash
-cd editor && go run ./gensamples
+cd cmd/lottie-state-editor && go run ./gensamples
 ```
 
 They are generated rather than downloaded so there is no third-party

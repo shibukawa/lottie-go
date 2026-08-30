@@ -17,7 +17,7 @@ import (
 // `go run ./genpresets` if these fail after a change.
 
 func presetPath(name string) string {
-	return filepath.Join("..", "testdata", "presets", name, name+".lottie")
+	return filepath.Join("..", "..", "testdata", "presets", name, name+".lottie")
 }
 
 // settle ticks until the machine reaches want, for following one-shot

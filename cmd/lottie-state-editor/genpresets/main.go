@@ -23,7 +23,7 @@ import (
 )
 
 func main() {
-	out := flag.String("out", filepath.Join("..", "testdata", "presets"), "output directory")
+	out := flag.String("out", filepath.Join("..", "..", "testdata", "presets"), "output directory")
 	flag.Parse()
 	if err := run(*out); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -36,7 +36,7 @@ func run(out string) error {
 	// elsewhere (genpresets/ itself is the classic slip) would silently
 	// create a second testdata tree, so refuse unless the target exists.
 	if _, err := os.Stat(out); err != nil {
-		return fmt.Errorf("output directory %s not found: run from the editor directory (go run ./genpresets) or pass -out", out)
+		return fmt.Errorf("output directory %s not found: run from cmd/lottie-state-editor (go run ./genpresets) or pass -out", out)
 	}
 	for _, p := range presets() {
 		if err := writePreset(filepath.Join(out, p.name), p); err != nil {
@@ -115,7 +115,7 @@ func writePreset(dir string, p preset) error {
 	if err := b.SetStateMachine(name, p.machine); err != nil {
 		return err
 	}
-	b.Manifest().Generator = "lottie-go/editor genpresets"
+	b.Manifest().Generator = "lottie-go/cmd/lottie-state-editor genpresets"
 	if problems := b.Validate(); len(problems) > 0 {
 		return fmt.Errorf("%s: %v", name, problems)
 	}

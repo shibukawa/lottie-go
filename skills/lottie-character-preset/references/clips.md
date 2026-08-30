@@ -195,7 +195,7 @@ Conventions to preserve when wiring new states:
 - New event inputs must be declared in `inputs` or `Fire` does nothing.
 
 After editing a machine, repack and run the editor
-(`cd editor && go run . yourfile.lottie`) if a human wants to try the
+(`cd cmd/lottie-state-editor && go run . yourfile.lottie`) if a human wants to try the
 wiring interactively; `lottiecheck` verifies references (a state naming a
 missing animation fails the bundle validation).
 
@@ -205,5 +205,5 @@ missing animation fails the bundle validation).
 edit, look at the frames around your changed keyframes specifically —
 e.g. after sharpening a punch, read the strike-frame PNG and confirm the
 arm is extended there, not one frame later. If a preset's generator is
-available (in-repo work), `editor/genpresets` regenerates presets from
+available (in-repo work), `cmd/lottie-state-editor/genpresets` regenerates presets from
 pose data; for dumped bundles the JSON is the source of truth.

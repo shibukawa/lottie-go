@@ -1,4 +1,4 @@
-module github.com/shibukawa/lottie-go/editor
+module github.com/shibukawa/lottie-go/cmd/lottie-state-editor
 
 go 1.27.0
 
@@ -15,8 +15,8 @@ require (
 )
 
 replace (
-	github.com/shibukawa/lottie-go/plugin/physics/cp => ../plugin/physics/cp
-	github.com/shibukawa/lottie-go/plugin/physics/resolv => ../plugin/physics/resolv
+	github.com/shibukawa/lottie-go/plugin/physics/cp => ../../plugin/physics/cp
+	github.com/shibukawa/lottie-go/plugin/physics/resolv => ../../plugin/physics/resolv
 )
 
 require (

@@ -19,10 +19,10 @@ consequence:
   - a keyframe tick is a whole-body pose, not a per-property key; the timeline shows poses, not a dense property grid
   - selecting a tick selects a pose; an edit writes one time across many layers
   - no key insertion on the common path — the time already exists on every animated track
-generator_origin: editor/genpresets clips.go authors []kf{t, pose, ease}; track() emits static when every pose agrees and keyframed otherwise, so synchronized times are structural, not coincidence
+generator_origin: cmd/lottie-state-editor/genpresets clips.go authors []kf{t, pose, ease}; track() emits static when every pose agrees and keyframed otherwise, so synchronized times are structural, not coincidence
 rig_semantics: the generator's pose fields (armN, elbowF, blade) are Go-side only; in JSON the same joints are ks.r on named layers (upper-arm-near, forearm-far, weapon), so layer names are the rig contract an editor must read
 holds: flipTrack writes hold keyframes for discrete swaps (limb sides trading, view drawings); they toggle and must not read as draggable
-serialization: generated clips are key-sorted, because editor/genpresets builds them from map[string]any; a map round-trip reproduces that order, so rewriting a preset produces no ordering diff
+serialization: generated clips are key-sorted, because cmd/lottie-state-editor/genpresets builds them from map[string]any; a map round-trip reproduces that order, so rewriting a preset produces no ordering diff
 ```
 
 Imported clips need not share this. testdata/editor/* — the editor's own

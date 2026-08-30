@@ -205,7 +205,7 @@ func TestOnionGhostsStayOffWhilePlaying(t *testing.T) {
 // it still has drawings either side of the playhead.
 func TestOnionGhostsWorkWithoutAPoseRow(t *testing.T) {
 	m := NewModel()
-	m.Open("../testdata/editor/character/walk-anim.json")
+	m.Open("../../testdata/editor/character/walk-anim.json")
 	m.ShowClip(clipRef{Anim: "walk-anim"})
 	m.SetCollisionTab(colPoses)
 	m.SetOnionSkin(true)

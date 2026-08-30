@@ -25,7 +25,7 @@ rig:
   - part spec per slot: canvas size + anchor point, fixed; the contract art swaps must honor
   - template art is a deliberate placeholder: one flat color per slot, NO decorations (collar/placket/buckle etc.) - decoration belongs to customized variants; gender/character lives in motion + swapped art
 status:
-  - chibi-male shipped: testdata/presets/chibi-male, generator editor/genpresets, pose-sequence authoring, preview.png contact sheet, regression tests in editor/presets_test.go
+  - chibi-male shipped: testdata/presets/chibi-male, generator cmd/lottie-state-editor/genpresets, pose-sequence authoring, preview.png contact sheet, regression tests in cmd/lottie-state-editor/presets_test.go
   - Lottie has no mesh warp; "morphing" = transform animation + opacity/time swaps between part variants
 authoring:
   - part images embedded in bundle (data:bundle-layout); WebP decodes via blank import in binaries

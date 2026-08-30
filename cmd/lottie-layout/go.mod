@@ -1,4 +1,4 @@
-module github.com/shibukawa/lottie-go/layout
+module github.com/shibukawa/lottie-go/cmd/lottie-layout
 
 go 1.27.0
 
