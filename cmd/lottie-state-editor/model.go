@@ -518,6 +518,77 @@ func (m *Model) DuplicateClip(id string) string {
 	return newID
 }
 
+// RenameClip changes a clip's id and repoints everything that names it:
+// every machine state playing it, the manifest's initial animation, and
+// the clip's hitbox track. Ids are how states and games address a clip,
+// so a rename is a real edit, refused for blanks and duplicates.
+func (m *Model) RenameClip(old, name string) {
+	if m.blockEdit() {
+		return
+	}
+	name = strings.TrimSpace(name)
+	if name == "" || name == old {
+		return
+	}
+	if slices.Contains(m.bundle.AnimationIDs(), name) {
+		m.setStatus("a clip named %q already exists", name)
+		m.generation++
+		return
+	}
+	data, ok := m.bundle.AnimationJSON(old)
+	if !ok {
+		return
+	}
+	if err := m.bundle.SetAnimation(name, bytes.Clone(data)); err != nil {
+		m.setStatus("cannot rename clip: %v", err)
+		m.generation++
+		return
+	}
+	if t, err := lottieresolv.Load(m.bundle, old); err == nil && t != nil {
+		if err := lottieresolv.Store(m.bundle, name, t); err != nil {
+			m.setStatus("renamed %q but not its hitboxes: %v", old, err)
+		}
+	}
+	lottieresolv.Remove(m.bundle, old)
+	m.bundle.RemoveAnimation(old)
+	// Every machine that plays the clip follows, the in-memory selected one
+	// included.
+	for _, mid := range m.bundle.StateMachineIDs() {
+		sm := m.machine
+		if mid != m.machineID || sm == nil {
+			loaded, err := m.bundle.StateMachine(mid)
+			if err != nil {
+				continue
+			}
+			sm = loaded
+		}
+		changed := false
+		for i := range sm.States {
+			if sm.States[i].Animation == old {
+				sm.States[i].Animation = name
+				changed = true
+			}
+		}
+		if changed {
+			if err := m.bundle.SetStateMachine(mid, sm); err != nil {
+				m.setStatus("renamed %q but machine %q still names it: %v", old, mid, err)
+			}
+		}
+	}
+	if in := m.bundle.Manifest().Initial; in != nil && in.Animation == old {
+		in.Animation = name
+	}
+	delete(m.trackCache, old)
+	delete(m.trackCache, name)
+	delete(m.clipDocs, old)
+	if m.previewClip.Anim == old {
+		m.previewClip.Anim = name
+	}
+	m.setStatus("renamed clip %q to %q", old, name)
+	m.docGen++
+	m.generation++
+}
+
 // Sources lists the disk files behind the current document, oldest first.
 func (m *Model) Sources() []string { return m.sources }
 

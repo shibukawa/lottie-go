@@ -31,6 +31,11 @@ the Shapes tab open, ready to draw into. The Poses tab's **length**
 field grows it, and a state can play it like any imported clip. **Copy**
 duplicates the selected clip under a fresh id, hitbox track included —
 the start of a variant: same rig, same keys, retuned from there.
+Both panes that edit a staged clip — Poses and Shapes — carry a **Clip**
+header at the top of the right pane: the clip's id (renaming repoints
+every state that plays it, the manifest's initial animation, and its
+hitbox track — blanks and taken names are refused) and what the clip is.
+The element-specific sections follow below it.
 
 Every tab carries the same transport — play/pause, −1, +1 — and the row
 above the tab bar holds what describes the stage rather than any one tab:

@@ -774,6 +774,56 @@ func TestDuplicateClipCopiesBytesAndHitboxes(t *testing.T) {
 	}
 }
 
+func TestRenameClipRepointsEverything(t *testing.T) {
+	m := NewModel()
+	m.Open(presetPath("chibi-male"))
+	if m.Bundle() == nil {
+		t.Fatalf("open: %s", m.Status())
+	}
+	m.ShowClip(clipRef{Anim: "punch-anim"})
+	hadTrack := false
+	if _, err := lottieresolv.Load(m.Bundle(), "punch-anim"); err == nil {
+		hadTrack = true
+	}
+	m.RenameClip("punch-anim", "jab-anim")
+
+	if slices.Contains(m.Bundle().AnimationIDs(), "punch-anim") {
+		t.Fatalf("old id still present")
+	}
+	if !slices.Contains(m.Bundle().AnimationIDs(), "jab-anim") {
+		t.Fatalf("new id missing")
+	}
+	if m.PreviewClip().Anim != "jab-anim" {
+		t.Fatalf("stage did not follow the rename: %q", m.PreviewClip().Anim)
+	}
+	// Every state that played the clip now names the new id.
+	for _, mid := range m.Bundle().StateMachineIDs() {
+		sm, err := m.Bundle().StateMachine(mid)
+		if err != nil {
+			t.Fatalf("machine %q: %v", mid, err)
+		}
+		for _, st := range sm.States {
+			if st.Animation == "punch-anim" {
+				t.Fatalf("machine %q state %q still plays the old id", mid, st.Name)
+			}
+		}
+	}
+	if hadTrack {
+		if _, err := lottieresolv.Load(m.Bundle(), "jab-anim"); err != nil {
+			t.Fatalf("hitbox track did not follow: %v", err)
+		}
+	}
+	// The bundle still validates — no dangling animation references.
+	for _, p := range m.Bundle().Validate() {
+		t.Fatalf("validation after rename: %v", p)
+	}
+	// A duplicate name refuses.
+	m.RenameClip("jab-anim", "idle-anim")
+	if !slices.Contains(m.Bundle().AnimationIDs(), "jab-anim") {
+		t.Fatalf("rename onto a taken id must refuse")
+	}
+}
+
 func TestNewClipIsBlankAndDrawable(t *testing.T) {
 	// From an empty bundle: defaults, on stage, Shapes tab, layer picked.
 	m := NewModel()
