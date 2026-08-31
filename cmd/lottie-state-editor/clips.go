@@ -34,6 +34,7 @@ type clipsPane struct {
 
 	clipsTitle basicwidget.Text
 	clipList   basicwidget.List[clipRef]
+	newClipBtn basicwidget.Button
 	importBtn  basicwidget.Button
 	removeBtn  basicwidget.Button
 
@@ -104,7 +105,7 @@ func (c *clipsPane) Build(context *guigui.Context, adder *guigui.ChildAdder) err
 		return nil
 	}
 	for _, w := range []guigui.Widget{
-		&c.clipsTitle, &c.clipList, &c.importBtn, &c.removeBtn,
+		&c.clipsTitle, &c.clipList, &c.newClipBtn, &c.importBtn, &c.removeBtn,
 		&c.machinesTitle, &c.machineList,
 		&c.newMachineBtn, &c.delMachineBtn,
 		&c.ioTitle, &c.tabs,
@@ -175,6 +176,15 @@ func (c *clipsPane) buildClips(context *guigui.Context, m *Model) {
 		c.selectedClip = clipRef{}
 	})
 
+	// A clip does not have to come from a file: New starts a blank vector
+	// clip to draw into, on stage with the Shapes tab open.
+	c.newClipBtn.SetText("New")
+	c.newClipBtn.OnDown(func(context *guigui.Context) {
+		if id := m.NewClip(); id != "" {
+			c.selectedClip = clipRef{Anim: id}
+		}
+	})
+	context.SetEnabled(&c.newClipBtn, !m.Viewer())
 	c.importBtn.SetText("Import…")
 	c.importBtn.OnDown(func(context *guigui.Context) { m.BrowseImport() })
 	context.SetEnabled(&c.importBtn, !m.DialogOpen())
@@ -495,6 +505,7 @@ func (c *clipsPane) Layout(context *guigui.Context, widgetBounds *guigui.WidgetB
 
 	c.importRowItems = slices.Delete(c.importRowItems, 0, len(c.importRowItems))
 	c.importRowItems = append(c.importRowItems,
+		guigui.LinearLayoutItem{Widget: &c.newClipBtn, Size: guigui.FlexibleSize(1)},
 		guigui.LinearLayoutItem{Widget: &c.importBtn, Size: guigui.FlexibleSize(1)},
 		guigui.LinearLayoutItem{Widget: &c.removeBtn, Size: guigui.FlexibleSize(1)},
 	)

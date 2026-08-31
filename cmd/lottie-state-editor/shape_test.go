@@ -731,6 +731,60 @@ func TestShapeVertexGhostsFollowOnionSkin(t *testing.T) {
 	}
 }
 
+func TestNewClipIsBlankAndDrawable(t *testing.T) {
+	// From an empty bundle: defaults, on stage, Shapes tab, layer picked.
+	m := NewModel()
+	id := m.NewClip()
+	if id != "clip" {
+		t.Fatalf("id = %q", id)
+	}
+	if m.PreviewClip().Anim != id || m.CollisionTab() != colShapes {
+		t.Fatalf("new clip not staged on the Shapes tab")
+	}
+	if m.SelectedShapeLayer() != 0 {
+		t.Fatalf("blank layer not selected")
+	}
+	anim, err := m.Bundle().Animation(id)
+	if err != nil {
+		t.Fatalf("new clip does not decode: %v", err)
+	}
+	if u := anim.UnsupportedFeatures(); len(u) > 0 {
+		t.Fatalf("new clip carries unsupported features: %v", u)
+	}
+	// It is immediately drawable: drop a primitive and re-decode.
+	m.PausePreview()
+	m.DropShapePrimitive(toolRect, 128, 128)
+	data, _ := m.Bundle().AnimationJSON(id)
+	d, err := newClipDoc(id, data)
+	if err != nil {
+		t.Fatalf("clip after drawing: %v", err)
+	}
+	nodes := d.shapeTree(0)
+	if len(nodes) == 0 || nodes[1].ty != "rc" {
+		t.Fatalf("drawing did not land: %+v", nodes)
+	}
+	rc, _ := d.shapeItem(0, []int{0, 0})
+	// The layer origin sits at the canvas center, so a click at the middle
+	// lands at (0, 0) in layer space.
+	if p, ok := propStaticObj(rc, "p"); !ok || p[0] != 0 || p[1] != 0 {
+		t.Fatalf("rect center = %v", p)
+	}
+
+	// In a bundle with clips, the new one follows the first clip's size
+	// and rate and takes a fresh id.
+	m2 := NewModel()
+	m2.Open("../../examples/state-editor/character/character.lottie")
+	id2 := m2.NewClip()
+	anim2, err := m2.Bundle().Animation(id2)
+	if err != nil {
+		t.Fatalf("second clip: %v", err)
+	}
+	w, h := anim2.Size()
+	if w != 200 || h != 200 {
+		t.Fatalf("size = %dx%d, want the bundle's 200x200", w, h)
+	}
+}
+
 func TestVertexTangentSwitch(t *testing.T) {
 	m := shapeModel(t)
 	m.SelectShapeNode([]int{2}) // the zig path: all corners

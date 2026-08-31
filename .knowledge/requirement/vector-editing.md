@@ -57,6 +57,7 @@ deviations:
   - the stage gained its first keyboard path (user 2026-08-31): Delete/Backspace removes the selected vertex or item, gated on the stage holding focus — a stage click grants it, a text field takes it back — so typing never deletes
   - promotion generalized past posed clips (user-caught bug 2026-08-31: dragging at one key of an unposed clip moved every key, because the static write applied clip-wide): a static member edited on a tick of its layer's row is keyed at that row's ticks and the edit lands at the parked one alone; paths promote the same way. Off-tick edits stay static and clip-wide
   - onion skin extends to path vertices: the selected path's points at the neighbouring keys draw as tinted dots with a hair from each current vertex to its ghost — the rig overlay's answer for paths (user 2026-08-31)
+  - clips can start blank (user 2026-08-31): New in the Clips pane creates an empty vector clip in the bundle — one shape layer, origin centered, one second, size/rate from the bundle's first clip — staged with the Shapes tab open. Loosens the policy:editor-out-of-scope "import them already cut" line for the drawn-from-scratch case
   - the box corner markers hide while an animated shape's playhead is between keys (user 2026-08-30): a grip must not offer a drag the park rule would refuse
   - the radial gradient's focal point (h/a) edits numerically, not by a stage marker yet
   - gradient alpha stops are preserved and honored but not editable on the ramp; color stops only

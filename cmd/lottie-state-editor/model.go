@@ -431,6 +431,60 @@ func (m *Model) ImportClip(path string) {
 	m.generation++
 }
 
+// NewClip creates a blank vector clip in the bundle and puts it on stage
+// with the Shapes tab open, ready to draw into: one empty shape layer
+// whose origin sits at the canvas center, one second long. Size and frame
+// rate follow the bundle's first clip, so a new clip drops into an
+// existing set without a mismatch.
+func (m *Model) NewClip() string {
+	if m.blockEdit() {
+		return ""
+	}
+	w, h, fr := 256.0, 256.0, 30.0
+	if ids := m.bundle.AnimationIDs(); len(ids) > 0 {
+		if anim, err := m.bundle.Animation(ids[0]); err == nil {
+			aw, ah := anim.Size()
+			w, h = float64(aw), float64(ah)
+			if f := anim.FrameRate(); f > 0 {
+				fr = f
+			}
+		}
+	}
+	op := fr // one second; the Poses tab's length field grows it
+	id := uniqueID("clip", m.bundle.AnimationIDs())
+	doc := map[string]any{
+		"v": "5.7.1", "nm": id, "fr": fr, "ip": 0.0, "op": op,
+		"w": w, "h": h,
+		"layers": []any{map[string]any{
+			"ty": 4, "nm": "shapes", "ind": 1,
+			"ip": 0.0, "op": op, "st": 0.0, "sr": 1,
+			"ks": map[string]any{
+				"a": staticVec(0, 0, 0), "p": staticVec(w/2, h/2, 0),
+				"s": staticVec(100, 100, 100), "r": staticProp(0.0), "o": staticProp(100.0),
+			},
+			"shapes": []any{},
+		}},
+	}
+	data, err := json.MarshalIndent(doc, "", " ")
+	if err != nil {
+		m.setStatus("cannot build clip: %v", err)
+		m.generation++
+		return ""
+	}
+	if err := m.bundle.SetAnimation(id, data); err != nil {
+		m.setStatus("cannot create clip: %v", err)
+		m.generation++
+		return ""
+	}
+	m.docGen++
+	m.ShowClip(clipRef{Anim: id})
+	m.SetCollisionTab(colShapes)
+	m.SelectShapeLayer(0)
+	m.setStatus("created clip %q — draw into its %q layer", id, "shapes")
+	m.generation++
+	return id
+}
+
 // Sources lists the disk files behind the current document, oldest first.
 func (m *Model) Sources() []string { return m.sources }
 

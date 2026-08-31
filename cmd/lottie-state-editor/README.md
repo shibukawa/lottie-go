@@ -23,6 +23,13 @@ window starts blank and its first Save writes the chosen path. Templates
 are embedded at build time from `cmd/lottie-state-editor/templates/`, which
 `go run ./genpresets` keeps in sync with the presets.
 
+A clip does not have to come from a file either: **New** in the Clips
+pane creates a blank vector clip inside the bundle — one empty shape
+layer, its origin at the canvas center, one second long, following the
+bundle's first clip for size and frame rate — and puts it on stage with
+the Shapes tab open, ready to draw into. The Poses tab's **length**
+field grows it, and a state can play it like any imported clip.
+
 Every tab carries the same transport — play/pause, −1, +1 — and the row
 above the tab bar holds what describes the stage rather than any one tab:
 an **autoplay** toggle (on by default), an **onion skin** toggle, a zoom
