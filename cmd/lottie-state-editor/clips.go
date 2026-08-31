@@ -35,6 +35,7 @@ type clipsPane struct {
 	clipsTitle basicwidget.Text
 	clipList   basicwidget.List[clipRef]
 	newClipBtn basicwidget.Button
+	dupClipBtn basicwidget.Button
 	importBtn  basicwidget.Button
 	removeBtn  basicwidget.Button
 
@@ -105,7 +106,7 @@ func (c *clipsPane) Build(context *guigui.Context, adder *guigui.ChildAdder) err
 		return nil
 	}
 	for _, w := range []guigui.Widget{
-		&c.clipsTitle, &c.clipList, &c.newClipBtn, &c.importBtn, &c.removeBtn,
+		&c.clipsTitle, &c.clipList, &c.newClipBtn, &c.dupClipBtn, &c.importBtn, &c.removeBtn,
 		&c.machinesTitle, &c.machineList,
 		&c.newMachineBtn, &c.delMachineBtn,
 		&c.ioTitle, &c.tabs,
@@ -185,6 +186,18 @@ func (c *clipsPane) buildClips(context *guigui.Context, m *Model) {
 		}
 	})
 	context.SetEnabled(&c.newClipBtn, !m.Viewer())
+	// Copy duplicates the selected clip under a fresh id — the start of a
+	// variant: same rig, same keys, retuned from there.
+	c.dupClipBtn.SetText("Copy")
+	c.dupClipBtn.OnDown(func(context *guigui.Context) {
+		if c.selectedClip.Anim == "" {
+			return
+		}
+		if id := m.DuplicateClip(c.selectedClip.Anim); id != "" {
+			c.selectedClip = clipRef{Anim: id}
+		}
+	})
+	context.SetEnabled(&c.dupClipBtn, c.selectedClip.Anim != "" && !m.Viewer())
 	c.importBtn.SetText("Import…")
 	c.importBtn.OnDown(func(context *guigui.Context) { m.BrowseImport() })
 	context.SetEnabled(&c.importBtn, !m.DialogOpen())
@@ -506,6 +519,7 @@ func (c *clipsPane) Layout(context *guigui.Context, widgetBounds *guigui.WidgetB
 	c.importRowItems = slices.Delete(c.importRowItems, 0, len(c.importRowItems))
 	c.importRowItems = append(c.importRowItems,
 		guigui.LinearLayoutItem{Widget: &c.newClipBtn, Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Widget: &c.dupClipBtn, Size: guigui.FlexibleSize(1)},
 		guigui.LinearLayoutItem{Widget: &c.importBtn, Size: guigui.FlexibleSize(1)},
 		guigui.LinearLayoutItem{Widget: &c.removeBtn, Size: guigui.FlexibleSize(1)},
 	)

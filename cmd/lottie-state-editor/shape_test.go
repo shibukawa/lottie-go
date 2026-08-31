@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"slices"
 	"strings"
 	"testing"
+
+	lottieresolv "github.com/shibukawa/lottie-go/plugin/physics/resolv"
 )
 
 // Shape edits go all the way to the bundle bytes, so these tests re-parse
@@ -728,6 +731,46 @@ func TestShapeVertexGhostsFollowOnionSkin(t *testing.T) {
 	// Key 20's first vertex sits at layer (-50, 0), the layer at (100, 100).
 	if len(ghosts[0].pts) != 4 || ghosts[0].pts[0] != [2]float64{50, 100} {
 		t.Fatalf("ghost points = %v", ghosts[0].pts)
+	}
+}
+
+func TestDuplicateClipCopiesBytesAndHitboxes(t *testing.T) {
+	m := NewModel()
+	m.Open(presetPath("chibi-male"))
+	if m.Bundle() == nil {
+		t.Fatalf("open: %s", m.Status())
+	}
+	src := "punch-anim"
+	orig, ok := m.Bundle().AnimationJSON(src)
+	if !ok {
+		t.Fatalf("no %q in the preset", src)
+	}
+	id := m.DuplicateClip(src)
+	if id != src+"2" {
+		t.Fatalf("copy id = %q", id)
+	}
+	copied, ok := m.Bundle().AnimationJSON(id)
+	if !ok || !bytes.Equal(orig, copied) {
+		t.Fatalf("copy differs from the original (ok=%v)", ok)
+	}
+	if m.PreviewClip().Anim != id {
+		t.Fatalf("copy not staged")
+	}
+	// The clip's hitbox track travels with it when it has one.
+	if _, err := lottieresolv.Load(m.Bundle(), src); err == nil {
+		if _, err := lottieresolv.Load(m.Bundle(), id); err != nil {
+			t.Fatalf("hitbox track not copied: %v", err)
+		}
+	}
+	// Editing the copy leaves the original alone.
+	m.SetCollisionTab(colShapes)
+	m.PausePreview()
+	if times := m.PoseTimes(); len(times) > 0 {
+		m.SelectPoseKey(times[0], -1)
+	}
+	after, _ := m.Bundle().AnimationJSON(src)
+	if !bytes.Equal(orig, after) {
+		t.Fatalf("staging the copy touched the original")
 	}
 }
 

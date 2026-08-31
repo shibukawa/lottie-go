@@ -28,7 +28,9 @@ pane creates a blank vector clip inside the bundle — one empty shape
 layer, its origin at the canvas center, one second long, following the
 bundle's first clip for size and frame rate — and puts it on stage with
 the Shapes tab open, ready to draw into. The Poses tab's **length**
-field grows it, and a state can play it like any imported clip.
+field grows it, and a state can play it like any imported clip. **Copy**
+duplicates the selected clip under a fresh id, hitbox track included —
+the start of a variant: same rig, same keys, retuned from there.
 
 Every tab carries the same transport — play/pause, −1, +1 — and the row
 above the tab bar holds what describes the stage rather than any one tab:

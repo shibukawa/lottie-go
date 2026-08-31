@@ -485,6 +485,39 @@ func (m *Model) NewClip() string {
 	return id
 }
 
+// DuplicateClip copies an existing clip under a fresh id and puts the
+// copy on stage — the starting point for a variant: same rig, same keys,
+// retuned from there. The clip's hitbox track travels with it; the cp
+// body and the sockets are bundle-wide and already apply.
+func (m *Model) DuplicateClip(id string) string {
+	if m.blockEdit() {
+		return ""
+	}
+	data, ok := m.bundle.AnimationJSON(id)
+	if !ok {
+		m.setStatus("no clip %q to copy", id)
+		m.generation++
+		return ""
+	}
+	newID := uniqueID(id, m.bundle.AnimationIDs())
+	if err := m.bundle.SetAnimation(newID, bytes.Clone(data)); err != nil {
+		m.setStatus("cannot copy clip: %v", err)
+		m.generation++
+		return ""
+	}
+	if t, err := lottieresolv.Load(m.bundle, id); err == nil && t != nil {
+		if err := lottieresolv.Store(m.bundle, newID, t); err != nil {
+			m.setStatus("copied %q but not its hitboxes: %v", id, err)
+		}
+		delete(m.trackCache, newID)
+	}
+	m.docGen++
+	m.ShowClip(clipRef{Anim: newID})
+	m.setStatus("copied clip %q to %q", id, newID)
+	m.generation++
+	return newID
+}
+
 // Sources lists the disk files behind the current document, oldest first.
 func (m *Model) Sources() []string { return m.sources }
 
