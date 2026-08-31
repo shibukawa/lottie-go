@@ -23,6 +23,20 @@ window starts blank and its first Save writes the chosen path. Templates
 are embedded at build time from `cmd/lottie-state-editor/templates/`, which
 `go run ./genpresets` keeps in sync with the presets.
 
+A clip does not have to come from a file either: **New** in the Clips
+pane creates a blank vector clip inside the bundle — one empty shape
+layer, its origin at the canvas center, one second long, following the
+bundle's first clip for size and frame rate — and puts it on stage with
+the Shapes tab open, ready to draw into. The Poses tab's **length**
+field grows it, and a state can play it like any imported clip. **Copy**
+duplicates the selected clip under a fresh id, hitbox track included —
+the start of a variant: same rig, same keys, retuned from there.
+Both panes that edit a staged clip — Poses and Shapes — carry a **Clip**
+header at the top of the right pane: the clip's id (renaming repoints
+every state that plays it, the manifest's initial animation, and its
+hitbox track — blanks and taken names are refused) and what the clip is.
+The element-specific sections follow below it.
+
 Every tab carries the same transport — play/pause, −1, +1 — and the row
 above the tab bar holds what describes the stage rather than any one tab:
 an **autoplay** toggle (on by default), an **onion skin** toggle, a zoom
@@ -146,6 +160,87 @@ transcribed back into the generator. **Undo pose edit** takes back the
 last change, counting a whole drag as one step. Editing is only possible
 while the playhead sits on a key; scrubbing away ends it rather than
 writing a value at a frame the other tracks have no key at.
+
+The **Shapes** tab edits vector artwork: the shape layers of the clip on
+stage — imported UI assets, the generated samples, or layers drawn from
+scratch. Choosing the tab opens the **Shapes** section at the top of the
+right pane, the way Poses opens the Parts list: a layer picker (with
+**+Layer** to start an empty one and **−Layer** to remove it) over the
+layer's item tree, indented the way the document nests it — groups,
+paths, primitives, fills, strokes, gradients, and modifiers, in paint
+order. Clicking a shape on the stage selects it in the tree and back,
+switching the layer with it when the click landed on another layer's
+artwork. Unknown item kinds are listed but left inert — they survive
+saving untouched. The strip under the stage keeps only the key chart and
+the tool row, so the stage keeps its height.
+
+The tool row picks the gesture. **Select** drags what is already there:
+the selected geometry shows its box, and dragging inside moves the whole
+shape while a box corner resizes it about the opposite corner — the press
+that picks a shape starts carrying it, so select-and-move is one gesture.
+A path adds the finer controls: square vertices drag individually (the
+selected one carries its bezier handle pins — drag them to bend the
+curve), and **Pen** on the outline of the selected path splits the
+segment under the click. A selected path also opens a **vertex list** in
+the pane — every vertex a row with its coordinates and whether it is a
+corner or smooth, selected in step with the stage. **+Insert after**
+splits the segment leaving the selected vertex at its midpoint (on every
+key, so the shape looks unchanged until the new vertex is dragged),
+**Delete** removes it, the **handles** checkbox switches the vertex
+between corner and smooth, and the coordinate and handle-vector fields
+type exact values — the handle rows enabled only while handles are on.
+Elsewhere **Pen** draws a new path click by click — clicking the first
+vertex again or **right-clicking** closes it (the last point joins the
+first), **Finish** commits it open — and **Rect** / **Ellipse** /
+**Star** drop a primitive where clicked.
+
+Geometry also inserts from the tree, without touching the stage tools:
+**+Path**, **+Rect**, **+Ellipse** and **+Star** drop into the selected
+item's group at its origin, ready to drag into place. New geometry from
+the stage tools arrives in its own group with a grey fill, selected and
+ready to restyle. **+Fill**, **+Stroke**, **+Grad**, **+Trim**,
+**+Round** and **+Group** add items to the selected item's group the same
+way; **▲ Front / ▼ Back** move an item within its group (the tree is the
+paint order), **Delete** removes it, subtree included. The **Delete key**
+(Backspace on a Mac keyboard) does the same from the stage: it removes
+the selected vertex when one is picked, the selected item otherwise. It
+listens only while the stage holds the keyboard focus — a stage click
+grants it, a text field takes it back — so editing a number never
+deletes a shape.
+
+**Copy** / **Paste** / **Duplicate** multiply what is already there.
+Copy takes the selected item, subtree and keyframes included, into the
+editor's own clipboard; Paste drops a fresh copy into the current group —
+of any layer, or any clip, since the clipboard lives as long as the
+editor — and Duplicate is the one-click twin, landing right on top of its
+source in the same group, selected and ready to drag aside. The grips
+follow the park rule everywhere: an animated shape shows its corner
+markers only while the playhead sits on one of its keys, so a drag is
+never offered where the write would be refused.
+
+Gradients edit the Flash way. On the stage the selected gradient shows
+its transform gizmo — drag the square (start / center), the circle (end:
+rotation and length in one handle) or the diamond (the whole gradient).
+In the pane, the **ramp** is the color bar: click under it to add a stop
+carrying the color the ramp already shows there, drag a stop to move it,
+drag it well off the bar to delete it, and recolor the selected stop in
+the hex field beside its swatch. **type** switches linear and radial.
+
+Editing follows the pose rules exactly. An animated value is written only
+with the playhead parked on one of its keys — click a tick on the chart.
+A static value edited **on a tick** is keyed first: it gains a key at
+every tick of its row (holding its old value), and the edit lands at the
+parked one alone — which is how a shape starts animating: park on a
+keyframe, drag, park on the next, drag again, and the motion between
+them interpolates. A static value edited anywhere else stays static and
+applies to the whole clip. With **onion skin** on, a selected path also
+shows its vertices at the neighbouring keys — cool behind, warm ahead,
+with a hair from each vertex to its ghost — so how far every point
+travels reads at a glance. Topology is stricter still: Lottie interpolates a path
+vertex-wise, so inserting or deleting a vertex rewrites **every** key of
+that path at once, keeping them in step. Shape keys ride the pose
+columns: retiming, +Pose, Delete and ease all carry them along.
+**Undo shape edit** shares the clip-edit stack with the pose tab.
 
 `-viewer` starts **viewer mode**: the editor watches every file the
 document was loaded from — the `.lottie` bundle (whose images travel

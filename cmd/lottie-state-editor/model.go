@@ -31,6 +31,7 @@ const (
 	inspectCPShape
 	inspectSocket
 	inspectPose
+	inspectShape
 	inspectConfig
 )
 
@@ -122,6 +123,20 @@ type Model struct {
 	poseLayer int
 	posePart  int
 
+	// Shape editing (see shape.go). The selection is a layer plus the index
+	// path of one item in its tree; the tool is the Shapes tab's active
+	// gesture, and the pen accumulates points until it commits.
+	selShapeLayer int
+	selShapePath  []int
+	selShapeVert  int
+	selGradStop   int
+	shapeTool     shapeTool
+	penPts        [][2]float64
+	penActive     bool
+	// shapeClipboard holds a deep copy of one copied item, so it can be
+	// pasted into any group of any clip for as long as the editor runs.
+	shapeClipboard map[string]any
+
 	// Clip edits are undoable on their own stack; a drag writes on every
 	// mouse move, so it collapses into one step between Begin and End.
 	clipUndo       []clipSnapshot
@@ -164,6 +179,9 @@ func NewModel() *Model {
 		selSocket:     -1,
 		poseLayer:     -1,
 		posePart:      -1,
+		selShapeLayer: -1,
+		selShapeVert:  -1,
+		selGradStop:   -1,
 		trackCache:    map[string]*lottieresolv.Track{},
 		clipDocs:      map[string]*clipDoc{},
 		dialog:        make(chan dialogResult, 1),
@@ -410,6 +428,164 @@ func (m *Model) ImportClip(path string) {
 	// the old bytes is stale.
 	delete(m.clipDocs, id)
 	m.setStatus("imported clip %q", id)
+	m.generation++
+}
+
+// NewClip creates a blank vector clip in the bundle and puts it on stage
+// with the Shapes tab open, ready to draw into: one empty shape layer
+// whose origin sits at the canvas center, one second long. Size and frame
+// rate follow the bundle's first clip, so a new clip drops into an
+// existing set without a mismatch.
+func (m *Model) NewClip() string {
+	if m.blockEdit() {
+		return ""
+	}
+	w, h, fr := 256.0, 256.0, 30.0
+	if ids := m.bundle.AnimationIDs(); len(ids) > 0 {
+		if anim, err := m.bundle.Animation(ids[0]); err == nil {
+			aw, ah := anim.Size()
+			w, h = float64(aw), float64(ah)
+			if f := anim.FrameRate(); f > 0 {
+				fr = f
+			}
+		}
+	}
+	op := fr // one second; the Poses tab's length field grows it
+	id := uniqueID("clip", m.bundle.AnimationIDs())
+	doc := map[string]any{
+		"v": "5.7.1", "nm": id, "fr": fr, "ip": 0.0, "op": op,
+		"w": w, "h": h,
+		"layers": []any{map[string]any{
+			"ty": 4, "nm": "shapes", "ind": 1,
+			"ip": 0.0, "op": op, "st": 0.0, "sr": 1,
+			"ks": map[string]any{
+				"a": staticVec(0, 0, 0), "p": staticVec(w/2, h/2, 0),
+				"s": staticVec(100, 100, 100), "r": staticProp(0.0), "o": staticProp(100.0),
+			},
+			"shapes": []any{},
+		}},
+	}
+	data, err := json.MarshalIndent(doc, "", " ")
+	if err != nil {
+		m.setStatus("cannot build clip: %v", err)
+		m.generation++
+		return ""
+	}
+	if err := m.bundle.SetAnimation(id, data); err != nil {
+		m.setStatus("cannot create clip: %v", err)
+		m.generation++
+		return ""
+	}
+	m.docGen++
+	m.ShowClip(clipRef{Anim: id})
+	m.SetCollisionTab(colShapes)
+	m.SelectShapeLayer(0)
+	m.setStatus("created clip %q — draw into its %q layer", id, "shapes")
+	m.generation++
+	return id
+}
+
+// DuplicateClip copies an existing clip under a fresh id and puts the
+// copy on stage — the starting point for a variant: same rig, same keys,
+// retuned from there. The clip's hitbox track travels with it; the cp
+// body and the sockets are bundle-wide and already apply.
+func (m *Model) DuplicateClip(id string) string {
+	if m.blockEdit() {
+		return ""
+	}
+	data, ok := m.bundle.AnimationJSON(id)
+	if !ok {
+		m.setStatus("no clip %q to copy", id)
+		m.generation++
+		return ""
+	}
+	newID := uniqueID(id, m.bundle.AnimationIDs())
+	if err := m.bundle.SetAnimation(newID, bytes.Clone(data)); err != nil {
+		m.setStatus("cannot copy clip: %v", err)
+		m.generation++
+		return ""
+	}
+	if t, err := lottieresolv.Load(m.bundle, id); err == nil && t != nil {
+		if err := lottieresolv.Store(m.bundle, newID, t); err != nil {
+			m.setStatus("copied %q but not its hitboxes: %v", id, err)
+		}
+		delete(m.trackCache, newID)
+	}
+	m.docGen++
+	m.ShowClip(clipRef{Anim: newID})
+	m.setStatus("copied clip %q to %q", id, newID)
+	m.generation++
+	return newID
+}
+
+// RenameClip changes a clip's id and repoints everything that names it:
+// every machine state playing it, the manifest's initial animation, and
+// the clip's hitbox track. Ids are how states and games address a clip,
+// so a rename is a real edit, refused for blanks and duplicates.
+func (m *Model) RenameClip(old, name string) {
+	if m.blockEdit() {
+		return
+	}
+	name = strings.TrimSpace(name)
+	if name == "" || name == old {
+		return
+	}
+	if slices.Contains(m.bundle.AnimationIDs(), name) {
+		m.setStatus("a clip named %q already exists", name)
+		m.generation++
+		return
+	}
+	data, ok := m.bundle.AnimationJSON(old)
+	if !ok {
+		return
+	}
+	if err := m.bundle.SetAnimation(name, bytes.Clone(data)); err != nil {
+		m.setStatus("cannot rename clip: %v", err)
+		m.generation++
+		return
+	}
+	if t, err := lottieresolv.Load(m.bundle, old); err == nil && t != nil {
+		if err := lottieresolv.Store(m.bundle, name, t); err != nil {
+			m.setStatus("renamed %q but not its hitboxes: %v", old, err)
+		}
+	}
+	lottieresolv.Remove(m.bundle, old)
+	m.bundle.RemoveAnimation(old)
+	// Every machine that plays the clip follows, the in-memory selected one
+	// included.
+	for _, mid := range m.bundle.StateMachineIDs() {
+		sm := m.machine
+		if mid != m.machineID || sm == nil {
+			loaded, err := m.bundle.StateMachine(mid)
+			if err != nil {
+				continue
+			}
+			sm = loaded
+		}
+		changed := false
+		for i := range sm.States {
+			if sm.States[i].Animation == old {
+				sm.States[i].Animation = name
+				changed = true
+			}
+		}
+		if changed {
+			if err := m.bundle.SetStateMachine(mid, sm); err != nil {
+				m.setStatus("renamed %q but machine %q still names it: %v", old, mid, err)
+			}
+		}
+	}
+	if in := m.bundle.Manifest().Initial; in != nil && in.Animation == old {
+		in.Animation = name
+	}
+	delete(m.trackCache, old)
+	delete(m.trackCache, name)
+	delete(m.clipDocs, old)
+	if m.previewClip.Anim == old {
+		m.previewClip.Anim = name
+	}
+	m.setStatus("renamed clip %q to %q", old, name)
+	m.docGen++
 	m.generation++
 }
 
@@ -1333,9 +1509,15 @@ func (m *Model) ShowClip(c clipRef) {
 	// The counts describe what is on the stage, so switching clips starts
 	// them over rather than carrying the last clip's tally forward.
 	m.resetMarkerHits()
-	m.previewClip, m.clipPlayer = c, p
 	// The hitbox selection indexed the previous stage's track, and the pose
-	// selection indexed its layers and key times.
+	// and shape selections indexed its layers and key times. The shape
+	// selection survives when the same document stays on stage — parking a
+	// key re-shows the clip a machine was already playing, and clearing
+	// there left every later stage click picking against no layer at all.
+	if m.StageAnimID() != c.Anim {
+		m.clearShapeSelection()
+	}
+	m.previewClip, m.clipPlayer = c, p
 	m.selBox = -1
 	m.clearPoseSelection()
 	m.setStatus("previewing %s", c.Label())
@@ -1351,6 +1533,7 @@ func (m *Model) ShowMachine() {
 	m.resetMarkerHits()
 	m.selBox = -1
 	m.clearPoseSelection()
+	m.clearShapeSelection()
 	m.generation++
 }
 

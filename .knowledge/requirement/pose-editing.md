@@ -47,7 +47,7 @@ scope:
   joint_drag: two readings, both wanted — the part follows its attach point (also how the character is moved, the body's joint being its position in the composition), or the artwork holds still and only the point it turns about moves (a' = a + L-inverse . dp, L being the part's own rotate-and-scale)
   order: the layer array is the draw order, and reordering it is how a rig's overlap is authored per clip. Parent links are by ind and resolve in a second pass, so the rig survives; track-matte clips refuse, because an implicit matte source is the layer before it
   visibility: opacity toggles per key, which is how a slot's alternate drawings (a head from another angle) take turns
-  never: shape paths, gradients, part images (policy:editor-out-of-scope)
+  never: part image pixels (policy:editor-out-of-scope); shape paths and gradients moved to their own tab — requirement:vector-editing, decision:vector-authoring-in-editor
 promotion: editing a property that is static across the clip materializes a key at every existing pose time holding the old value, then writes the new value at the selected time — the inverse of cmd/lottie-state-editor/genpresets track()
 mirror: not authored. Facing flips stay rule:facing-mirror at runtime
 verify: after each edit the clip is re-encoded and re-Decoded for the preview, so the stage shows what the renderer produces, never an editor-side approximation (decision:json-level-animation-edit)

@@ -220,6 +220,13 @@ type inspectorContent struct {
 	parentItems     []basicwidget.SelectItem[int]
 	jdragItems      []basicwidget.SelectItem[bool]
 
+	// Shape pane (shapeinspector.go), a widget of its own: the per-kind
+	// forms would double this struct otherwise. The clip header tops both
+	// the pose and shape panes: the stage clip's settings first, then the
+	// selected element's.
+	shapePane shapeInspector
+	clipHead  clipHeader
+
 	selectedGuard int
 
 	transItems     []basicwidget.ListItem[int]
@@ -276,6 +283,7 @@ func (c *inspectorContent) Build(context *guigui.Context, adder *guigui.ChildAdd
 		adder.AddWidget(&c.sockRotBtn)
 		c.buildSocketPane(context, m)
 	case inspectPose:
+		adder.AddWidget(&c.clipHead)
 		adder.AddWidget(&c.partsTitle)
 		adder.AddWidget(&c.partsList)
 		for _, w := range []guigui.Widget{&c.partsFront, &c.partsBack, &c.partsHide} {
@@ -291,6 +299,9 @@ func (c *inspectorContent) Build(context *guigui.Context, adder *guigui.ChildAdd
 		adder.AddWidget(&c.poseUndo)
 		adder.AddWidget(&c.poseHint)
 		c.buildPosePane(context, m, adder)
+	case inspectShape:
+		adder.AddWidget(&c.clipHead)
+		adder.AddWidget(&c.shapePane)
 	case inspectConfig:
 		adder.AddWidget(&c.cfgTitle)
 		adder.AddWidget(&c.cfgForm)
@@ -1041,6 +1052,7 @@ func (c *inspectorContent) layout(context *guigui.Context) guigui.LinearLayout {
 		)
 	case inspectPose:
 		c.items = append(c.items,
+			guigui.LinearLayoutItem{Widget: &c.clipHead},
 			guigui.LinearLayoutItem{Widget: &c.partsTitle, Size: guigui.FixedSize(u)},
 			guigui.LinearLayoutItem{Widget: &c.partsList, Size: guigui.FixedSize(6 * u)},
 			guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.partsBtnRow},
@@ -1048,6 +1060,11 @@ func (c *inspectorContent) layout(context *guigui.Context) guigui.LinearLayout {
 			guigui.LinearLayoutItem{Widget: &c.poseForm},
 			guigui.LinearLayoutItem{Widget: &c.poseUndo, Size: guigui.FixedSize(u)},
 			guigui.LinearLayoutItem{Widget: &c.poseHint, Size: guigui.FixedSize(2 * u)},
+		)
+	case inspectShape:
+		c.items = append(c.items,
+			guigui.LinearLayoutItem{Widget: &c.clipHead},
+			guigui.LinearLayoutItem{Widget: &c.shapePane},
 		)
 	case inspectConfig:
 		c.items = append(c.items,
@@ -1476,6 +1493,94 @@ func (c *inspectorContent) buildParentPicker(context *guigui.Context, m *Model, 
 			m.SetJointDragKeepsArt(item.Value)
 		}
 	})
+}
+
+// clipHeader is the stage clip's own settings, heading the pose and shape
+// panes: the id (renaming repoints every state that plays the clip), and
+// what the clip is. The element-specific sections follow below it.
+type clipHeader struct {
+	guigui.DefaultWidget
+
+	title     basicwidget.Text
+	idLabel   basicwidget.Text
+	idInput   basicwidget.TextInput
+	infoLabel basicwidget.Text
+	infoValue basicwidget.Text
+	form      basicwidget.Form
+	formItems []basicwidget.FormItem
+	items     []guigui.LinearLayoutItem
+}
+
+func (h *clipHeader) model(context *guigui.Context) *Model {
+	v, ok := context.Env(h, envKeyModel)
+	if !ok {
+		return nil
+	}
+	m, _ := v.(*Model)
+	return m
+}
+
+func (h *clipHeader) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
+	m := h.model(context)
+	if m == nil {
+		return nil
+	}
+	adder.AddWidget(&h.title)
+	adder.AddWidget(&h.form)
+
+	setBold(&h.title, "Clip")
+	id := m.StageAnimID()
+	label(&h.idLabel, "id")
+	h.idInput.SetValue(id)
+	h.idInput.OnValueChanged(func(context *guigui.Context, text string, committed bool) {
+		if committed {
+			m.RenameClip(id, text)
+		}
+	})
+	context.SetEnabled(&h.idInput, id != "" && !m.Viewer())
+
+	label(&h.infoLabel, "info")
+	if id != "" {
+		h.infoValue.SetValue(m.ClipSummary(id))
+	} else {
+		h.infoValue.SetValue("nothing on stage")
+	}
+	h.infoValue.SetVerticalAlign(basicwidget.VerticalAlignMiddle)
+
+	h.formItems = slices.Delete(h.formItems, 0, len(h.formItems))
+	h.formItems = append(h.formItems,
+		basicwidget.FormItem{PrimaryWidget: &h.idLabel, SecondaryWidget: &h.idInput},
+		basicwidget.FormItem{PrimaryWidget: &h.infoLabel, SecondaryWidget: &h.infoValue},
+	)
+	h.form.SetItems(h.formItems)
+	return nil
+}
+
+func (h *clipHeader) WriteStateKey(context *guigui.Context, w *guigui.StateKeyWriter) {
+	if m := h.model(context); m != nil {
+		w.WriteInt(m.Generation())
+		w.WriteString(m.StageAnimID())
+	}
+}
+
+func (h *clipHeader) layout(context *guigui.Context) guigui.LinearLayout {
+	u := basicwidget.UnitSize(context)
+	h.items = slices.Delete(h.items, 0, len(h.items))
+	h.items = append(h.items,
+		guigui.LinearLayoutItem{Widget: &h.title, Size: guigui.FixedSize(u)},
+		guigui.LinearLayoutItem{Widget: &h.form},
+	)
+	return guigui.LinearLayout{
+		Direction: guigui.LayoutDirectionVertical, Items: h.items, Gap: u / 4,
+	}
+}
+
+func (h *clipHeader) Layout(context *guigui.Context, widgetBounds *guigui.WidgetBounds, layouter *guigui.ChildLayouter) {
+	h.layout(context).LayoutWidgets(context, widgetBounds.Bounds(), layouter)
+}
+
+func (h *clipHeader) Measure(context *guigui.Context, constraints guigui.Constraints) image.Point {
+	return h.layout(context).Measure(context, constraints)
 }
 
 // tabOrder wires Tab to walk a form's fields, and Shift-Tab to walk back.

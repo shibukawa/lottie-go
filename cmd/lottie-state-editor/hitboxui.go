@@ -333,6 +333,7 @@ type colTab int
 const (
 	colSegment colTab = iota
 	colPoses
+	colShapes
 	colHitboxes
 	colBody
 	colSockets
@@ -401,6 +402,14 @@ type collisionPanel struct {
 	addSockBtns guigui.WidgetSlice[*basicwidget.Button]
 	delSock     basicwidget.Button
 
+	// Shapes tab (shapeui.go): only the drawing tools live in the strip —
+	// the layer picker, the item tree and the structure buttons sit at the
+	// top of the inspector, the way the Parts list does for poses, because
+	// the strip has no height to spare.
+	shapeTools     basicwidget.SegmentedControl[shapeTool]
+	shapeToolItems []basicwidget.SegmentedControlItem[shapeTool]
+	shapeFinish    basicwidget.Button
+
 	tabItems  []basicwidget.SegmentedControlItem[colTab]
 	bodyItems []basicwidget.ListItem[int]
 	sockItems []basicwidget.ListItem[int]
@@ -424,7 +433,7 @@ func (c *collisionPanel) model(context *guigui.Context) *Model {
 // availableTabs is the tab set the physics config leaves standing. The
 // segment overview and sockets are always there.
 func availableTabs(m *Model) []colTab {
-	out := []colTab{colSegment, colPoses}
+	out := []colTab{colSegment, colPoses, colShapes}
 	if m.ResolvEnabled() {
 		out = append(out, colHitboxes)
 	}
@@ -498,6 +507,7 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 		text := map[colTab]string{
 			colSegment:  "Segment",
 			colPoses:    "Poses",
+			colShapes:   "Shapes",
 			colHitboxes: "Hitbox (resolv)",
 			colBody:     "Body (cp)",
 			colSockets:  "Sockets",
@@ -524,6 +534,11 @@ func (c *collisionPanel) Build(context *guigui.Context, adder *guigui.ChildAdder
 		// Where the clip's keyframes are, and which one an edit lands on.
 		adder.AddWidget(&c.poses)
 		c.buildPoseButtons(context, m, adder)
+	case colShapes:
+		// The same key chart: shape edits park on a key the same way pose
+		// edits do, so the way to select one is the same chart.
+		adder.AddWidget(&c.poses)
+		c.buildShapePanel(context, m, adder)
 	case colHitboxes:
 		adder.AddWidget(&c.chart)
 		for _, w := range []guigui.Widget{&c.addRect, &c.addCircle, &c.addWin, &c.delBox} {
@@ -668,6 +683,12 @@ func (c *collisionPanel) layout(context *guigui.Context) guigui.LinearLayout {
 			guigui.LinearLayoutItem{Widget: &c.poseLenLabel, Size: guigui.FixedSize(3 * u)},
 			guigui.LinearLayoutItem{Widget: &c.poseLenInput, Size: guigui.FixedSize(2 * u)},
 		)
+	case colShapes:
+		c.btnRowItems = append(c.btnRowItems,
+			guigui.LinearLayoutItem{Widget: &c.shapeTools, Size: guigui.FixedSize(12 * u)},
+			guigui.LinearLayoutItem{Widget: &c.shapeFinish, Size: guigui.FixedSize(2 * u)},
+			guigui.LinearLayoutItem{Size: guigui.FlexibleSize(1)},
+		)
 	case colHitboxes:
 		c.btnRowItems = append(c.btnRowItems,
 			guigui.LinearLayoutItem{Widget: &c.addRect, Size: guigui.FixedSize(2 * u)},
@@ -724,6 +745,8 @@ func (c *collisionPanel) layout(context *guigui.Context) guigui.LinearLayout {
 	case colSegment:
 		c.items = append(c.items, guigui.LinearLayoutItem{Widget: &c.timeline})
 	case colPoses:
+		c.items = append(c.items, guigui.LinearLayoutItem{Widget: &c.poses})
+	case colShapes:
 		c.items = append(c.items, guigui.LinearLayoutItem{Widget: &c.poses})
 	case colHitboxes:
 		c.items = append(c.items, guigui.LinearLayoutItem{Widget: &c.chart})
