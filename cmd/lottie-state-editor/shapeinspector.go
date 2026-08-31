@@ -146,10 +146,19 @@ type shapeInspector struct {
 
 	closedLabel basicwidget.Text
 	closedCheck basicwidget.Checkbox
-	vertLabel   basicwidget.Text
-	vertValue   basicwidget.Text
-	smoothBtn   basicwidget.Button
-	vertDelBtn  basicwidget.Button
+
+	// The vertex list edits a path from the sidebar: every vertex a row,
+	// insertion and deletion beside it, the selected one's numbers below.
+	vertList     basicwidget.List[int]
+	vertItems    []basicwidget.ListItem[int]
+	vertShown    int // last row scrolled to, plus one
+	vertInsBtn   basicwidget.Button
+	vertDelBtn   basicwidget.Button
+	vertBtnRow   guigui.LinearLayout
+	vertBtnItems []guigui.LinearLayoutItem
+	showVerts    bool
+	tangentLbl   basicwidget.Text
+	tangentChk   basicwidget.Checkbox
 
 	capLabel  basicwidget.Text
 	capSel    basicwidget.Select[int]
@@ -214,6 +223,7 @@ func (p *shapeInspector) Build(context *guigui.Context, adder *guigui.ChildAdder
 
 	p.formItems = slices.Delete(p.formItems, 0, len(p.formItems))
 	p.tabFields = p.tabFields[:0]
+	p.showVerts = false
 	editable := hasSel && !m.Viewer()
 
 	label(&p.nameLabel, "name")
@@ -529,12 +539,16 @@ func (p *shapeInspector) buildStrokeStyleRows(context *guigui.Context, m *Model,
 	)
 }
 
-// buildPathRows are the sh item's closure and the selected vertex.
+// buildPathRows edit a path from the sidebar: the closure, the vertex
+// list with insert and delete beside it, and the selected vertex's
+// numbers — coordinates always, the handle vectors while handles are on.
 func (p *shapeInspector) buildPathRows(context *guigui.Context, m *Model, adder *guigui.ChildAdder, editable bool) {
 	adder.AddWidget(&p.closedCheck)
-	adder.AddWidget(&p.vertValue)
-	adder.AddWidget(&p.smoothBtn)
+	adder.AddWidget(&p.vertList)
+	adder.AddWidget(&p.vertInsBtn)
 	adder.AddWidget(&p.vertDelBtn)
+	adder.AddWidget(&p.tangentChk)
+	p.showVerts = true
 
 	label(&p.closedLabel, "closed")
 	p.closedCheck.SetValue(m.ShapePathClosed())
@@ -543,30 +557,75 @@ func (p *shapeInspector) buildPathRows(context *guigui.Context, m *Model, adder 
 	})
 	context.SetEnabled(&p.closedCheck, editable)
 
-	label(&p.vertLabel, "vertex")
 	writable := m.ShapePathWritable() && !m.Viewer()
 	sel := m.SelectedShapeVert()
 	pd, okPath := m.ShapePath()
-	if sel >= 0 && okPath && sel < len(pd.v) {
-		p.vertValue.SetValue(fmt.Sprintf("%d of %d", sel+1, len(pd.v)))
-	} else {
-		p.vertValue.SetValue("none — click one on the stage")
-	}
-	p.vertValue.SetVerticalAlign(basicwidget.VerticalAlignMiddle)
-
-	p.smoothBtn.SetText("Smooth / Corner")
-	p.smoothBtn.OnDown(func(context *guigui.Context) { m.SmoothShapeVertex(m.SelectedShapeVert()) })
-	p.vertDelBtn.SetText("Delete vertex")
-	p.vertDelBtn.OnDown(func(context *guigui.Context) { m.DeleteShapeVertex() })
 	hasVert := sel >= 0 && okPath && sel < len(pd.v)
-	context.SetEnabled(&p.smoothBtn, writable && hasVert)
-	context.SetEnabled(&p.vertDelBtn, editable && hasVert)
+
+	// Every vertex is a row, selected in step with the stage both ways.
+	p.vertItems = p.vertItems[:0]
+	if okPath {
+		for i, v := range pd.v {
+			kind := "corner"
+			if pd.i[i] != [2]float64{} || pd.o[i] != [2]float64{} {
+				kind = "smooth"
+			}
+			p.vertItems = append(p.vertItems, basicwidget.ListItem[int]{
+				Text: fmt.Sprintf("%d  (%s, %s)", i+1,
+					strconv.FormatFloat(v[0], 'g', -1, 64),
+					strconv.FormatFloat(v[1], 'g', -1, 64)),
+				KeyText: kind, Value: i,
+			})
+		}
+	}
+	p.vertList.SetItems(p.vertItems)
+	if hasVert {
+		p.vertList.SelectItemByValue(sel)
+		if p.vertShown != sel+1 {
+			p.vertList.EnsureItemVisibleByIndex(sel)
+			p.vertShown = sel + 1
+		}
+	} else {
+		p.vertShown = 0
+	}
+	p.vertList.OnItemSelected(func(context *guigui.Context, index int) {
+		if index >= 0 && index < len(p.vertItems) && index != m.SelectedShapeVert() {
+			m.SelectShapeVert(index)
+		}
+	})
+
+	// Insert splits the segment leaving the selected vertex at its
+	// midpoint, on every key at once, so the shape looks unchanged until
+	// the new vertex is dragged.
+	segs := 0
+	if okPath {
+		segs = len(pd.v) - 1
+		if pd.closed {
+			segs = len(pd.v)
+		}
+	}
+	p.vertInsBtn.SetText("+Insert after")
+	p.vertInsBtn.OnDown(func(context *guigui.Context) {
+		m.InsertShapeVertex(m.SelectedShapeVert(), 0.5)
+	})
+	context.SetEnabled(&p.vertInsBtn, editable && hasVert && sel < segs)
+	p.vertDelBtn.SetText("Delete")
+	p.vertDelBtn.OnDown(func(context *guigui.Context) { m.DeleteShapeVertex() })
+	context.SetEnabled(&p.vertDelBtn, editable && hasVert && okPath && len(pd.v) > 2)
+
+	// Handles on is a smooth vertex, off a corner; the vector fields below
+	// follow the switch.
+	label(&p.tangentLbl, "handles")
+	tangents := hasVert && m.ShapeVertexHasTangents(sel)
+	p.tangentChk.SetValue(tangents)
+	p.tangentChk.OnValueChanged(func(context *guigui.Context, v bool) {
+		m.SetShapeVertexTangents(m.SelectedShapeVert(), v)
+	})
+	context.SetEnabled(&p.tangentChk, writable && hasVert)
 
 	p.formItems = append(p.formItems,
 		basicwidget.FormItem{PrimaryWidget: &p.closedLabel, SecondaryWidget: &p.closedCheck},
-		basicwidget.FormItem{PrimaryWidget: &p.vertLabel, SecondaryWidget: &p.vertValue},
-		basicwidget.FormItem{SecondaryWidget: &p.smoothBtn},
-		basicwidget.FormItem{SecondaryWidget: &p.vertDelBtn},
+		basicwidget.FormItem{PrimaryWidget: &p.tangentLbl, SecondaryWidget: &p.tangentChk},
 	)
 
 	p.vertLabels.SetLen(len(shapeVertexFields))
@@ -591,9 +650,11 @@ func (p *shapeInspector) buildPathRows(context *guigui.Context, m *Model, adder 
 				m.SetShapeVertexValue(f.comp, v)
 			}
 		})
-		context.SetEnabled(in, writable && hasVert)
+		// The handle vectors only mean something while handles are on.
+		rowOn := writable && hasVert && (f.comp < 2 || tangents)
+		context.SetEnabled(in, rowOn)
 		p.tabFields = append(p.tabFields, in)
-		wireAdjacentCopy(context, row, writable && hasVert, cur,
+		wireAdjacentCopy(context, row, rowOn, cur,
 			func(dir int) (float64, float64, bool) { return m.ShapeVertexAdjacentValue(f.comp, dir) },
 			func(dir int) { m.CopyShapeVertexFromAdjacent(f.comp, dir) })
 		p.formItems = append(p.formItems, basicwidget.FormItem{PrimaryWidget: lb, SecondaryWidget: row})
@@ -748,6 +809,22 @@ func (p *shapeInspector) layout(context *guigui.Context) guigui.LinearLayout {
 		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &p.addRow1},
 		guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &p.addRow2},
 		guigui.LinearLayoutItem{Widget: &p.title, Size: guigui.FixedSize(u)},
+	)
+	if p.showVerts {
+		p.vertBtnItems = slices.Delete(p.vertBtnItems, 0, len(p.vertBtnItems))
+		p.vertBtnItems = append(p.vertBtnItems,
+			guigui.LinearLayoutItem{Widget: &p.vertInsBtn, Size: guigui.FlexibleSize(1)},
+			guigui.LinearLayoutItem{Widget: &p.vertDelBtn, Size: guigui.FlexibleSize(1)},
+		)
+		p.vertBtnRow = guigui.LinearLayout{
+			Direction: guigui.LayoutDirectionHorizontal, Items: p.vertBtnItems, Gap: u / 4,
+		}
+		p.items = append(p.items,
+			guigui.LinearLayoutItem{Widget: &p.vertList, Size: guigui.FixedSize(4 * u)},
+			guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &p.vertBtnRow},
+		)
+	}
+	p.items = append(p.items,
 		guigui.LinearLayoutItem{Widget: &p.form},
 		guigui.LinearLayoutItem{Widget: &p.undoBtn, Size: guigui.FixedSize(u)},
 		guigui.LinearLayoutItem{Widget: &p.hint, Size: guigui.FixedSize(3 * u)},

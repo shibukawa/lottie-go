@@ -58,7 +58,7 @@ ui:
     kind: form
     id: form.shape
     columns: [item, name, frame, ease, per-kind fields]
-    state: per-kind fields — fl/st: color, opacity, width, cap, join, dashes; gf/gs: type picker plus the stop ramp (stage.gradient); sh: selected vertex xy and handle xy; rc/el/sr: parameters; tr: p r s o a
+    state: per-kind fields — fl/st: color, opacity, width, cap, join, dashes; gf/gs: type picker plus the stop ramp (stage.gradient); sh: a vertex list (row per vertex with coordinates and corner/smooth, +Insert-after at the segment midpoint on every key, Delete, a handles on/off switch gating the handle-vector fields — user 2026-08-31) plus the selected vertex's numbers; rc/el/sr: parameters; tr: p r s o a
     state: values are the ones stored at the selected key, not interpolated; static properties show a Keyframe button that promotes them
     state: color fields are hex plus a swatch; the editor has no OS color picker dependency, so the swatch opens the same in-app popup everywhere
     state: a hint line names what blocks editing — no key selected, vertex counts out of step, or an item the renderer skips

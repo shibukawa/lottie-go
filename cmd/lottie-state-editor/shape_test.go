@@ -731,6 +731,30 @@ func TestShapeVertexGhostsFollowOnionSkin(t *testing.T) {
 	}
 }
 
+func TestVertexTangentSwitch(t *testing.T) {
+	m := shapeModel(t)
+	m.SelectShapeNode([]int{2}) // the zig path: all corners
+	m.SelectShapeVert(1)
+	if m.ShapeVertexHasTangents(1) {
+		t.Fatalf("zig vertices start as corners")
+	}
+	m.SetShapeVertexTangents(1, true)
+	if !m.ShapeVertexHasTangents(1) {
+		t.Fatalf("handles did not switch on")
+	}
+	p, _ := m.ShapePath()
+	if p.i[1] == [2]float64{} && p.o[1] == [2]float64{} {
+		t.Fatalf("no tangent vectors grown")
+	}
+	// Setting the same state again changes nothing; off zeroes them.
+	m.SetShapeVertexTangents(1, true)
+	m.SetShapeVertexTangents(1, false)
+	p, _ = m.ShapePath()
+	if p.i[1] != [2]float64{} || p.o[1] != [2]float64{} {
+		t.Fatalf("handles did not switch off: %v %v", p.i[1], p.o[1])
+	}
+}
+
 func TestVertexInsertDeleteFromModel(t *testing.T) {
 	m := shapeModel(t)
 	m.SelectShapeNode([]int{0, 0})

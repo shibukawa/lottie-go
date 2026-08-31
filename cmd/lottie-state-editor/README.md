@@ -166,8 +166,15 @@ shape while a box corner resizes it about the opposite corner — the press
 that picks a shape starts carrying it, so select-and-move is one gesture.
 A path adds the finer controls: square vertices drag individually (the
 selected one carries its bezier handle pins — drag them to bend the
-curve, **Smooth / Corner** toggles the tangents), and **Pen** on the
-outline of the selected path splits the segment under the click.
+curve), and **Pen** on the outline of the selected path splits the
+segment under the click. A selected path also opens a **vertex list** in
+the pane — every vertex a row with its coordinates and whether it is a
+corner or smooth, selected in step with the stage. **+Insert after**
+splits the segment leaving the selected vertex at its midpoint (on every
+key, so the shape looks unchanged until the new vertex is dragged),
+**Delete** removes it, the **handles** checkbox switches the vertex
+between corner and smooth, and the coordinate and handle-vector fields
+type exact values — the handle rows enabled only while handles are on.
 Elsewhere **Pen** draws a new path click by click — clicking the first
 vertex again or **right-clicking** closes it (the last point joins the
 first), **Finish** commits it open — and **Rect** / **Ellipse** /

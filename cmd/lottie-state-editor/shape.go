@@ -727,6 +727,26 @@ func (m *Model) SetShapeVertexValue(comp int, v float64) {
 	m.setShapePath(p)
 }
 
+// ShapeVertexHasTangents reports whether a vertex carries bezier handles
+// — the pane's on/off reading of corner versus smooth.
+func (m *Model) ShapeVertexHasTangents(idx int) bool {
+	p, ok := m.ShapePath()
+	if !ok || idx < 0 || idx >= len(p.v) {
+		return false
+	}
+	return p.i[idx] != [2]float64{} || p.o[idx] != [2]float64{}
+}
+
+// SetShapeVertexTangents switches a vertex's handles on or off: off is a
+// corner (both tangents zeroed), on grows a level pair from the
+// neighbouring segment directions, ready to be dragged into shape.
+func (m *Model) SetShapeVertexTangents(idx int, on bool) {
+	if m.ShapeVertexHasTangents(idx) == on {
+		return
+	}
+	m.SmoothShapeVertex(idx)
+}
+
 // SmoothShapeVertex toggles a vertex between corner and smooth: corner
 // zeroes the tangents, smooth grows a level pair from the neighbouring
 // segment directions.
