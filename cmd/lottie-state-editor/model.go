@@ -17,6 +17,7 @@ import (
 	lottiecp "github.com/shibukawa/lottie-go/plugin/physics/cp"
 	lottieresolv "github.com/shibukawa/lottie-go/plugin/physics/resolv"
 	lottiesockets "github.com/shibukawa/lottie-go/plugin/sockets"
+	lottietexture "github.com/shibukawa/lottie-go/plugin/texture"
 )
 
 // inspectTarget names what kind of thing the inspector pane edits. The
@@ -137,6 +138,15 @@ type Model struct {
 	// pasted into any group of any clip for as long as the editor runs.
 	shapeClipboard map[string]any
 
+	// Texture documents (plugin/texture) ride woven inside clipDocs; the
+	// entries Weave could not place and each document's unknown members
+	// wait here per clip for the store-back. selUVVert is the UV pane's
+	// point; texImages caches decoded bundle images for it (texture.go).
+	texUnplaced map[string]*lottietexture.Doc
+	texExtra    map[string]lottie.ExtraFields
+	texImages   map[string]*ebiten.Image
+	selUVVert   int
+
 	// Clip edits are undoable on their own stack; a drag writes on every
 	// mouse move, so it collapses into one step between Begin and End.
 	clipUndo       []clipSnapshot
@@ -182,6 +192,7 @@ func NewModel() *Model {
 		selShapeLayer: -1,
 		selShapeVert:  -1,
 		selGradStop:   -1,
+		selUVVert:     -1,
 		trackCache:    map[string]*lottieresolv.Track{},
 		clipDocs:      map[string]*clipDoc{},
 		dialog:        make(chan dialogResult, 1),
@@ -511,6 +522,7 @@ func (m *Model) DuplicateClip(id string) string {
 		}
 		delete(m.trackCache, newID)
 	}
+	m.carryTextures(id, newID, false)
 	m.docGen++
 	m.ShowClip(clipRef{Anim: newID})
 	m.setStatus("copied clip %q to %q", id, newID)
@@ -550,6 +562,7 @@ func (m *Model) RenameClip(old, name string) {
 		}
 	}
 	lottieresolv.Remove(m.bundle, old)
+	m.carryTextures(old, name, true)
 	m.bundle.RemoveAnimation(old)
 	// Every machine that plays the clip follows, the in-memory selected one
 	// included.
@@ -624,6 +637,9 @@ func (m *Model) RemoveClip(id string) {
 	// The clip's hitbox track goes with it; the core leaves extension
 	// files alone, so the cleanup is this editor's job.
 	lottieresolv.Remove(m.bundle, id)
+	lottietexture.Remove(m.bundle, id)
+	delete(m.texUnplaced, id)
+	delete(m.texExtra, id)
 	delete(m.trackCache, id)
 	delete(m.clipDocs, id)
 	m.setStatus("removed clip %q", id)
@@ -1495,6 +1511,7 @@ func (m *Model) ShowClip(c clipRef) {
 		return
 	}
 	p := anim.NewPlayer()
+	m.applyTextures(c.Anim, p)
 	p.SetLoop(true)
 	if c.Segment != "" && !p.SetMarkerRange(c.Segment) {
 		m.setStatus("clip %q has no marker %q", c.Anim, c.Segment)
@@ -1681,6 +1698,7 @@ func (m *Model) restartPreview() {
 		m.previewErr = err
 		return
 	}
+	lottietexture.Attach(p, m.bundle)
 	m.resetMarkerHits()
 	p.OnMarker(func(state string, mk lottie.Marker) {
 		m.noteMarker(m.animForState(state), mk)

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 	"slices"
+
+	lottietexture "github.com/shibukawa/lottie-go/plugin/texture"
 )
 
 // Shape layers are edited through the same document as poses
@@ -377,6 +379,15 @@ func (d *clipDoc) eachShapeProp(layer int, fn func(owner map[string]any, member 
 		if n.ty == "gf" || n.ty == "gs" {
 			if g, ok := item["g"].(map[string]any); ok {
 				fn(g, "k")
+			}
+		}
+		// A woven texture paint's placement transform is keyed like any
+		// other member, so its keys join the columns too (texture.go).
+		if tex, ok := item[lottietexture.MemberTex].(map[string]any); ok {
+			if tr, ok := tex["transform"].(map[string]any); ok {
+				for _, member := range texTransformMembers {
+					fn(tr, member)
+				}
 			}
 		}
 	}

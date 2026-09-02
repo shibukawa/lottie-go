@@ -14,7 +14,7 @@ layout:
   s/: optional; one JSON per data:state-machine
   t/: optional; themes
   f/: optional; fonts
-  extensions/: optional; tool-specific payloads, opaque to the core (api:bundle-extension-files); physics subtrees defined by data:physics-cp-body and data:physics-resolv-track
+  extensions/: optional; tool-specific payloads, opaque to the core (api:bundle-extension-files); physics subtrees defined by data:physics-cp-body and data:physics-resolv-track, texture/ by data:texture-document
 v1_difference:
   animations/: v1 name for a/
   images/: v1 name for i/

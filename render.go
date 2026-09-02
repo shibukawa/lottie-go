@@ -22,6 +22,7 @@ type geometry struct {
 	mat   matrix
 	alpha float64
 	xor   bool
+	uv    [][2]float32 // per-vertex UV bound to the source path (texture.go); nil otherwise
 }
 
 // drawCmd is one fill or stroke over a range of geometries. Style properties
@@ -37,6 +38,7 @@ type drawCmd struct {
 	fillRule   vector.FillRule
 	strokeOpts vector.StrokeOptions
 	grad       *gradientCmd // non-nil for gradient fills/strokes
+	tex        *textureCmd  // non-nil for textured fills/strokes
 }
 
 // maxOffscreen bounds pooled offscreen dimensions.
@@ -281,6 +283,19 @@ type renderer struct {
 	blendUnis  map[string]any
 	lumaUnis   map[string]any
 
+	// Texture paints bound to this renderer's player (texture.go): the
+	// paint per fill/stroke node, the UV set per path node, runtime images
+	// by name, and the per-frame command arena plus mesh scratch.
+	paints   map[*shapeNode]*texturePaint
+	uvs      map[*shapeNode][][2]float32
+	textures map[string]*ebiten.Image
+	texCmds  []textureCmd
+	nTex     int
+	texVerts []ebiten.Vertex
+	texIdx   []uint32
+	texPts   []texPoint
+	texUnis  map[string]any
+
 	// Text scratch (renderGlyphText): shaped glyphs, per-glyph animator
 	// state, the flattened factor buffer behind it, and the selector-unit
 	// table. All frame-local; reused so animated text stops allocating
@@ -300,6 +315,7 @@ func nextSlot(arr []geometry, n *int) ([]geometry, *geometry) {
 	*n++
 	g.alpha = 1
 	g.xor = false
+	g.uv = nil
 	return arr, g
 }
 
@@ -321,6 +337,7 @@ func copyGeomInto(dst *geometry, src *geometry) {
 	dst.mat = src.mat
 	dst.alpha = src.alpha
 	dst.xor = src.xor
+	dst.uv = src.uv
 	dst.bez.Closed = src.bez.Closed
 	dst.bez.V = copyPoints(dst.bez.V, src.bez.V)
 	dst.bez.I = copyPoints(dst.bez.I, src.bez.I)
@@ -810,6 +827,7 @@ func (r *renderer) renderBody(dst *ebiten.Image, l *layerNode, f, lt float64, ma
 		r.nGeoms = 0
 		r.nDash = 0
 		r.nGrad = 0
+		r.nTex = 0
 		r.cmds = r.cmds[:0]
 		r.walkShapes(l.shapes, lt, mat, opacity)
 		for c := len(r.cmds) - 1; c >= 0; c-- {
@@ -1102,6 +1120,7 @@ func (r *renderer) walkShapes(nodes []*shapeNode, f float64, mat matrix, opacity
 			src := n.shape.at(f, &r.shapeScratch)
 			g := r.nextGeom()
 			g.mat = mat
+			g.uv = r.uvs[n]
 			g.bez.Closed = src.Closed
 			g.bez.V = copyPoints(g.bez.V, src.V)
 			g.bez.I = copyPoints(g.bez.I, src.I)
@@ -1181,6 +1200,9 @@ func (r *renderer) emitStyleRange(n *shapeNode, f float64, opacity float64, star
 		cmd = r.gradientCmd(n, f, opacity, start, end, mat)
 	default:
 		cmd = r.styleCmd(n, f, opacity, start, end)
+		if tp := r.paints[n]; tp != nil {
+			cmd.tex = r.textureCmd(tp, f, mat)
+		}
 	}
 	switch n.kind {
 	case "fl", "gf":
@@ -1268,6 +1290,17 @@ func (r *renderer) execute(dst *ebiten.Image, cmd *drawCmd, cs ebiten.ColorScale
 		r.executeGradient(dst, cmd, arr, cs, blend, antialias)
 		return
 	}
+	if cmd.tex != nil {
+		r.executeTexture(dst, cmd, arr, cs, blend, antialias)
+		return
+	}
+	r.executeSolid(dst, cmd, arr, cs, blend, antialias)
+}
+
+// executeSolid draws a plain fill or stroke through the vector package. It
+// is also where a textured command lands when its image cannot be found,
+// so the item's color stays the picture a missing texture leaves behind.
+func (r *renderer) executeSolid(dst *ebiten.Image, cmd *drawCmd, arr []geometry, cs ebiten.ColorScale, blend ebiten.Blend, antialias bool) {
 	r.path.Reset()
 	for i := cmd.geomStart; i < cmd.geomEnd; i++ {
 		g := &arr[i]

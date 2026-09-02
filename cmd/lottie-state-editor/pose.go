@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	lottietexture "github.com/shibukawa/lottie-go/plugin/texture"
 	"math"
 	"slices"
 	"strings"
@@ -41,6 +42,7 @@ func (m *Model) StageClipDoc() *clipDoc {
 		// rest of the editor still works on it.
 		d = nil
 	}
+	m.weaveTextures(d)
 	if m.clipDocs == nil {
 		m.clipDocs = map[string]*clipDoc{}
 	}
@@ -431,12 +433,8 @@ func (m *Model) touchClipDoc() {
 	if d == nil {
 		return
 	}
-	data, err := d.encode()
-	if err != nil {
-		m.setStatus("cannot serialize clip: %v", err)
-		return
-	}
-	if err := m.bundle.SetAnimation(d.id, data); err != nil {
+	// The clip is stored pure, its texture document beside it (texture.go).
+	if err := m.storeClipDoc(d); err != nil {
 		m.setStatus("clip edit rejected: %v", err)
 		return
 	}
@@ -462,6 +460,7 @@ func (m *Model) rebuildStageClip(id string) {
 	frame := m.clipPlayer.Frame()
 	c := m.previewClip
 	p := anim.NewPlayer()
+	m.applyTextures(id, p)
 	// Looping stays off while a key is parked, or restoring the frame would
 	// wrap an out-point key back to the start (parkPreview).
 	p.SetLoop(!m.poseParked())
@@ -762,6 +761,10 @@ const clipUndoLimit = 64
 type clipSnapshot struct {
 	id   string
 	data []byte
+	// The clip's texture document travels with it (nil with hasTex set
+	// means the clip had none), so undoing a texture edit is one step too.
+	tex    []byte
+	hasTex bool
 }
 
 // BeginPoseEdit opens a drag. Every write until EndPoseEdit collapses into
@@ -791,7 +794,11 @@ func (m *Model) snapshotClip() bool {
 	if !ok {
 		return false
 	}
-	m.clipUndo = append(m.clipUndo, clipSnapshot{d.id, bytes.Clone(data)})
+	snap := clipSnapshot{id: d.id, data: bytes.Clone(data)}
+	if tex, ok := m.bundle.ExtensionFile(lottietexture.File(d.id)); ok {
+		snap.tex, snap.hasTex = bytes.Clone(tex), true
+	}
+	m.clipUndo = append(m.clipUndo, snap)
 	if n := len(m.clipUndo); n > clipUndoLimit {
 		m.clipUndo = append(m.clipUndo[:0], m.clipUndo[n-clipUndoLimit:]...)
 	}
@@ -823,6 +830,13 @@ func (m *Model) UndoClipEdit() {
 	if err := m.bundle.SetAnimation(snap.id, snap.data); err != nil {
 		m.setStatus("cannot undo: %v", err)
 		return
+	}
+	if snap.hasTex {
+		if err := m.bundle.SetExtensionFile(lottietexture.File(snap.id), snap.tex); err != nil {
+			m.setStatus("cannot undo textures: %v", err)
+		}
+	} else {
+		lottietexture.Remove(m.bundle, snap.id)
 	}
 	// The parsed document is the edited one; drop it so the restored bytes
 	// are what the next question is answered from.
@@ -1013,6 +1027,7 @@ func (m *Model) clipDocFor(id string) *clipDoc {
 	if err != nil {
 		d = nil
 	}
+	m.weaveTextures(d)
 	if m.clipDocs == nil {
 		m.clipDocs = map[string]*clipDoc{}
 	}

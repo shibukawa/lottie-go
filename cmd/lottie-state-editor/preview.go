@@ -148,9 +148,10 @@ type previewStage struct {
 // ghostPlayer is the paused, non-looping player the onion skin draws with.
 // It is rebuilt only when the animation behind the stage is replaced, which
 // an edit does on every drag step.
-func (s *previewStage) ghostPlayer(anim *lottie.Animation) *lottie.Player {
+func (s *previewStage) ghostPlayer(m *Model, anim *lottie.Animation) *lottie.Player {
 	if s.ghostAnim != anim {
 		s.ghost = anim.NewPlayer()
+		m.applyTextures(m.StageAnimID(), s.ghost)
 		s.ghost.Pause()
 		s.ghostAnim = anim
 	}
@@ -165,7 +166,7 @@ func (s *previewStage) drawOnionSkin(dst *ebiten.Image, m *Model, anim *lottie.A
 	if len(ghosts) == 0 {
 		return
 	}
-	p := s.ghostPlayer(anim)
+	p := s.ghostPlayer(m, anim)
 	for _, g := range ghosts {
 		op := *base
 		// Pushed harder than looks right on paper: at this alpha the result
@@ -199,6 +200,8 @@ const (
 	dragShapeGradBoth
 	dragShapeCorner
 	dragShapeMoveGeom
+	dragShapeTexOrigin
+	dragShapeTexAxis
 )
 
 type stageDrag int
@@ -402,7 +405,8 @@ func (s *previewStage) HandlePointingInput(context *guigui.Context, widgetBounds
 			return guigui.HandleInputByWidget(s)
 		case dragShapeVertex, dragShapeHandleIn, dragShapeHandleOut,
 			dragShapeGradS, dragShapeGradE, dragShapeGradBoth,
-			dragShapeCorner, dragShapeMoveGeom:
+			dragShapeCorner, dragShapeMoveGeom,
+			dragShapeTexOrigin, dragShapeTexAxis:
 			s.dragShapeStep(m, dx, dy)
 			return guigui.HandleInputByWidget(s)
 		}

@@ -50,6 +50,7 @@ type StateMachinePlayer struct {
 	onStateChanged func(from, to string)
 	onMarker       func(state string, marker Marker)
 	onAction       func(Action)
+	onPlayer       func(animID string, p *Player)
 
 	unsupported map[string]struct{}
 	err         error
@@ -188,6 +189,18 @@ func (m *StateMachinePlayer) State() string {
 // Player returns the Player of the clip the current state plays, or nil in a
 // state that plays none. Use it to read playback position for a scrub bar.
 func (m *StateMachinePlayer) Player() *Player { return m.player }
+
+// OnPlayer registers a function to run on every clip Player the machine
+// creates, handed the animation id it plays — where a game dresses players
+// it never sees itself, binding textures (Player.SetTexturePaint) or
+// tuning playback. The player of the current state, created before this
+// call, is handed over at once.
+func (m *StateMachinePlayer) OnPlayer(f func(animID string, p *Player)) {
+	m.onPlayer = f
+	if f != nil && m.player != nil && m.current != nil {
+		f(m.current.Animation, m.player)
+	}
+}
 
 // OnStateChanged registers a function to run on every state change,
 // including the moves a single Update chains through. It runs during Update.
@@ -496,6 +509,9 @@ func (m *StateMachinePlayer) startPlayback(st *State) {
 		p.Play()
 	} else {
 		p.Pause()
+	}
+	if m.onPlayer != nil {
+		m.onPlayer(st.Animation, p)
 	}
 	m.player = p
 }

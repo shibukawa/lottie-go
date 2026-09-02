@@ -19,6 +19,7 @@ const (
 	dialogSaveBundle
 	dialogImportClips
 	dialogNewBundle
+	dialogImportTexture
 )
 
 // newEmptyChoice heads the New… list; the other entries are templates.
@@ -174,6 +175,11 @@ func (m *Model) apply(r dialogResult) {
 			m.ImportClip(p)
 		}
 		m.setStatus("imported %d clip(s)", len(r.paths))
+		m.generation++
+	case dialogImportTexture:
+		if p := firstPath(r.paths); p != "" {
+			m.ImportTextureImage(p)
+		}
 		m.generation++
 	}
 }

@@ -513,6 +513,45 @@ left-facing character on one convention (position mirrors across a
 vertical axis, angle negates): `ActiveBox.Mirrored`,
 `LayerPlacement.Mirrored`, `Placed.Mirrored`, and `lottiecp.MirrorX`.
 
+## Textured fills and strokes (extension)
+
+Lottie has no way to paint an image through a vector path. lottie-go adds
+one as an extension: a fill or stroke can name an image, mapped by the
+shape's bounding box, by a UV per path vertex, or along a stroke. The
+outline still animates and deforms; the picture follows it. The clip JSON
+stays plain Lottie — a player without the extension draws the fill's
+solid color — and the data lives beside the clip in the bundle, at
+`extensions/texture/<clip>.json`, through the `plugin/texture` package:
+
+```go
+import lottietexture "github.com/shibukawa/lottie-go/plugin/texture"
+
+anim, _ := b.Animation("hero")
+p := anim.NewPlayer()
+if doc, err := lottietexture.Load(b, "hero"); err == nil && doc != nil {
+    doc.Apply(p) // binds every paint and UV set to this player
+}
+p.SetTexture("portrait", portraitImage) // a runtime image, by name
+
+// State machines: every clip player the machine creates gets dressed.
+lottietexture.Attach(sm, b)
+```
+
+The core hooks are `Player.SetTexturePaint`, `SetVertexUV` and
+`SetTexture`, so a plain JSON clip can be textured from code too.
+Rendering rasterizes the path into a coverage mask as usual and draws one
+UV mesh through it with a Kage shader, so curves, fill rules, trim, dashes
+and antialiasing are untouched; a textured style costs about what a
+gradient does. The editor's Shapes tab binds images, edits the placement
+on the stage, and lays out per-vertex UV in a pane.
+[examples/lottie/octopus](examples/lottie/octopus) is a complete sample —
+a soft-bodied octopus whose skin, suckers and kelp are all textured paths,
+generated in-repository. Its bundle is embedded, so it runs from anywhere:
+
+```bash
+go run github.com/shibukawa/lottie-go/examples/lottie/octopus@latest
+```
+
 ## Supported features
 
 **Layers**: shape, null, solid, precomposition (offscreen with clipping and
@@ -533,7 +572,8 @@ rules; intersect needs true path booleans and stays unsupported).
 
 **Styles**: solid fills (non-zero / even-odd), solid strokes (width, cap,
 join, miter), dash patterns (incl. offset), linear & radial gradient fills
-and strokes (Kage shader, alpha stops supported).
+and strokes (Kage shader, alpha stops supported); textured fills and
+strokes as a lottie-go extension (see above).
 
 **Compositing**: masks (add / subtract / intersect, inverted variants,
 expansion), track mattes (alpha, alpha inverted, luma, luma inverted —

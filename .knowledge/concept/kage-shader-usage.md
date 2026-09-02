@@ -11,6 +11,7 @@ required_for:
   - linear / radial gradients (gf / gs)
   - luma matte (luminance -> alpha)
   - blend modes multiply / screen and similar
+  - textured fill / stroke (concept:texture-uv-pipeline) — same mask trick as gradients, mesh instead of quad
 ```
 
 Gradient complexity is a known risk; excluded from P0, asset authors use solid colors until requirement:phase-p1 (policy:risks).

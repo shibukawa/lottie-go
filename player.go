@@ -527,7 +527,9 @@ func (p *Player) SetSnapshotCache(enabled bool) {
 // which point the composites of every idle player merge into one draw call,
 // and re-baking into a kept image would defer that rejoin exponentially.
 func (p *Player) drawSnapshot(dst *ebiten.Image, f float64, root matrix, cs ebiten.ColorScale, antialias bool) bool {
-	if p.snapOff || !p.anim.snapshotOK {
+	// A textured player is never snapshotted: a bound texture may be a
+	// render target the game redraws between frames, which no key sees.
+	if p.snapOff || !p.anim.snapshotOK || len(p.r.paints) > 0 {
 		return false
 	}
 	key := snapshotKey{f, root, cs, antialias, dst.Bounds(), p.anim.generation}
