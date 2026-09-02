@@ -233,7 +233,7 @@ func (r *Root) Layout(context *guigui.Context, widgetBounds *guigui.WidgetBounds
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "init" {
-		if err := runInit(os.Args[2:], os.Stdout); err != nil {
+		if err := runInit(os.Args[2:], os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "init:", err)
 			os.Exit(2)
 		}
