@@ -41,6 +41,11 @@ existing part, because they have to move independently of it:
 | scabbard | 12x51 | (6,4) | body | (8,30) | rides the trailing hip, behind the torso |
 | tail-near / tail-far | 24x57 | (12,4) | head | (2,24) / (70,24) | the twin-tails follow the HEAD, not the body, and mirror with it on a turn |
 
+The two tails sit on opposite sides of the head in the layer order:
+tail-far behind it, tail-near in front, so the trailing lock falls over
+the cheek and the shoulder the way long hair does. Behind the head it
+just peeked out at the silhouette's edge and read as part of it.
+
 Each is parented to the part it hangs off and given a static transform.
 Parenting alone carries them through every clip, which is why adding
 them needed no new keyframes: the skirt tips with the hips, the tails
