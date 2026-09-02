@@ -1,9 +1,12 @@
-// Command player is a standalone viewer for arbitrary Lottie JSON files.
+// Command player is a standalone viewer for arbitrary Lottie JSON files
+// and dotLottie bundles. A bundle plays its initial animation; a texture
+// document stored in it (plugin/texture) is applied, so textured samples
+// such as examples/lottie/octopus show their art here too.
 //
 // Open a file by passing it as an argument or by dropping it onto the
 // window:
 //
-//	go run ./examples/lottie/player [file.json]
+//	go run ./examples/lottie/player [file.json | bundle.lottie]
 //
 // Controls:
 //   - space: play / pause
@@ -31,6 +34,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/vector"
 
 	lottie "github.com/shibukawa/lottie-go"
+	lottietexture "github.com/shibukawa/lottie-go/plugin/texture"
 
 	// The library only registers PNG; registering WebP here lets the
 	// player open samples with WebP image assets (examples/lottie/motioncomic).
@@ -69,9 +73,26 @@ func newViewer() *viewer {
 
 func (v *viewer) load(name string, data []byte) {
 	var anim *lottie.Animation
+	var texDoc *lottietexture.Doc
 	var err error
 	if strings.HasSuffix(strings.ToLower(name), ".lottie") {
-		anim, err = lottie.DecodeDotLottie(bytes.NewReader(data), int64(len(data)))
+		// A bundle plays its initial animation, dressed from the texture
+		// document stored beside it when there is one (plugin/texture).
+		var b *lottie.Bundle
+		b, err = lottie.DecodeBundle(bytes.NewReader(data), int64(len(data)))
+		if err == nil {
+			id := ""
+			if in := b.Manifest().Initial; in != nil {
+				id = in.Animation
+			}
+			if ids := b.AnimationIDs(); id == "" && len(ids) > 0 {
+				id = ids[0]
+			}
+			anim, err = b.Animation(id)
+			if err == nil {
+				texDoc, err = lottietexture.Load(b, id)
+			}
+		}
 	} else {
 		anim, err = lottie.Decode(bytes.NewReader(data))
 	}
@@ -85,6 +106,11 @@ func (v *viewer) load(name string, data []byte) {
 	v.player = anim.NewPlayer()
 	v.player.SetLoop(v.loop)
 	v.player.SetSpeed(v.speed)
+	if texDoc != nil {
+		if err := texDoc.Apply(v.player); err != nil {
+			v.errMsg = fmt.Sprintf("%s: textures: %v", name, err)
+		}
+	}
 }
 
 func (v *viewer) loadPath(path string) {
