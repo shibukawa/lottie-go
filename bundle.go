@@ -459,6 +459,23 @@ func (b *Bundle) SetImage(name string, data []byte) {
 	b.images[path.Base(name)] = bytes.Clone(data)
 }
 
+// ImageNames lists the shared images the bundle holds, by base name,
+// sorted — the names an image asset's p member can point at.
+func (b *Bundle) ImageNames() []string {
+	names := make([]string, 0, len(b.images))
+	for name := range b.images {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// Image returns a shared image's bytes by base name.
+func (b *Bundle) Image(name string) ([]byte, bool) {
+	data, ok := b.images[path.Base(name)]
+	return data, ok
+}
+
 // Validate reports problems across the whole bundle: each state machine's
 // own structural problems plus references to animations or markers the
 // bundle does not hold.

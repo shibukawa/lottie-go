@@ -15,6 +15,7 @@ mapping:
   stroke: vector.StrokePath + StrokeOptions (LineCap / LineJoin)
   gradient: DrawTrianglesShader + Kage (concept:kage-shader-usage)
   mask_matte: offscreen ebiten.Image + Kage compositing
+  texture: coverage mask + UV mesh + Kage (concept:texture-uv-pipeline) — an extension, not Lottie
 ```
 
 Coordinate and alpha conventions: rule:coordinates-and-alpha.

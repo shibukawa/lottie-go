@@ -32,6 +32,14 @@ type Animation struct {
 
 	fontResolver FontResolver
 
+	// Retained for texture paints (texture.go): precomp layer trees by
+	// asset id, image assets by refId with the images decoded so far, and
+	// the resolver external files load through.
+	comps       map[string][]*layerNode
+	imageAssets map[string]rawAsset
+	images      map[string]*ebiten.Image
+	resolver    AssetResolver
+
 	// Compiled at decode; see analyzeCompositing.
 	snapshotOK      bool
 	rootShaderBlend bool // a root layer blends by sampling the backdrop
@@ -105,6 +113,15 @@ func decodeJSON(data []byte, resolver AssetResolver) (*Animation, error) {
 		}
 	}
 	a.layers = b.buildLayers(raw.Layers)
+	a.comps = b.comps
+	a.images = b.images
+	a.resolver = resolver
+	a.imageAssets = map[string]rawAsset{}
+	for id, as := range b.assets {
+		if as.Layers == nil {
+			a.imageAssets[id] = *as
+		}
+	}
 	a.analyzeCompositing()
 	return a, nil
 }
@@ -360,6 +377,10 @@ func (t *transformTracks) opacityAt(f float64) float64 {
 type shapeNode struct {
 	kind string // gr, sh, rc, el, fl, st, tr
 	name string
+	// jsonIndex is the item's position in its authored it (or shapes)
+	// array, hidden and skipped siblings included, so a ShapeRef computed
+	// from the document resolves against this tree (texture.go).
+	jsonIndex int
 
 	children  []*shapeNode     // gr
 	transform *transformTracks // gr's tr item
@@ -619,39 +640,44 @@ func (b *builder) buildImage(refID string) *ebiten.Image {
 		b.anim.note(fmt.Sprintf("missing image asset %q", refID))
 		return nil
 	}
+	img, note := loadImageAsset(as, b.resolver)
+	if note != "" {
+		b.anim.note(note)
+	}
+	b.images[refID] = img
+	return img
+}
+
+// loadImageAsset decodes one image asset. Embedded data URIs decode
+// directly; external files go through the resolver when one is configured.
+// A failure comes back as the note to record, with a nil image.
+func loadImageAsset(as *rawAsset, resolver AssetResolver) (*ebiten.Image, string) {
 	var data []byte
 	switch {
 	case strings.HasPrefix(as.FileName, "data:"):
 		idx := strings.Index(as.FileName, "base64,")
 		if idx < 0 {
-			b.anim.note("image asset with non-base64 data URI")
-			return nil
+			return nil, "image asset with non-base64 data URI"
 		}
 		raw, err := base64.StdEncoding.DecodeString(as.FileName[idx+len("base64,"):])
 		if err != nil {
-			b.anim.note("undecodable embedded image")
-			return nil
+			return nil, "undecodable embedded image"
 		}
 		data = raw
-	case b.resolver != nil:
-		raw, err := b.resolver(as.Path, as.FileName)
+	case resolver != nil:
+		raw, err := resolver(as.Path, as.FileName)
 		if err != nil {
-			b.anim.note(fmt.Sprintf("unresolvable image asset %q", as.FileName))
-			return nil
+			return nil, fmt.Sprintf("unresolvable image asset %q", as.FileName)
 		}
 		data = raw
 	default:
-		b.anim.note(fmt.Sprintf("external image asset %q", as.FileName))
-		return nil
+		return nil, fmt.Sprintf("external image asset %q", as.FileName)
 	}
 	src, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
-		b.anim.note("undecodable embedded image")
-		return nil
+		return nil, "undecodable embedded image"
 	}
-	img := ebiten.NewImageFromImage(src)
-	b.images[refID] = img
-	return img
+	return ebiten.NewImageFromImage(src), ""
 }
 
 func (b *builder) buildMasks(raws []rawMask) []maskNode {
@@ -754,7 +780,21 @@ var shapeTypeNames = map[string]string{
 
 func (b *builder) buildShapeItems(items []rawShapeItem) []*shapeNode {
 	var nodes []*shapeNode
-	for i := range items {
+	// Whatever a branch below appends while handling items[i] is stamped
+	// with i at the top of the next round (and once past the end), so no
+	// branch has to remember to (see shapeNode.jsonIndex).
+	stamped := 0
+	stamp := func(i int) {
+		for _, n := range nodes[stamped:] {
+			n.jsonIndex = i
+		}
+		stamped = len(nodes)
+	}
+	for i := 0; i <= len(items); i++ {
+		stamp(i - 1)
+		if i == len(items) {
+			break
+		}
 		it := &items[i]
 		if it.Hidden {
 			continue
