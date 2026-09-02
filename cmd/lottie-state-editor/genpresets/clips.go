@@ -957,15 +957,20 @@ func slashClip() clipDef {
 	raiseDeep := base().at(-2, 0).lean(-12).nod(2.24).arms(-132.97, 182.12).
 		elbows(-19.26, -10).legs(-6, 10).knees(4, 8).blades(-30.87).shoulders(7, 0, 0, 0)
 	drive := base().at(4, 5).lean(16).nod(-24).arms(-142.69, 167.63).
-		elbows(-14.83, -8).legs(10, -50).knees(0, 34).blades(-37.56).shoulders(9, 1, -1, -1)
+		elbows(-14.83, -8).legs(10, -68.8).knees(0, 34).blades(-37.56).shoulders(9, 1, -1, -1)
 	cut := base().at(24, 8).lean(30).squash(103, 97).nod(-25).arms(-59.92, -45.24).
-		elbows(-0.67, -17.32).legs(2, -70).knees(0, 50).blades(-42.38).shoulders(21, 0, -4, -2)
+		elbows(-0.67, -17.32).legs(2, -88.09).knees(0, 59.29).blades(-42.38).shoulders(21, 0, -4, -2)
 	follow := base().at(22, 9).lean(28).nod(-24.83).arms(-58.87, -43.52).
-		elbows(-8.57, -14.41).legs(2, -64).knees(2, 46).blades(-32.88).shoulders(23, 0, -3, -2)
+		elbows(-8.57, -14.41).legs(2, -89.63).knees(2, 60.95).blades(-32.88).shoulders(23, 0, -3, -2)
+	// The recovery no longer plants the feet together: the leading leg
+	// stays out ahead, which is most of the way to the staggered stance
+	// the idle now holds.
+	settle := base().lean(4).nod(-12).arms(-6.61, 2).elbows(-79.09, 72).
+		legs(0, -20.8).knees(3, 12.8).blades(-33)
 	return def("slash-anim", 24,
 		k(0, ready, true), k(6, raise, true), k(9, raiseDeep, true),
 		k(11, drive, false), k(13, cut, false), k(17, follow, true),
-		k(24, ready, true))
+		k(24, settle, true))
 }
 
 // slash2Clip answers the first cut from the other direction: a rising
