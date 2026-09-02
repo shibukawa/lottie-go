@@ -46,10 +46,24 @@ tail-far behind it, tail-near in front, so the trailing lock falls over
 the cheek and the shoulder the way long hair does. Behind the head it
 just peeked out at the silhouette's edge and read as part of it.
 
-Each is parented to the part it hangs off and given a static transform.
-Parenting alone carries them through every clip, which is why adding
-them needed no new keyframes: the skirt tips with the hips, the tails
-swing and mirror with the head, the veil follows the torso.
+Each is parented to the part it hangs off, so the skirt tips with the
+hips, the tails follow the head and mirror with it, and the veil rides
+the torso — none of that needed a keyframe.
+
+The twin-tails do get keyframes, because hair that holds one angle
+through a run reads as a helmet. Their rotation is simulated per clip:
+each tail is a damped spring hanging from the head, pulled toward
+straight down in WORLD space and shoved by the head's own acceleration.
+Converting that world angle back into the head's frame is what produces
+the lag — the head turns, the hair keeps pointing where it was, then
+catches up and overshoots. Two details are deliberate fakes. A rigid
+pendulum cannot be rotated by acceleration along its own axis, so a gait
+that only bobs up and down would leave the hair dead still; a vertical
+term splays the tails outward instead. And the swing is capped either
+side of rest, because a hard landing otherwise puts enough into the
+spring to carry the tail somewhere no head of hair goes. Looping clips
+are simulated three times over, so the swing that gets baked is the one
+already settled into the cycle.
 
 One thing from the sheet is deliberately not honored: it asks for 3.5
 heads tall and the rig is 2.5. Proportions are the contract every clip
@@ -62,11 +76,17 @@ directory:
 
 ```bash
 go run ./gen -out parts
+cp ../presets/chibi-sword/chibi-sword.lottie knight-nun.lottie
 go run github.com/shibukawa/lottie-go/cmd/lottierepack -dump -dir work knight-nun.lottie
-go run ./gen -out work/parts
+go run ./gen -out work/parts -slots work
 go run github.com/shibukawa/lottie-go/cmd/lottierepack -dir work -out knight-nun.lottie
 go run github.com/shibukawa/lottie-go/cmd/lottiecheck knight-nun.lottie
 ```
+
+It starts from the preset every time rather than editing in place, so
+the motion data is always the preset's current one. `-slots` adds the
+five decoration layers and bakes the hair sway; it is a no-op on a
+bundle that already has them.
 
 Open it in the editor:
 
