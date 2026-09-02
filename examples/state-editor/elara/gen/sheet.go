@@ -43,10 +43,15 @@ func loadSheet(path string) (image.Image, error) {
 
 // paperish is the candidate-background test: unsaturated, not dark, and
 // not bluer than it is red, which the navy habit is.
+// The floor sits low enough to take the printed guide dashes with the
+// paper — they are a mid grey, well above the drawing's linework but
+// well below its steel. Colours this test lets through are still only
+// candidates: the character's own greys survive because the border flood
+// cannot reach them through its outlines.
 func paperish(c color.NRGBA) bool {
 	hi := max(c.R, max(c.G, c.B))
 	lo := min(c.R, min(c.G, c.B))
-	return hi >= 140 && hi-lo <= 46 && c.R >= c.B
+	return hi >= 115 && hi-lo <= 46 && c.R >= c.B
 }
 
 // lift crops a region of a sheet and clears the paper from it.
@@ -201,4 +206,101 @@ func (f *figure) grid(path string) error {
 		}
 	}
 	return writePNG(path, out)
+}
+
+// liftBox lifts one boxed panel as its own figure. The face panels are
+// drawn inside a frame, and the pale ground inside it is walled off from
+// the sheet's border — the flood that lifts everything else cannot reach
+// it. Flooding from the panel's own edge can.
+func liftBox(sheet image.Image, b [][2]int) *figure {
+	x0, y0 := b[0][0], b[0][1]
+	x1, y1 := b[2][0], b[2][1]
+	return lift(sheet, x0, y0, x1-x0, y1-y0)
+}
+
+// eraseMargin clears a band around the crop. The face panels are drawn
+// inside a frame that the paper test will not take — it is as dark as
+// the linework — and the face reaches the panel's bottom edge, so the
+// frame cannot be told from the face by connectivity either. Cutting a
+// band off the edge takes the frame and costs a few pixels of neck.
+func (f *figure) eraseMargin(n int) {
+	b := f.img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	for y := range h {
+		for x := range w {
+			if x < n || y < n || x >= w-n || y >= h-n {
+				f.img.SetNRGBA(x, y, color.NRGBA{})
+			}
+		}
+	}
+}
+
+// keepLargest drops everything but the biggest connected run of opaque
+// pixels. What is left of a face panel after the margin comes off is the
+// face and a few fragments of its frame; the face outweighs them by two
+// orders of magnitude, so size tells them apart where neither colour nor
+// connectivity to the edge could.
+func (f *figure) keepLargest() {
+	b := f.img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	label := make([]int, w*h)
+	best, bestSize := 0, 0
+	next := 0
+	for i := range label {
+		if label[i] != 0 || f.img.NRGBAAt(i%w, i/w).A < 128 {
+			continue
+		}
+		next++
+		size := 0
+		stack := [][2]int{{i % w, i / w}}
+		label[i] = next
+		for len(stack) > 0 {
+			p := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			size++
+			for _, d := range [][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}} {
+				x, y := p[0]+d[0], p[1]+d[1]
+				if x < 0 || y < 0 || x >= w || y >= h || label[y*w+x] != 0 ||
+					f.img.NRGBAAt(x, y).A < 128 {
+					continue
+				}
+				label[y*w+x] = next
+				stack = append(stack, [2]int{x, y})
+			}
+		}
+		if size > bestSize {
+			best, bestSize = next, size
+		}
+	}
+	for i, l := range label {
+		if l != best {
+			f.img.SetNRGBA(i%w, i/w, color.NRGBA{})
+		}
+	}
+}
+
+// trim crops a figure down to what is actually drawn in it.
+func (f *figure) trim(name string) (*part, error) {
+	b := f.img.Bounds()
+	minX, minY, maxX, maxY := b.Dx(), b.Dy(), -1, -1
+	for y := range b.Dy() {
+		for x := range b.Dx() {
+			if f.img.NRGBAAt(x, y).A < 128 {
+				continue
+			}
+			minX, minY = min(minX, x), min(minY, y)
+			maxX, maxY = max(maxX, x), max(maxY, y)
+		}
+	}
+	if maxX < 0 {
+		return nil, fmt.Errorf("%s: the panel lifted to nothing", name)
+	}
+	w, h := maxX-minX+1, maxY-minY+1
+	img := image.NewNRGBA(image.Rect(0, 0, w, h))
+	for y := range h {
+		for x := range w {
+			img.SetNRGBA(x, y, f.img.NRGBAAt(minX+x, minY+y))
+		}
+	}
+	return &part{name: name, img: img, x: minX + f.x, y: minY + f.y}, nil
 }
