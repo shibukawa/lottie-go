@@ -63,7 +63,10 @@ func (g *game) Update() error {
 		g.cam = sp.Camera()
 	}
 	sp.Update()
-	target := sp.Camera() // the running phase's camera (or where a switch just snapped it)
+	// The target is the document's camera for the running phase — not
+	// sp.Camera(), which after the first SetCamera below is this override
+	// itself and would chase its own tail.
+	target := sp.Scene().CameraFor(sp.Phase())
 	g.cam = lottie.SceneCamera{
 		X:        g.cam.X + (target.X-g.cam.X)*chase,
 		Y:        g.cam.Y + (target.Y-g.cam.Y)*chase,
