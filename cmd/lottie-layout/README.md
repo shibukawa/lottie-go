@@ -16,14 +16,20 @@ A scene is a standalone JSON file (`*.scene.json`) that references
 node names what it shows (an animation, a state machine, a static image,
 or a text block with font/size/alignment/anchor whose content the game
 overwrites by name), where it sits (position, scale, rotation, opacity —
-draw order is the overlap), when it enters (a start time on the scene
-clock), which phase it belongs to (intro / main screen / outro, switched
-by time, bindings, or the game), how it plays (segment, loop, speed, or
-an entry-state override), whether focus can land on it (tab index,
-directional neighbor links), and how it reacts (bindings from
-`focus`/`hover`/`press`/`activate`/`cancel` to machine events, marker
-segments, focus moves, phase switches, or named callbacks the game
-receives).
+draw order is the overlap), how strongly the scene camera moves it (a
+parallax depth: 1 tracks fully, 0 pins to the screen like a HUD, values
+between let a background drift slower), when it enters (a start time on
+the scene clock), which phase it belongs to (intro / main screen /
+outro, switched by time, bindings, or the game), how it plays (segment,
+loop, speed — per chain step too — or an entry-state override), whether
+focus can land on it (tab index, directional neighbor links), and how it
+reacts (bindings from `focus`/`hover`/`press`/`activate`/`cancel` to
+machine events, marker segments, focus moves, phase switches, or named
+callbacks the game receives).
+
+The scene also carries a 2D camera (position, zoom, rotation), which each
+phase may override — a zoomed-in intro pulling back to the main screen.
+Games animate it per frame with `ScenePlayer.SetCamera`.
 
 ## Working in the tool
 
@@ -32,7 +38,9 @@ receives).
   instances into the viewed phase.
 - **Canvas** (center): drag nodes into place; green outlines mark
   focusable nodes, blue the selection, grey a node whose entrance has
-  not come yet. Coordinates round to two decimals.
+  not come yet. Coordinates round to two decimals. Arranging ignores the
+  camera (nodes sit in plain scene coordinates); a purple outline shows
+  the camera's framing instead, and Preview plays the camera for real.
 - **Timeline** (under the canvas): the node list and the choreography in
   one. Layer rows for the viewed phase, front on top — drag a name
   vertically to reorder the overlap, drag a bar horizontally to move its
@@ -41,9 +49,10 @@ receives).
   itself when the last element's animation finishes (a looping clip
   counts one pass); Replay runs the choreography again.
 - **Inspector** (right): parameters for the selection — the node
-  (transform, playback, text style, focus, bindings, phase), or the
-  scene itself (design size, focus options, and the phase list) via the
-  Scene toolbar button.
+  (transform with parallax depth, playback, text style, focus, bindings,
+  phase), or the scene itself (design size, focus options, the camera,
+  and the phase list with per-phase camera overrides) via the Scene
+  toolbar button.
 - **Preview**: runs the real `ScenePlayer` with real input — Tab and
   Shift+Tab walk the tab order, cursor keys move directionally, Enter or
   Space activates, Esc cancels, and the mouse hovers and clicks. What the
@@ -56,6 +65,13 @@ text nodes, callbacks — open the game-opening sample:
 
 ```
 go run . ../../examples/layout/opening-animation/assets/opening.scene.json
+```
+
+For the camera and parallax depth — a searchlight sweeping a dark room
+stop by stop, each stop a phase's camera — open the searchlight sample:
+
+```
+go run . ../../examples/layout/searchlight/assets/searchlight.scene.json
 ```
 
 ## Screenshot mode

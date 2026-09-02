@@ -10,10 +10,11 @@ One composed screen for vision:scene-editor. A standalone JSON file that referen
 root:
   name: string; scene id
   size: {w, h}; design resolution — scene coords span this box; screen mapping is runtime-side (api:scene-runtime)
+  camera: "{x, y, zoom, rotation}; requirement:scene-camera — 2D camera, zero value = identity, zoom 0 resolves to 1"
   bundles: list of {alias, path}; relative to the scene file
   images: list of {alias, path}; static image files (png/jpeg/webp via consumer-registered decoders)
   fonts: list of {alias, path}; ttf/otf for text nodes
-  phases: list of {name, duration, next}; requirement:scene-phases — first is where the scene starts
+  phases: list of {name, duration, next, camera}; requirement:scene-phases — first is where the scene starts; camera (optional) overrides the scene camera while the phase runs
   nodes: ordered list; order is draw order, first = back — overlap is edited by reordering
   options:
     hoverMovesFocus: bool; menu default true
@@ -27,6 +28,7 @@ node:
     {value, font: alias, size, align: left|center|right, anchorX: left|center|right, anchorY: top|middle|bottom, color: "#rrggbb(aa)", lineHeight}
   phase: phase this node belongs to; empty = every phase (requirement:scene-phases)
   transform: {x, y, scaleX, scaleY, rotation, opacity}
+  depth: parallax factor (requirement:scene-camera); absent = 1 (tracks camera), 0 = screen-pinned HUD, 0..1 = slower background, >1 = leading foreground; a pointer field because 0 is meaningful
   playback: # kind animation only
     {segment: marker name, loop, loopCount, speed, mode, autoplay}
   entry: string # kind machine only; initial state override, empty = machine's own initial

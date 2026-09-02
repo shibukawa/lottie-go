@@ -16,6 +16,8 @@ import (
 type palette struct {
 	frame, designBox, selected, focusable, hovered color.Color
 	canvasBack                                     color.Color
+	// camera outlines the scene camera's framing on the edit canvas.
+	camera color.Color
 	// timeline parts: the row track, a clip's bar, the open-ended bar of
 	// a machine or a looping clip, and the playhead.
 	track, bar, barOpen, playhead, tick color.Color
@@ -30,6 +32,7 @@ func paletteFor(context *guigui.Context) palette {
 			focusable:  color.NRGBA{0x4c, 0xc2, 0x8a, 0xff},
 			hovered:    color.NRGBA{0xd0, 0x9a, 0x3c, 0xff},
 			canvasBack: color.NRGBA{0x20, 0x22, 0x28, 0xff},
+			camera:     color.NRGBA{0xc8, 0x6f, 0xd6, 0xff},
 			track:      color.NRGBA{0x2a, 0x2d, 0x36, 0xff},
 			bar:        color.NRGBA{0x3d, 0x62, 0x93, 0xff},
 			barOpen:    color.NRGBA{0x3d, 0x62, 0x93, 0x66},
@@ -44,6 +47,7 @@ func paletteFor(context *guigui.Context) palette {
 		focusable:  color.NRGBA{0x1e, 0x9c, 0x63, 0xff},
 		hovered:    color.NRGBA{0xb5, 0x7c, 0x1a, 0xff},
 		canvasBack: color.NRGBA{0xf2, 0xf3, 0xf6, 0xff},
+		camera:     color.NRGBA{0x9b, 0x3f, 0xb0, 0xff},
 		track:      color.NRGBA{0xe6, 0xe8, 0xee, 0xff},
 		bar:        color.NRGBA{0x9d, 0xbc, 0xe6, 0xff},
 		barOpen:    color.NRGBA{0x9d, 0xbc, 0xe6, 0x77},
