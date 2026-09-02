@@ -1,0 +1,3 @@
+# Intermediate cuts and coordinate overlays: regenerate with `go run ./gen`.
+parts/
+work/
