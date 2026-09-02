@@ -11,3 +11,15 @@
 /player.exe
 /editor/editor
 /editor/editor.exe
+/cmd/lottie-layout/lottie-layout
+/cmd/lottie-layout/lottie-layout.exe
+/cmd/lottie-state-editor/lottie-state-editor
+/cmd/lottie-state-editor/lottie-state-editor.exe
+/cmd/lottie-state-editor/genpresets/genpresets
+/cmd/lottiecheck/lottiecheck
+/cmd/lottierepack/lottierepack
+
+# Asset generators built in place, e.g. `cd examples/layout/opening-animation/gen && go build .`
+/examples/*/*/gen/gen
+/examples/*/*/gen/gen.exe
+/examples/state-editor/gen
