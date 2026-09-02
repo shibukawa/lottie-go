@@ -22,6 +22,7 @@ import (
 
 	_ "image/jpeg"
 	"image/png"
+	"io"
 )
 
 // figure is one view lifted off its sheet: pixels with alpha, in the
@@ -172,6 +173,10 @@ type part struct {
 	x, y int
 }
 
+// pngEncode writes an image into a buffer, for the copies that go into
+// the bundle rather than onto disk.
+func pngEncode(w io.Writer, img image.Image) error { return png.Encode(w, img) }
+
 func writePNG(path string, img image.Image) error {
 	f, err := os.Create(path)
 	if err != nil {
@@ -236,18 +241,20 @@ func (f *figure) eraseMargin(n int) {
 }
 
 // keepLargest drops everything but the biggest connected run of opaque
-// pixels. What is left of a face panel after the margin comes off is the
-// face and a few fragments of its frame; the face outweighs them by two
-// orders of magnitude, so size tells them apart where neither colour nor
-// connectivity to the edge could.
-func (f *figure) keepLargest() {
-	b := f.img.Bounds()
+// pixels. It settles two different problems with the same measure. What
+// survives a face panel's margin trim is the face and a few fragments of
+// its frame, and the face outweighs them by two orders of magnitude. And
+// a stray speck left anywhere on a part derails the silhouette trace,
+// which starts at the topmost opaque pixel and would walk around the
+// speck instead of the part.
+func keepLargest(img *image.NRGBA) {
+	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()
 	label := make([]int, w*h)
 	best, bestSize := 0, 0
 	next := 0
 	for i := range label {
-		if label[i] != 0 || f.img.NRGBAAt(i%w, i/w).A < 128 {
+		if label[i] != 0 || img.NRGBAAt(i%w, i/w).A < 128 {
 			continue
 		}
 		next++
@@ -261,7 +268,7 @@ func (f *figure) keepLargest() {
 			for _, d := range [][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}} {
 				x, y := p[0]+d[0], p[1]+d[1]
 				if x < 0 || y < 0 || x >= w || y >= h || label[y*w+x] != 0 ||
-					f.img.NRGBAAt(x, y).A < 128 {
+					img.NRGBAAt(x, y).A < 128 {
 					continue
 				}
 				label[y*w+x] = next
@@ -274,7 +281,7 @@ func (f *figure) keepLargest() {
 	}
 	for i, l := range label {
 		if l != best {
-			f.img.SetNRGBA(i%w, i/w, color.NRGBA{})
+			img.SetNRGBA(i%w, i/w, color.NRGBA{})
 		}
 	}
 }
