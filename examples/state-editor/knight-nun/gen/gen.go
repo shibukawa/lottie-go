@@ -485,9 +485,16 @@ func run(out string) error {
 
 func main() {
 	out := flag.String("out", "parts", "output directory for the part PNGs")
+	slotsIn := flag.String("slots", "", "dumped clip directory to add the decoration slots to")
 	flag.Parse()
 	if err := run(*out); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+	if *slotsIn != "" {
+		if err := addSlots(*slotsIn); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	}
 }
