@@ -103,12 +103,15 @@ func run(gridOnly bool) error {
 	for _, r := range faceRegions {
 		panel := liftBox(sheet2, r.poly)
 		panel.eraseMargin(6)
-		panel.keepLargest()
+		keepLargest(panel.img)
 		p, err := panel.trim(r.name)
 		if err != nil {
 			return err
 		}
 		parts[r.name] = p
+	}
+	for _, p := range parts {
+		keepLargest(p.img)
 	}
 	all := append(append([]region{}, frontRegions...), partRegions...)
 	all = append(all, faceRegions...)
@@ -120,5 +123,5 @@ func run(gridOnly bool) error {
 		fmt.Printf("%-12s %3dx%-3d at (%d,%d)\n",
 			p.name, p.img.Bounds().Dx(), p.img.Bounds().Dy(), p.x, p.y)
 	}
-	return nil
+	return buildBundle(parts, "elara.lottie")
 }
