@@ -15,6 +15,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"image"
 	"os"
 	"path/filepath"
 )
@@ -32,11 +33,15 @@ const (
 	// The expanded sheet redraws every piece from several angles, which is
 	// where the turn clips' side and back views come from.
 	sheetAngles = "sheets/parts-angles.jpg"
-	partsDir    = "parts"
-	frontX      = 200
-	frontY      = 90
-	frontW      = 340
-	frontH      = 620
+	// The head is not one drawing: this sheet takes it apart into a bald
+	// base, a face, three pieces of hair and the veil's hood, which is the
+	// only way the expression can be swapped without redrawing the hair.
+	sheetHead = "sheets/head-parts.jpg"
+	partsDir  = "parts"
+	frontX    = 200
+	frontY    = 90
+	frontW    = 340
+	frontH    = 620
 )
 
 func main() {
@@ -65,6 +70,7 @@ func run(gridOnly bool) error {
 		for name, path := range map[string]string{
 			"parts-grid.png":  sheetParts,
 			"angles-grid.png": sheetAngles,
+			"head-grid.png":   sheetHead,
 		} {
 			sh, err := loadSheet(path)
 			if err != nil {
@@ -100,7 +106,27 @@ func run(gridOnly bool) error {
 	for k, v := range fromSheet {
 		parts[k] = v
 	}
-	for _, r := range faceRegions {
+	sheet3, err := loadSheet(sheetHead)
+	if err != nil {
+		return fmt.Errorf("%s: %w", sheetHead, err)
+	}
+	panels := []struct {
+		sheet   image.Image
+		regions []region
+	}{{sheet2, faceRegions}, {sheet3, headRegions}}
+	for _, set := range panels {
+		for _, r := range set.regions {
+			panel := liftBox(set.sheet, r.poly)
+			panel.eraseMargin(6)
+			keepLargest(panel.img)
+			p, err := panel.trim(r.name)
+			if err != nil {
+				return err
+			}
+			parts[r.name] = p
+		}
+	}
+	for _, r := range []region(nil) {
 		panel := liftBox(sheet2, r.poly)
 		panel.eraseMargin(6)
 		keepLargest(panel.img)
@@ -115,6 +141,7 @@ func run(gridOnly bool) error {
 	}
 	all := append(append([]region{}, frontRegions...), partRegions...)
 	all = append(all, faceRegions...)
+	all = append(all, headRegions...)
 	for _, r := range all {
 		p := parts[r.name]
 		if err := writePNG(filepath.Join(partsDir, p.name+".png"), p.img); err != nil {

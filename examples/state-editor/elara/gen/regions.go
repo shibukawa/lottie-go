@@ -49,3 +49,20 @@ var faceRegions = []region{
 	{"face-wink", box(1030, 495, 1196, 645)},
 	{"face-sad", box(1214, 495, 1380, 645)},
 }
+
+// The head comes apart on its own sheet: a bald base, a face, three
+// pieces of hair and the veil's hood. Layering them is what lets the
+// expression be swapped without redrawing the hair over it — the mesh
+// has no interior vertices, so a face cannot be deformed into another
+// expression, only replaced.
+//
+// These sit in drawn panels like the faces do, so they are lifted panel
+// by panel rather than cut out of the sheet.
+var headRegions = []region{
+	{"head-base", box(74, 434, 228, 682)},
+	{"face-3q", box(288, 148, 382, 248)},
+	{"hair-bangs", box(244, 434, 352, 566)},
+	{"hair-side", box(368, 434, 476, 566)},
+	{"hair-pigtails", box(494, 578, 602, 688)},
+	{"veil-hood", box(908, 432, 1032, 572)},
+}
