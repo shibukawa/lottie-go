@@ -13,7 +13,7 @@ dialog offers stay `chibi-male` and `chibi-sword`.
 ## Where it stands
 
 Assembly and preview work: `elara.lottie` holds the standing figure as
-ten textured meshes with a one-state machine, and opens in the editor or
+sixteen textured meshes with a one-state machine, and opens in the editor or
 renders with `lottiecheck`. The skinning that drives the meshes from the
 rig's joint angles is next; today the outlines are static.
 
@@ -46,6 +46,14 @@ own, and cutting those needs nothing but a rough box round each.
 - `parts.jpg` — every piece on its own, plus six faces.
 - `parts-angles.jpg` — the same pieces from several angles, which is
   where the turn clips' side and back views will come from.
+- `head-parts.jpg` — the head taken apart: a bald base, ten 3/4 faces,
+  bangs, side hair, pigtails and the veil's hood.
+
+The head needs that last sheet because a mesh has no interior vertices.
+A face cannot be deformed into another expression, only replaced — so
+the face has to be a separate plate laid on a bald base, with everything
+that overlaps it stacked on top rather than drawn into it. Six layers
+for a head, and swapping one of them changes the expression.
 
 ## Lifting the art off the paper
 
