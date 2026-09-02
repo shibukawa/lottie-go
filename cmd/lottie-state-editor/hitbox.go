@@ -97,6 +97,7 @@ func (m *Model) touchTrack() {
 			}
 		}
 	}
+	m.extGen++
 	m.generation++
 }
 
@@ -572,6 +573,7 @@ func (m *Model) touchCPBody() {
 			m.setStatus("cannot serialize body: %v", err)
 		}
 	}
+	m.extGen++
 	m.generation++
 }
 
@@ -755,6 +757,7 @@ func (m *Model) touchSockets() {
 			m.setStatus("cannot serialize sockets: %v", err)
 		}
 	}
+	m.extGen++
 	m.generation++
 }
 

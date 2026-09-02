@@ -13,6 +13,7 @@ scope:
     - author states, transitions, guards, inputs
     - live preview with manual trigger firing
     - read v1 and v2 archives; always write v2
+    - agent access: the same Model operations over MCP (requirement:editor-mcp)
   out: policy:editor-out-of-scope
 built_with: system:guigui
 principles:

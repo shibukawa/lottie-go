@@ -23,7 +23,7 @@ rules:
   - no expressions: bake to keyframes (ecosystem norm: native renderers skip them; lottie-web needs CSP unsafe-eval)
   - no effects: emulate via duplicated shapes / opacity
   - blend modes normal/multiply/screen only; masks add/subtract only (decision:practical-subset)
-mcp: revisit only on demonstrated demand
+mcp: revisited 2026-09-02 — decision:editor-mcp-server adopts it as the live pair-editing path; this file workflow stays for batch and no-editor contexts
 status:
   - shipped: cmd/lottiecheck (validate + render sample frames), cmd/lottierepack (dump/rebuild bundles), skills/lottie-character-preset (SKILL.md + rig/clips/subset references)
 ```

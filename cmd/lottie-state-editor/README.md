@@ -353,6 +353,65 @@ they are what a game passes to `Fire`.
   stage itself: inside moves, the white grip resizes, empty stage
   deselects. The checkbox hides the whole overlay.
 
+## MCP server
+
+`-mcp` serves the open document to a coding agent over the Model Context
+Protocol while you watch the same window. The agent drives the same
+Model the panes drive — the inspector's fields, the stage, the strip's
+tabs — so an edit it makes lands on screen at once, and anything you
+click moves the agent's cursor too:
+
+```bash
+cd cmd/lottie-state-editor && go run . -mcp 127.0.0.1:0 path/to/character.lottie
+```
+
+The address appears in the title row (`[mcp http://127.0.0.1:PORT/mcp]`)
+and in the Config pane, which can also switch the server off and on.
+`-mcp stdio` speaks over stdin/stdout instead, for a launcher that
+starts the editor itself; the window still opens. The server binds
+loopback only and has no authentication: the boundary is the machine.
+
+`init` writes the client side for you, on a fixed port so the address
+never has to be copied out of the title row:
+
+```bash
+cd your-game && lottie-state-editor init character.lottie
+```
+
+That writes `.mcp.json` (Claude Code, project scope) and
+`.vscode/mcp.json` (VS Code / Copilot), prints the `codex mcp add` line
+for Codex — whose servers live in `~/.codex/config.toml`, not in the
+project — and prints the matching launch command,
+`lottie-state-editor -mcp 127.0.0.1:7391 character.lottie`. Existing
+servers in those files are kept. `-port`, `-name`, `-dir` and `-clients`
+adjust it; `-transport stdio` records a launcher instead, so the agent
+starts the editor on the bundle itself. The server answers protocol
+revision 2026-07-28 and the 2025-11-25 handshake from the same endpoint.
+
+There are fifteen tools, and the loop an agent runs is
+`describe → select → inspect → set / add / remove / move / pose / path →
+render → validate → file`. The tool list stays small because `inspect`
+returns the selection as a form — every field with its value, options,
+whether it is keyed and whether it is writable right now — so the agent
+learns what `set` accepts from the reply, not from the schema. Things are
+named by address: `state:walk`, `transition:walk/0`, `part:forearm-near`,
+`key:12`, `shape:#0/0/1`, `hitbox:hurt`, `socket:hand`, `config`. A clip
+or machine segment left out means the one on stage; a layer can be named
+`#index` when its name is blank or repeated.
+
+Every reply carries the focus (stage, playhead, parked key, selection) and
+the document generation. Pass `expect_generation` on an edit to have it
+refused when you edited in between, and every refusal lists the valid
+choices so the agent corrects in one retry. `render` returns a PNG of the
+stage drawn by the real renderer (optionally with the overlays), a
+contact sheet, or the whole window. `raw` gets, puts or patches (RFC
+6902) a clip or machine as JSON, validated like an import: a document
+that does not decode or uses a feature the renderer skips is refused and
+nothing changes. `undo` covers clip edits and machine edits (`what=clip|machine`), the two stacks the Undo buttons use.
+
+`go test -run TestMCPLiveRender` with `LSM_MCP_URL` set talks to a running
+editor and checks the renders, the one thing the in-memory tests cannot.
+
 ## Notes
 
 A native dialog blocks for as long as it is on screen, so dialogs run on

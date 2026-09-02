@@ -151,18 +151,22 @@ func writePNG(src *ebiten.Image, path string) error {
 	return png.Encode(f, img)
 }
 
-// runWithOptionalScreenshot runs the app, wrapping it when a screenshot was
-// requested.
-func runWithOptionalScreenshot(root guigui.Widget, op *guigui.RunOptions) error {
+// runWithOptionalScreenshot runs the app through wrap — the MCP capture
+// hook — and, when a screenshot was requested, the screenshot wrapper on
+// top of that.
+func runWithOptionalScreenshot(root guigui.Widget, op *guigui.RunOptions, wrap func(ebiten.Game) ebiten.Game) error {
 	path := os.Getenv(screenshotPathEnv)
-	if path == "" {
-		return guigui.Run(root, op)
-	}
 	after := 30
 	if v, err := strconv.Atoi(os.Getenv(screenshotTicksEnv)); err == nil && v > 0 {
 		after = v
 	}
 	return guigui.RunWithCustomFunc(root, op, func(game ebiten.Game, options *ebiten.RunGameOptions) error {
-		return ebiten.RunGameWithOptions(&screenshotGame{Game: game, path: path, after: after}, options)
+		if wrap != nil {
+			game = wrap(game)
+		}
+		if path != "" {
+			game = &screenshotGame{Game: game, path: path, after: after}
+		}
+		return ebiten.RunGameWithOptions(game, options)
 	})
 }
