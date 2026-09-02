@@ -794,6 +794,7 @@ func (m *Model) InsertShapeVertex(seg int, t float64) {
 		}
 		return
 	}
+	insertUVVertex(item, seg, t)
 	m.selShapeVert = seg + 1
 	m.touchClipDoc()
 }
@@ -816,7 +817,9 @@ func (m *Model) DeleteShapeVertex() {
 		m.generation++
 		return
 	}
+	deleteUVVertex(item, m.selShapeVert)
 	m.selShapeVert = -1
+	m.selUVVert = -1
 	m.touchClipDoc()
 }
 

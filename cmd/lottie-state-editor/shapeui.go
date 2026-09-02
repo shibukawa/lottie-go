@@ -124,6 +124,9 @@ func drawShapeOverlay(dst *ebiten.Image, m *Model, tr stageTransform, u float32)
 	if m.ShapeItemIsGradient() {
 		drawGradGizmo(dst, m, tr, u, live)
 	}
+	if m.ShapeTexGizmoActive() {
+		drawTexGizmo(dst, m, tr, u, live)
+	}
 }
 
 // drawShapeVertexSkin is the onion skin per vertex: the selected path's
@@ -381,6 +384,9 @@ func shapeGripAt(m *Model, tr stageTransform, u float32, cx, cy int) (stageDragK
 	hit := func(p [2]float32) bool {
 		return abs32(float32(cx)-p[0]) <= half && abs32(float32(cy)-p[1]) <= half
 	}
+	if kind, ok := texGripAt(m, tr, u, cx, cy); ok {
+		return kind, 0, true
+	}
 	if pts, ok := gradGizmoScreen(m, tr); ok {
 		switch {
 		case hit(pts.mid):
@@ -485,6 +491,10 @@ func (s *previewStage) dragShapeStep(m *Model, dx, dy float64) {
 		m.MoveShapeGradPoint("e", ix, iy)
 	case dragShapeGradBoth:
 		m.MoveShapeGradPoint("both", ix, iy)
+	case dragShapeTexOrigin:
+		m.MoveShapeTexGizmo("origin", ix, iy)
+	case dragShapeTexAxis:
+		m.MoveShapeTexGizmo("axis", ix, iy)
 	case dragShapeCorner:
 		m.ResizeShapeGeometry(s.shapeDragIdx, ix, iy)
 	case dragShapeMoveGeom:

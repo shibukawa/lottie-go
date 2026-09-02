@@ -167,6 +167,34 @@ type shapeInspector struct {
 	capItems  []basicwidget.SelectItem[int]
 	joinItems []basicwidget.SelectItem[int]
 
+	// The texture section of a fill or stroke and the UV pane of a path
+	// (textureui.go).
+	texLabel       basicwidget.Text
+	texSel         basicwidget.Select[string]
+	texItems       []basicwidget.SelectItem[string]
+	texMapLabel    basicwidget.Text
+	texMapSel      basicwidget.Select[string]
+	texMapItems    []basicwidget.SelectItem[string]
+	texWrapLabel   basicwidget.Text
+	texWrapSel     basicwidget.Select[string]
+	texWrapItems   []basicwidget.SelectItem[string]
+	texFilterLabel basicwidget.Text
+	texFilterSel   basicwidget.Select[string]
+	texFilterItems []basicwidget.SelectItem[string]
+	texTintLabel   basicwidget.Text
+	texTintChk     basicwidget.Checkbox
+	texLabels      guigui.WidgetSlice[*basicwidget.Text]
+	texRows        guigui.WidgetSlice[*poseFieldRow]
+	uvPane         uvPaneView
+	uvSeedBtn      basicwidget.Button
+	uvClearBtn     basicwidget.Button
+	uvBtnRow       guigui.LinearLayout
+	uvBtnItems     []guigui.LinearLayoutItem
+	showUV         bool
+	unplacedLabel  basicwidget.Text
+	unplacedText   basicwidget.Text
+	unplacedDrop   basicwidget.Button
+
 	numLabels  guigui.WidgetSlice[*basicwidget.Text]
 	numRows    guigui.WidgetSlice[*poseFieldRow]
 	vertLabels guigui.WidgetSlice[*basicwidget.Text]
@@ -249,10 +277,12 @@ func (p *shapeInspector) Build(context *guigui.Context, adder *guigui.ChildAdder
 		basicwidget.FormItem{PrimaryWidget: &p.frameLabel, SecondaryWidget: &p.frameValue},
 	)
 
+	p.showUV = false
 	if hasSel {
 		switch {
 		case n.ty == "fl" || n.ty == "st":
 			p.buildColorRow(context, m, adder, editable)
+			p.buildTextureRows(context, m, adder, editable)
 		case n.ty == "gf" || n.ty == "gs":
 			p.buildGradientRows(context, m, adder, editable)
 		}
@@ -261,9 +291,11 @@ func (p *shapeInspector) Build(context *guigui.Context, adder *guigui.ChildAdder
 		}
 		if n.ty == "sh" {
 			p.buildPathRows(context, m, adder, editable)
+			p.buildUVRows(context, m, adder, editable)
 		}
 		p.buildNumericRows(context, m, adder, n.ty, editable)
 	}
+	p.buildUnplacedRows(context, m, adder, !m.Viewer())
 
 	p.undoBtn.SetText("Undo shape edit")
 	p.undoBtn.OnDown(func(context *guigui.Context) { m.UndoClipEdit() })
@@ -427,6 +459,14 @@ func (p *shapeInspector) hintText(m *Model) string {
 	if m.ShapeItemIsGradient() {
 		return "Drag the square (start), circle (end) or diamond (both) on the " +
 			"stage. Click under the ramp to add a stop; drag a stop off the bar to delete it."
+	}
+	if m.ShapeTexGizmoActive() {
+		return "Drag the square (texture origin) or the circle (its u axis: " +
+			"rotation and scale) on the stage; the rows below type the same placement."
+	}
+	if m.ShapeUVEditable() {
+		return "Drag a UV point in the pane, or empty space to move them all; " +
+			"the wheel scales the set. Seed projects the path's box onto the texture."
 	}
 	return "Drag inside the shape to move it, a box corner to resize it. On a " +
 		"path, vertices drag too; the selected one shows its bezier handles, " +
@@ -822,6 +862,20 @@ func (p *shapeInspector) layout(context *guigui.Context) guigui.LinearLayout {
 		p.items = append(p.items,
 			guigui.LinearLayoutItem{Widget: &p.vertList, Size: guigui.FixedSize(4 * u)},
 			guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &p.vertBtnRow},
+		)
+	}
+	if p.showUV {
+		p.uvBtnItems = slices.Delete(p.uvBtnItems, 0, len(p.uvBtnItems))
+		p.uvBtnItems = append(p.uvBtnItems,
+			guigui.LinearLayoutItem{Widget: &p.uvSeedBtn, Size: guigui.FlexibleSize(1)},
+			guigui.LinearLayoutItem{Widget: &p.uvClearBtn, Size: guigui.FlexibleSize(1)},
+		)
+		p.uvBtnRow = guigui.LinearLayout{
+			Direction: guigui.LayoutDirectionHorizontal, Items: p.uvBtnItems, Gap: u / 4,
+		}
+		p.items = append(p.items,
+			guigui.LinearLayoutItem{Widget: &p.uvPane, Size: guigui.FixedSize(8 * u)},
+			guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &p.uvBtnRow},
 		)
 	}
 	p.items = append(p.items,
