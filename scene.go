@@ -18,6 +18,7 @@ import (
 type Scene struct {
 	Name    string        `json:"name,omitempty"`
 	Size    SceneSize     `json:"size"`
+	Camera  SceneCamera   `json:"camera,omitzero"`
 	Bundles []SceneBundle `json:"bundles,omitempty"`
 	Images  []SceneAsset  `json:"images,omitempty"`
 	Fonts   []SceneAsset  `json:"fonts,omitempty"`
@@ -50,6 +51,48 @@ type ScenePhase struct {
 	// into the main screen. Empty stays put and reports OnPhaseEnd, so
 	// the game can act on an outro finishing.
 	Next string `json:"next,omitempty"`
+	// Camera overrides the scene's camera while this phase runs; nil keeps
+	// Scene.Camera.
+	Camera *SceneCamera `json:"camera,omitempty"`
+}
+
+// SceneCamera is a 2D camera over the whole scene: X, Y move the camera in
+// scene units (the content shifts the opposite way), Zoom magnifies around
+// the design box's center, and Rotation tilts the camera in degrees
+// clockwise (the content appears rotated the other way). Zoom resolves 0
+// to 1, so the zero value is the identity camera.
+//
+// How strongly the camera moves each node is the node's Depth — the
+// parallax factor. Entering a phase applies its camera; a game animates
+// the camera by calling ScenePlayer.SetCamera each frame.
+type SceneCamera struct {
+	X        float64 `json:"x,omitempty"`
+	Y        float64 `json:"y,omitempty"`
+	Zoom     float64 `json:"zoom,omitempty"`
+	Rotation float64 `json:"rotation,omitempty"`
+}
+
+// ZoomFactor returns Zoom, resolving an absent value to 1.
+func (c SceneCamera) ZoomFactor() float64 {
+	if c.Zoom == 0 {
+		return 1
+	}
+	return c.Zoom
+}
+
+// isIdentity reports whether the camera leaves the scene untouched.
+func (c SceneCamera) isIdentity() bool {
+	return c.X == 0 && c.Y == 0 && c.ZoomFactor() == 1 && c.Rotation == 0
+}
+
+// CameraFor resolves the camera in effect for the named phase: the phase's
+// own override, else the scene's. An unknown or empty name means the
+// scene's.
+func (s *Scene) CameraFor(phase string) SceneCamera {
+	if p, ok := s.Phase(phase); ok && p.Camera != nil {
+		return *p.Camera
+	}
+	return s.Camera
 }
 
 // Phase returns the named phase, or false.
@@ -357,6 +400,13 @@ type SceneNode struct {
 	Source    SceneSource    `json:"source"`
 	Transform SceneTransform `json:"transform,omitzero"`
 
+	// Depth is the parallax factor: how strongly the scene camera moves
+	// this node. nil resolves to 1 (tracks the camera fully); 0 pins the
+	// node to the screen (a HUD); between 0 and 1 a background drifts
+	// slower; above 1 a foreground leads. It is a pointer because 0 is a
+	// meaningful value, unlike the transform's zero-resolves-to-1 fields.
+	Depth *float64 `json:"depth,omitempty"`
+
 	// Playback applies to animation nodes only.
 	Playback ScenePlayback `json:"playback,omitzero"`
 	// Entry overrides a machine node's initial state; empty keeps the
@@ -378,6 +428,14 @@ type SceneNode struct {
 	Bindings []SceneBinding `json:"bindings,omitempty"`
 
 	Extra ExtraFields `json:"-"`
+}
+
+// ParallaxDepth returns Depth, resolving an absent value to 1.
+func (n *SceneNode) ParallaxDepth() float64 {
+	if n.Depth == nil {
+		return 1
+	}
+	return *n.Depth
 }
 
 func (s Scene) MarshalJSON() ([]byte, error) {
@@ -524,6 +582,16 @@ func (s *Scene) Validate() []error {
 	var errs []error
 	if s.Size.W <= 0 || s.Size.H <= 0 {
 		errs = append(errs, fmt.Errorf("scene has no design size"))
+	}
+	// A negative zoom flips the scene, and combined with fractional depth
+	// the parallax math has no real answer — reject it outright.
+	if s.Camera.Zoom < 0 {
+		errs = append(errs, fmt.Errorf("scene camera has negative zoom"))
+	}
+	for _, p := range s.Phases {
+		if p.Camera != nil && p.Camera.Zoom < 0 {
+			errs = append(errs, fmt.Errorf("phase %q camera has negative zoom", p.Name))
+		}
 	}
 	aliases := map[string]bool{}
 	for _, b := range s.Bundles {

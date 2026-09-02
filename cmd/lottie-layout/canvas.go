@@ -289,6 +289,10 @@ func (c *canvasView) Draw(context *guigui.Context, widgetBounds *guigui.WidgetBo
 	if m.PreviewMode() {
 		return
 	}
+	// Edit mode arranges in plain scene coordinates (the runtime camera is
+	// neutralized), so the camera shows as a framing overlay instead: the
+	// region a depth-1 node must occupy to be on screen under the camera.
+	c.strokeCameraFrame(dst, m, tr, paletteFor(context).camera)
 	// Edit overlays: nodes whose entrance is still to come in grey — the
 	// runtime skips them, but they must stay arrangeable — focusable
 	// nodes in green, the selection in blue on top.
@@ -308,6 +312,35 @@ func (c *canvasView) Draw(context *guigui.Context, widgetBounds *guigui.WidgetBo
 		if sel != nil && def.Name == sel.Name {
 			c.strokeNode(dst, n, tr, u/8, pal.selected)
 		}
+	}
+}
+
+// strokeCameraFrame outlines what the viewed phase's camera sees: the
+// design box pulled back through the inverse camera at depth 1. An
+// identity camera draws nothing — the design box already is the frame.
+func (c *canvasView) strokeCameraFrame(dst *ebiten.Image, m *Model, tr canvasTransform, clr color.Color) {
+	s := m.Scene()
+	cam := s.CameraFor(m.ViewPhase())
+	if cam.X == 0 && cam.Y == 0 && cam.ZoomFactor() == 1 && cam.Rotation == 0 {
+		return
+	}
+	g := cam.GeoM(s.Size.W, s.Size.H, 1)
+	if !g.IsInvertible() {
+		return
+	}
+	g.Invert()
+	g.Scale(tr.scale, tr.scale)
+	g.Translate(tr.ox, tr.oy)
+	w, h := float64(s.Size.W), float64(s.Size.H)
+	pts := [4][2]float64{{0, 0}, {w, 0}, {w, h}, {0, h}}
+	var xs, ys [4]float32
+	for i, pt := range pts {
+		x, y := g.Apply(pt[0], pt[1])
+		xs[i], ys[i] = float32(x), float32(y)
+	}
+	for i := range 4 {
+		j := (i + 1) % 4
+		vector.StrokeLine(dst, xs[i], ys[i], xs[j], ys[j], 1.5, clr, true)
 	}
 }
 

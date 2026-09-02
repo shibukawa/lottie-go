@@ -748,6 +748,53 @@ func (m *Model) SetNodeTransform(i int, tf lottie.SceneTransform) {
 	m.touchLight()
 }
 
+// SetNodeDepth writes a node's parallax depth. 1 is the default and stays
+// out of the document; the live player reads the shared definition, so no
+// rebuild is needed.
+func (m *Model) SetNodeDepth(i int, d float64) {
+	if i < 0 || i >= len(m.scene.Nodes) {
+		return
+	}
+	if d == 1 {
+		m.scene.Nodes[i].Depth = nil
+	} else {
+		m.scene.Nodes[i].Depth = &d
+	}
+	m.touchLight()
+}
+
+// SetSceneCamera writes the scene's camera. A zoom of exactly 1 is the
+// default and stays out of the document.
+func (m *Model) SetSceneCamera(c lottie.SceneCamera) {
+	if c.Zoom == 1 {
+		c.Zoom = 0
+	}
+	m.scene.Camera = c
+	m.touch()
+}
+
+// SetPhaseCamera sets or clears a phase's camera override.
+func (m *Model) SetPhaseCamera(i int, c *lottie.SceneCamera) {
+	if i < 0 || i >= len(m.scene.Phases) {
+		return
+	}
+	if c != nil && c.Zoom == 1 {
+		c.Zoom = 0
+	}
+	m.scene.Phases[i].Camera = c
+	m.touch()
+}
+
+// applyEditCamera neutralizes the camera on the running player while
+// arranging: edit mode lays nodes out in plain scene coordinates, and the
+// canvas shows the camera as a framing overlay instead. Preview mode keeps
+// the document's camera, the way a game would see it.
+func (m *Model) applyEditCamera(sp *lottie.ScenePlayer) {
+	if sp != nil && !m.preview {
+		sp.SetCamera(lottie.SceneCamera{})
+	}
+}
+
 func (m *Model) patchLiveTransform(n *lottie.SceneNode) {
 	if m.player == nil {
 		return
@@ -1086,6 +1133,8 @@ func (m *Model) TogglePreview() {
 			m.setStatus("preview: Tab/arrows move focus, Enter activates, Esc cancels")
 		}
 	} else {
+		// Back to arranging: the camera returns to a framing overlay.
+		m.applyEditCamera(m.player)
 		m.setStatus("editing")
 	}
 	m.generation++
@@ -1099,6 +1148,7 @@ func (m *Model) ReplayScene() {
 		if m.viewPhase != "" {
 			sp.SetPhase(m.viewPhase)
 		}
+		m.applyEditCamera(sp)
 		m.playing = true
 		m.setStatus("replaying from 0s")
 	}
@@ -1145,8 +1195,11 @@ func (m *Model) rebuildPlayer() {
 	})
 	sp.OnPhaseChanged(func(from, to string) {
 		// Follow the running scene, so the timeline and canvas show the
-		// phase an auto-advance or a binding entered.
+		// phase an auto-advance or a binding entered. Entering a phase
+		// re-resolves the document camera, so edit mode neutralizes it
+		// again.
 		m.viewPhase = to
+		m.applyEditCamera(sp)
 		m.generation++
 	})
 	if m.viewPhase != "" && m.viewPhase != sp.Phase() {
@@ -1154,6 +1207,7 @@ func (m *Model) rebuildPlayer() {
 			m.viewPhase = sp.Phase()
 		}
 	}
+	m.applyEditCamera(sp)
 	m.player = sp
 }
 
@@ -1201,6 +1255,7 @@ func (m *Model) SeekScene(sec float64) {
 	if m.viewPhase != "" {
 		sp.SetPhase(m.viewPhase)
 	}
+	m.applyEditCamera(sp)
 	tps := float64(ebiten.TPS())
 	if tps <= 0 {
 		tps = 60
@@ -1242,6 +1297,7 @@ func (m *Model) TogglePlayback() {
 		if m.viewPhase != "" {
 			sp.SetPhase(m.viewPhase)
 		}
+		m.applyEditCamera(sp)
 	}
 	m.playing = true
 	m.setStatus("playing")
@@ -1281,6 +1337,7 @@ func (m *Model) SetViewPhase(name string) {
 	m.viewPhase = name
 	if sp := m.Player(); sp != nil && name != "" {
 		sp.SetPhase(name)
+		m.applyEditCamera(sp)
 	}
 	m.generation++
 }

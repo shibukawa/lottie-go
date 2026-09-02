@@ -454,3 +454,69 @@ func TestRemoveBundleKeepsNodesAsProblems(t *testing.T) {
 		t.Error("player built against a missing bundle")
 	}
 }
+
+func TestCameraEditAndEditModeNeutralizes(t *testing.T) {
+	m, _ := testModel(t)
+	placeClip(t, m)
+
+	// The document takes the camera; a zoom of exactly 1 stays out of it.
+	m.SetSceneCamera(lottie.SceneCamera{X: 40, Zoom: 1})
+	if m.scene.Camera.X != 40 || m.scene.Camera.Zoom != 0 {
+		t.Fatalf("scene camera = %+v, want x=40 with zoom normalized away", m.scene.Camera)
+	}
+
+	// Edit mode arranges without the camera: the rebuilt player runs the
+	// identity even though the document pans.
+	sp := m.Player()
+	if sp == nil {
+		t.Fatalf("player did not build: %v", m.PlayerErr())
+	}
+	if got := sp.Camera(); got != (lottie.SceneCamera{}) {
+		t.Fatalf("edit-mode camera = %+v, want identity", got)
+	}
+
+	// Preview mode plays the document's camera, the way a game would.
+	m.TogglePreview()
+	sp = m.Player()
+	if got := sp.Camera(); got.X != 40 {
+		t.Fatalf("preview camera = %+v, want the document's x=40", got)
+	}
+	m.TogglePreview()
+	if got := m.Player().Camera(); got != (lottie.SceneCamera{}) {
+		t.Fatalf("camera after leaving preview = %+v, want identity", got)
+	}
+}
+
+func TestSetNodeDepthNormalizesDefault(t *testing.T) {
+	m, _ := testModel(t)
+	placeClip(t, m)
+	i := m.SelectedNodeIndex()
+	m.SetNodeDepth(i, 0.5)
+	if d := m.scene.Nodes[i].ParallaxDepth(); d != 0.5 {
+		t.Fatalf("depth = %v, want 0.5", d)
+	}
+	// 1 is the default and must leave the document.
+	m.SetNodeDepth(i, 1)
+	if m.scene.Nodes[i].Depth != nil {
+		t.Fatalf("depth 1 stored as %v, want absent", *m.scene.Nodes[i].Depth)
+	}
+	// 0 is meaningful (screen-pinned) and must stay.
+	m.SetNodeDepth(i, 0)
+	if d := m.scene.Nodes[i].Depth; d == nil || *d != 0 {
+		t.Fatalf("depth 0 not stored")
+	}
+}
+
+func TestPhaseCameraOverride(t *testing.T) {
+	m, _ := testModel(t)
+	m.AddPhase()
+	m.SetPhaseCamera(0, &lottie.SceneCamera{X: 100, Zoom: 1})
+	p := &m.scene.Phases[0]
+	if p.Camera == nil || p.Camera.X != 100 || p.Camera.Zoom != 0 {
+		t.Fatalf("phase camera = %+v, want x=100 with zoom normalized away", p.Camera)
+	}
+	m.SetPhaseCamera(0, nil)
+	if p.Camera != nil {
+		t.Fatal("phase camera override not cleared")
+	}
+}
