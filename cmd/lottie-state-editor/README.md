@@ -378,15 +378,26 @@ never has to be copied out of the title row:
 cd your-game && lottie-state-editor init character.lottie
 ```
 
-That writes `.mcp.json` (Claude Code, project scope) and
-`.vscode/mcp.json` (VS Code / Copilot), prints the `codex mcp add` line
-for Codex — whose servers live in `~/.codex/config.toml`, not in the
-project — and prints the matching launch command,
-`lottie-state-editor -mcp 127.0.0.1:7391 character.lottie`. Existing
-servers in those files are kept. `-port`, `-name`, `-dir` and `-clients`
-adjust it; `-transport stdio` records a launcher instead, so the agent
-starts the editor on the bundle itself. The server answers protocol
-revision 2026-07-28 and the 2025-11-25 handshake from the same endpoint.
+It asks which tools to set up — or takes them from `-clients`, by name,
+number or `all` — and writes each one's project-level MCP config in the
+shape that tool expects, keeping whatever else the file already holds:
+
+| tool | file |
+|---|---|
+| `claude` — Claude Code | `.mcp.json` |
+| `copilot` — GitHub Copilot in VS Code | `.vscode/mcp.json` |
+| `codex` — OpenAI Codex | `.codex/config.toml` (read for trusted projects only) |
+| `kiro` — Kiro | `.kiro/settings/mcp.json` |
+| `antigravity` — Google Antigravity | `.agents/mcp_config.json` |
+| `grok` — Grok Build | `.grok/config.toml` (it also reads `.mcp.json`) |
+| `cursor` — Cursor | `.cursor/mcp.json` |
+
+Then it prints the matching launch command,
+`lottie-state-editor -mcp 127.0.0.1:7391 character.lottie`. `-port`,
+`-name` and `-dir` adjust it; `-transport stdio` records a launcher
+instead, so the agent starts the editor on the bundle itself. The server
+answers protocol revision 2026-07-28 and the 2025-11-25 handshake from
+the same endpoint.
 
 There are fifteen tools, and the loop an agent runs is
 `describe → select → inspect → set / add / remove / move / pose / path →

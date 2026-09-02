@@ -18,7 +18,7 @@ chosen:
   auth: none; loopback is the boundary (user 2026-09-02)
   protocol: target revision 2026-07-28 (stateless, no session id, server/discover, per-request _meta version) while also answering the 2025-11-25 handshake from the same endpoint; system:mcp-go-sdk v1.7.0 does both
   sdk: system:mcp-go-sdk (pure Go — decision:no-cgo)
-  setup: an init subcommand (cmd/lottie-state-editor/mcpinit.go) writes the client half — .mcp.json for Claude Code, .vscode/mcp.json for VS Code, the codex mcp add line for Codex, whose servers live in ~/.codex/config.toml — on one fixed port (7391) and prints the matching launch command; -transport stdio records a launcher on the bundle instead (user 2026-09-02)
+  setup: an init subcommand (cmd/lottie-state-editor/mcpinit.go) writes each chosen tool's project-level MCP config on one fixed port (7391) — claude .mcp.json, copilot .vscode/mcp.json, codex .codex/config.toml (trusted projects only), kiro .kiro/settings/mcp.json, antigravity .agents/mcp_config.json (serverUrl), grok .grok/config.toml, cursor .cursor/mcp.json — each in the shape that tool insists on, merged into what the file already holds, chosen with -clients or an interactive list; then prints the launch command. -transport stdio records a launcher on the bundle instead (user 2026-09-02)
   surface: few tools over one shared selection cursor (concept:editor-focus) plus a raw-JSON escape hatch; not one tool per Model method
 rejected:
   stdio_only: the agent would own the window's lifecycle, and a second agent session could not reach an open document. Kept as the second transport for agent-launched runs, not the only one
