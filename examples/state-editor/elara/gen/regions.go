@@ -1,20 +1,18 @@
 package main
 
-// Where each part is cut from the front view, in sheet coordinates, and
-// in what order they stack. The list runs BACK to FRONT, which is both
-// the draw order and the order the cut resolves overlaps in: a part
-// claims only what nothing in front of it already took.
+// Where each part comes from, in its sheet's coordinates.
 //
-// The polygons are placed by eye against work/front-grid.png and may be
-// sloppy where they fall outside the figure — the cut intersects them
-// with the figure's own alpha. What they really decide is where one part
-// ENDS and the next begins, along seams the illustration does not draw:
-// the shoulder, the hip, the hairline.
+// Two sources, because neither has everything. The parts sheet draws the
+// cape, the arms, a leg, the sword, the sheath and the faces on their
+// own, which is the only way to get them clean: on the front view those
+// pieces lie across one another and the drawing contains no line where
+// they would have to be cut apart. What the parts sheet does not draw —
+// the torso under its armour, and the twin-tails — comes off the front
+// view, where nothing overlaps them.
 //
-// The count is driven by depth, not by joints. A mesh bends, so a thigh
-// and a shin are one part; a second part is needed only where something
-// passes in front of something else during a clip. That is why there are
-// ten of these and not the rig's usual sixteen.
+// Boxes are read by eye against the overlays -grid writes. They may be
+// sloppy: the cut intersects them with the figure's own alpha, and parts
+// claim pixels front to back so no pixel lands in two parts.
 type region struct {
 	name string
 	poly [][2]int
@@ -24,15 +22,30 @@ func box(x0, y0, x1, y1 int) [][2]int {
 	return [][2]int{{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}
 }
 
-var regions = []region{
-	{"cape", box(232, 240, 510, 660)},
-	{"scabbard", box(414, 394, 476, 592)},
-	{"arm-far", box(396, 284, 480, 444)},
-	{"leg-far", box(350, 492, 428, 710)},
+// From the front view: back to front.
+var frontRegions = []region{
 	{"tail-far", box(426, 108, 536, 306)},
 	{"torso", box(280, 280, 430, 508)},
-	{"leg-near", box(278, 492, 352, 710)},
-	{"head", box(270, 90, 440, 294)},
-	{"arm-near", box(250, 284, 324, 444)},
-	{"sword", box(190, 396, 286, 608)},
+}
+
+// From the parts sheet. Nothing here overlaps, so the order is only the
+// order they get written in.
+var partRegions = []region{
+	{"cape", box(50, 150, 515, 625)},
+	{"arm-near", box(505, 170, 705, 330)},
+	{"arm-far", box(770, 165, 980, 360)},
+	{"leg", box(585, 445, 705, 690)},
+	{"sword", box(80, 595, 460, 690)},
+	{"sheath", box(840, 440, 930, 690)},
+}
+
+// The faces sit inside drawn panels, each with its own pale ground, so
+// they are lifted panel by panel rather than cut out of the sheet.
+var faceRegions = []region{
+	{"face-smile", box(1042, 172, 1178, 318)},
+	{"face-resolve", box(1226, 172, 1362, 318)},
+	{"face-blush", box(1030, 335, 1196, 485)},
+	{"face-shock", box(1214, 335, 1380, 485)},
+	{"face-wink", box(1030, 495, 1196, 645)},
+	{"face-sad", box(1214, 495, 1380, 645)},
 }
