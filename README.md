@@ -395,7 +395,7 @@ anchors and every clip plays with the new look.
 Presets are built for automated editing. Two commands close the loop:
 
 ```bash
-# explode a bundle into clips / parts / machines, and rebuild it
+# explode a bundle into clips / parts / machines / extensions, and rebuild it
 go run github.com/shibukawa/lottie-go/cmd/lottierepack -dump -dir work character.lottie
 go run github.com/shibukawa/lottie-go/cmd/lottierepack -dir work -out character.lottie
 

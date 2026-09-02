@@ -8,15 +8,17 @@
 //
 // The directory layout mirrors what the pieces are:
 //
-//	work/<id>.json          one animation per file, named by its id
-//	work/parts/<name>.png   shared images (the bundle's i/ or images/ dir)
-//	work/machines/<id>.json state machines
+//	work/<id>.json            one animation per file, named by its id
+//	work/parts/<name>.png     shared images (the bundle's i/ or images/ dir)
+//	work/machines/<id>.json   state machines
+//	work/extensions/<path>    plugin payloads, the bundle's extensions/ subtree
 //
 // Repacking starts from the dumped bundle's manifest when -base points at
 // one (or when the output already exists), so fields the directory does
 // not carry survive the round trip. Animations present in the bundle but
 // missing from the directory are removed — deleting a clip's file deletes
-// the clip.
+// the clip. The same holds for extension files once work/extensions/
+// exists; a directory without one leaves the base's payloads untouched.
 package main
 
 import (
@@ -68,7 +70,7 @@ func dumpBundle(src, dir string) error {
 	if err != nil {
 		return err
 	}
-	for _, sub := range []string{"parts", "machines"} {
+	for _, sub := range []string{"parts", "machines", "extensions"} {
 		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
 			return err
 		}
@@ -95,6 +97,24 @@ func dumpBundle(src, dir string) error {
 			return err
 		}
 		if err := os.WriteFile(filepath.Join(dir, "machines", id+".json"), raw, 0o644); err != nil {
+			return err
+		}
+	}
+	// Extension payloads keep their subtree: plugins claim directories
+	// (extensions/physics/cp/, extensions/texture/) and some a single file
+	// at the root (extensions/sockets.json). JSON is pretty-printed like
+	// the clips; anything else is written verbatim.
+	for _, name := range b.ExtensionFiles("") {
+		rel, err := extensionRelPath(name)
+		if err != nil {
+			return err
+		}
+		raw, _ := b.ExtensionFile(name)
+		dst := filepath.Join(dir, "extensions", rel)
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return err
+		}
+		if err := writeIndented(dst, raw); err != nil {
 			return err
 		}
 	}
@@ -131,7 +151,71 @@ func dumpBundle(src, dir string) error {
 	if err := os.WriteFile(filepath.Join(dir, ".source"), []byte(src), 0o644); err != nil {
 		return err
 	}
-	fmt.Printf("dumped %s into %s (%d clips, %d machines)\n", src, dir, len(b.AnimationIDs()), len(b.StateMachineIDs()))
+	fmt.Printf("dumped %s into %s (%d clips, %d machines, %d extension files)\n", src, dir, len(b.AnimationIDs()), len(b.StateMachineIDs()), len(b.ExtensionFiles("")))
+	return nil
+}
+
+// extensionRelPath turns a bundle member name under extensions/ into a
+// path relative to work/extensions, checking every component: member
+// names come from zip entries, which may try to climb out of -dir.
+func extensionRelPath(name string) (string, error) {
+	rel, ok := strings.CutPrefix(name, "extensions/")
+	if !ok || rel == "" {
+		return "", fmt.Errorf("lottierepack: refusing extension member %q outside extensions/", name)
+	}
+	parts := strings.Split(rel, "/")
+	for _, p := range parts {
+		if !safeComponent(p) {
+			return "", fmt.Errorf("lottierepack: refusing unsafe extension member %q", name)
+		}
+	}
+	return filepath.Join(parts...), nil
+}
+
+// syncExtensions makes work/extensions the authority over the bundle's
+// extensions/ subtree, mirroring the clip rule: a file present is set, a
+// member absent from the directory is removed. A directory that does not
+// exist means the caller never dumped one (an older dump, a hand-built
+// tree), and the base's payloads pass through as before.
+func syncExtensions(b *lottie.Bundle, dir string) error {
+	root := filepath.Join(dir, "extensions")
+	if _, err := os.Stat(root); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	present := map[string]bool{}
+	err := filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(root, p)
+		if err != nil {
+			return err
+		}
+		name := "extensions/" + filepath.ToSlash(rel)
+		data, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		if err := b.SetExtensionFile(name, data); err != nil {
+			return fmt.Errorf("%s: %w", p, err)
+		}
+		present[name] = true
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	for _, name := range b.ExtensionFiles("") {
+		if !present[name] {
+			b.RemoveExtensionFile(name)
+		}
+	}
 	return nil
 }
 
@@ -223,6 +307,10 @@ func repack(dir, base, out string) error {
 			return err
 		}
 		b.SetImage(filepath.Base(path), data)
+	}
+
+	if err := syncExtensions(b, dir); err != nil {
+		return err
 	}
 
 	if problems := b.Validate(); len(problems) > 0 {

@@ -41,7 +41,9 @@ go run github.com/shibukawa/lottie-go/cmd/lottiecheck -render preview/ character
 
 The dump layout: `work/<clip-id>.json` (one animation per file),
 `work/parts/*.png` (shared images), `work/machines/<id>.json` (state
-machines). Deleting a clip file deletes the clip on repack.
+machines), `work/extensions/...` (plugin payloads such as hitboxes,
+sockets, and texture maps, subtree kept). Deleting a clip file deletes the
+clip on repack; the same rule applies to files under `work/extensions/`.
 
 If the lottie-go checkout is available, the user can watch your edits
 land live: `cd cmd/lottie-state-editor && go run . -viewer path/to/character.lottie`
