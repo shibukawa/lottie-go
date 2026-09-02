@@ -2,6 +2,11 @@ module github.com/shibukawa/lottie-go/cmd/lottie-state-editor
 
 go 1.27.0
 
+replace (
+	github.com/shibukawa/lottie-go/plugin/physics/cp => ../../plugin/physics/cp
+	github.com/shibukawa/lottie-go/plugin/physics/resolv => ../../plugin/physics/resolv
+)
+
 require (
 	github.com/guigui-gui/guigui v0.0.0-20260820074925-239b2393c8d1
 	github.com/hajimehoshi/ebiten/v2 v2.10.0-alpha.13.0.20260817125030-944601d3f17b
@@ -14,11 +19,6 @@ require (
 	github.com/shibukawa/lottie-go/plugin/physics/resolv v0.0.0-00010101000000-000000000000
 )
 
-replace (
-	github.com/shibukawa/lottie-go/plugin/physics/cp => ../../plugin/physics/cp
-	github.com/shibukawa/lottie-go/plugin/physics/resolv => ../../plugin/physics/resolv
-)
-
 require (
 	github.com/akavel/rsrc v0.10.2 // indirect
 	github.com/dchest/jsmin v1.0.0 // indirect
@@ -29,6 +29,7 @@ require (
 	github.com/hajimehoshi/iro v0.4.0-alpha.0.20260802170616-edef5c559e51 // indirect
 	github.com/jeandeaual/go-locale v0.0.0-20250612000132-0ef82f21eade // indirect
 	github.com/josephspurrier/goversioninfo v1.7.0 // indirect
+	github.com/modelcontextprotocol/go-sdk v1.7.0 // indirect
 	github.com/randall77/makefat v0.0.0-20260406194835-1b91746796b7 // indirect
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	golang.org/x/image v0.45.0 // indirect

@@ -75,10 +75,11 @@ func (p *inspectorPane) Layout(context *guigui.Context, widgetBounds *guigui.Wid
 type inspectorContent struct {
 	guigui.DefaultWidget
 
-	stateTitle basicwidget.Text
-	addState   basicwidget.Button
-	delState   basicwidget.Button
-	setInitial basicwidget.Button
+	stateTitle  basicwidget.Text
+	addState    basicwidget.Button
+	delState    basicwidget.Button
+	setInitial  basicwidget.Button
+	undoMachine basicwidget.Button
 
 	nameLabel, typeLabel, animLabel basicwidget.Text
 	segLabel, modeLabel, speedLabel basicwidget.Text
@@ -161,6 +162,10 @@ type inspectorContent struct {
 	cfgPhysLabel   basicwidget.Text
 	cfgPhysSel     basicwidget.Select[string]
 	cfgNote        basicwidget.Text
+	cfgMCPLabel    basicwidget.Text
+	cfgMCP         basicwidget.Checkbox
+	cfgMCPURLLabel basicwidget.Text
+	cfgMCPURL      basicwidget.Text
 	cfgForm        basicwidget.Form
 	cfgFormItems   []basicwidget.FormItem
 
@@ -309,7 +314,7 @@ func (c *inspectorContent) Build(context *guigui.Context, adder *guigui.ChildAdd
 		c.buildConfigPane(context, m)
 	default:
 		for _, w := range []guigui.Widget{
-			&c.stateTitle, &c.addState, &c.delState, &c.setInitial, &c.form,
+			&c.stateTitle, &c.addState, &c.delState, &c.setInitial, &c.undoMachine, &c.form,
 			&c.transTitle, &c.transList, &c.transTarget, &c.addTrans,
 			&c.upTrans, &c.downTrans, &c.delTrans,
 			&c.guardTitle, &c.guardList, &c.addGuard, &c.delGuard,
@@ -624,6 +629,11 @@ func (c *inspectorContent) buildStateForm(context *guigui.Context, m *Model, st 
 	c.setInitial.OnDown(func(context *guigui.Context) { m.SetInitial(m.SelectedStateName()) })
 	context.SetEnabled(&c.delState, st != nil && !m.Viewer())
 	context.SetEnabled(&c.setInitial, st != nil && !m.Viewer())
+	// Undo covers every machine edit — states, transitions, guards,
+	// inputs — but not node drags, which are layout rather than logic.
+	c.undoMachine.SetText("Undo")
+	c.undoMachine.OnDown(func(context *guigui.Context) { m.UndoMachineEdit() })
+	context.SetEnabled(&c.undoMachine, m.CanUndoMachineEdit() && !m.Viewer())
 
 	label(&c.nameLabel, "name")
 	label(&c.typeLabel, "type")
@@ -961,10 +971,30 @@ func (c *inspectorContent) buildConfigPane(context *guigui.Context, m *Model) {
 	c.cfgNote.SetMultiline(true)
 	c.cfgNote.SetScale(0.85)
 
+	// The MCP server is a per-window switch: an agent connects to this
+	// document, so the address it needs is shown right beside the toggle.
+	label(&c.cfgMCPLabel, "MCP server")
+	c.cfgMCP.SetValue(m.MCPOn())
+	c.cfgMCP.OnValueChanged(func(context *guigui.Context, v bool) {
+		if v != m.MCPOn() {
+			m.SetMCPOn(v)
+		}
+	})
+	label(&c.cfgMCPURLLabel, "MCP address")
+	url := m.MCPURL()
+	if url == "" {
+		url = "(off)"
+	}
+	c.cfgMCPURL.SetValue(url)
+	c.cfgMCPURL.SetSelectable(true)
+	c.cfgMCPURL.SetVerticalAlign(basicwidget.VerticalAlignMiddle)
+
 	c.cfgFormItems = slices.Delete(c.cfgFormItems, 0, len(c.cfgFormItems))
 	c.cfgFormItems = append(c.cfgFormItems,
 		basicwidget.FormItem{PrimaryWidget: &c.cfgViewerLabel, SecondaryWidget: &c.cfgViewer},
 		basicwidget.FormItem{PrimaryWidget: &c.cfgPhysLabel, SecondaryWidget: &c.cfgPhysSel},
+		basicwidget.FormItem{PrimaryWidget: &c.cfgMCPLabel, SecondaryWidget: &c.cfgMCP},
+		basicwidget.FormItem{PrimaryWidget: &c.cfgMCPURLLabel, SecondaryWidget: &c.cfgMCPURL},
 	)
 	c.cfgForm.SetItems(c.cfgFormItems)
 }
@@ -1095,6 +1125,7 @@ func (c *inspectorContent) stateItems(context *guigui.Context, u int) []guigui.L
 		guigui.LinearLayoutItem{Widget: &c.addState, Size: guigui.FlexibleSize(1)},
 		guigui.LinearLayoutItem{Widget: &c.setInitial, Size: guigui.FlexibleSize(1)},
 		guigui.LinearLayoutItem{Widget: &c.delState, Size: guigui.FlexibleSize(1)},
+		guigui.LinearLayoutItem{Widget: &c.undoMachine, Size: guigui.FlexibleSize(1)},
 	)
 	c.stateBtnRow = guigui.LinearLayout{
 		Direction: guigui.LayoutDirectionHorizontal, Items: c.stateBtnItems, Gap: u / 4,

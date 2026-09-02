@@ -14,6 +14,7 @@ import (
 	"github.com/guigui-gui/guigui"
 	"github.com/guigui-gui/guigui/basicwidget"
 	_ "github.com/guigui-gui/guigui/basicwidget/cjkfont"
+	"github.com/hajimehoshi/ebiten/v2"
 )
 
 // envKeyModel publishes the document to every pane, so none of them needs a
@@ -44,6 +45,7 @@ type Root struct {
 
 	model *Model
 	watch *watcher
+	mcp   *mcpServer
 
 	toolbar      guigui.LinearLayout
 	toolbarItems []guigui.LinearLayoutItem
@@ -86,6 +88,9 @@ func (r *Root) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 	}
 	if m.Viewer() {
 		name += "  [viewer]"
+	}
+	if m.MCPOn() {
+		name += "  [mcp " + m.MCPURL() + "]"
 	}
 	r.pathLabel.SetValue(name)
 	r.pathLabel.SetVerticalAlign(basicwidget.VerticalAlignMiddle)
@@ -136,6 +141,9 @@ func (r *Root) Build(context *guigui.Context, adder *guigui.ChildAdder) error {
 // the generation, and the state key below turns that into a rebuild.
 func (r *Root) Tick(context *guigui.Context, widgetBounds *guigui.WidgetBounds) error {
 	r.model.PumpDialogs()
+	if r.mcp != nil {
+		r.mcp.tick()
+	}
 	// Viewer mode can be toggled at runtime (Config pane) as well as by
 	// the -viewer flag, so the watcher follows the model here.
 	if r.model.Viewer() && r.watch == nil {
@@ -224,13 +232,44 @@ func (r *Root) Layout(context *guigui.Context, widgetBounds *guigui.WidgetBounds
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "init" {
+		if err := runInit(os.Args[2:], os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "init:", err)
+			os.Exit(2)
+		}
+		return
+	}
 	viewer := flag.Bool("viewer", false,
 		"viewer mode: watch every loaded file (.lottie, .json, images) and auto-reload on change; saving is disabled")
 	newAt := flag.String("new", "",
 		"start with an empty bundle whose first save goes to this path (used by the New… dialog)")
+	mcpAddr := flag.String("mcp", "",
+		"serve the editor over MCP: \"stdio\", or a loopback address such as 127.0.0.1:0 (0 = pick a port, shown in the title row)")
 	flag.Parse()
 	root := &Root{model: NewModel()}
 	root.model.SetViewer(*viewer)
+	root.mcp = newMCPServer(root.model)
+	mcpSpec := *mcpAddr
+	root.model.mcpToggle = func(on bool) {
+		if !on {
+			root.mcp.stop()
+			return
+		}
+		spec := mcpSpec
+		if spec == "" || spec == "stdio" {
+			spec = "127.0.0.1:0"
+		}
+		if err := root.mcp.start(spec); err != nil {
+			root.model.setStatus("mcp: %v", err)
+			root.model.generation++
+		}
+	}
+	if *mcpAddr != "" {
+		if err := root.mcp.start(*mcpAddr); err != nil {
+			fmt.Fprintln(os.Stderr, "mcp:", err)
+			os.Exit(1)
+		}
+	}
 	switch {
 	case *newAt != "":
 		root.model.StartNewAt(*newAt)
@@ -250,7 +289,9 @@ func main() {
 		WindowSize:    image.Pt(1520, 920),
 		WindowMinSize: image.Pt(1180, 700),
 	}
-	if err := runWithOptionalScreenshot(root, op); err != nil {
+	if err := runWithOptionalScreenshot(root, op, func(game ebiten.Game) ebiten.Game {
+		return &mcpGame{Game: game, srv: root.mcp}
+	}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

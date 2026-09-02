@@ -169,7 +169,11 @@ type Model struct {
 	// something never reports the running preview as out of date.
 	generation int
 	docGen     int
-	status     string
+	// extGen counts edits to the bundle's extension files — hitboxes,
+	// body, sockets — which change the document without touching what
+	// the preview plays, so they stay out of docGen and the stale check.
+	extGen int
+	status string
 
 	problemsCache []string
 	problemsGen   int
@@ -177,6 +181,19 @@ type Model struct {
 	// Native file dialogs run on their own goroutine; see dialog.go.
 	dialog     chan dialogResult
 	dialogOpen bool
+
+	// Machine edits are undoable: touch compares the serialized machine
+	// with the last snapshot and keeps the previous one when it changed.
+	// Node positions refresh the snapshot without pushing, so a drag never
+	// becomes an undo step.
+	machineUndo []machineSnapshot
+	machineSnap []byte
+
+	// The MCP server (mcp.go) reports its endpoint here for the status
+	// bar and the Config pane, and is switched through mcpToggle.
+	mcpURL    string
+	mcpOn     bool
+	mcpToggle func(on bool)
 }
 
 func NewModel() *Model {
@@ -202,7 +219,11 @@ func NewModel() *Model {
 	return m
 }
 
-func (m *Model) Generation() int               { return m.generation }
+func (m *Model) Generation() int { return m.generation }
+
+// DocGeneration counts every document edit, clips and machines as well
+// as extension files; it is the optimistic-lock value MCP clients echo.
+func (m *Model) DocGeneration() int            { return m.docGen + m.extGen }
 func (m *Model) Status() string                { return m.status }
 func (m *Model) Path() string                  { return m.path }
 func (m *Model) MachineID() string             { return m.machineID }
@@ -226,6 +247,30 @@ func (m *Model) Touch() {
 // widget-local state (a checkbox, a picker) that changes what the panes
 // show but not the document itself.
 func (m *Model) Redraw() { m.generation++ }
+
+// StageDragOpen reports a stage drag in progress, between BeginPoseEdit
+// and EndPoseEdit; an MCP edit landing mid-swing would fight the mouse.
+func (m *Model) StageDragOpen() bool { return m.poseDragOpen }
+
+// ---- MCP control ----
+
+func (m *Model) setMCP(url string, on bool) {
+	m.mcpURL, m.mcpOn = url, on
+	m.generation++
+}
+
+func (m *Model) MCPOn() bool    { return m.mcpOn }
+func (m *Model) MCPURL() string { return m.mcpURL }
+
+// SetMCPOn starts or stops the server through the hook main installs;
+// without one (tests) it only records the wish.
+func (m *Model) SetMCPOn(on bool) {
+	if m.mcpToggle != nil {
+		m.mcpToggle(on)
+		return
+	}
+	m.setMCP("", on)
+}
 
 // blockEdit refuses document mutation in viewer mode, where the disk owns
 // the document and any edit would be silently thrown away by the next
@@ -253,9 +298,113 @@ func (m *Model) syncMachine() {
 
 // touch records a document edit: it syncs and bumps both counters.
 func (m *Model) touch() {
+	m.recordMachineEdit()
 	m.syncMachine()
 	m.docGen++
 	m.generation++
+}
+
+// ---- machine undo ----
+
+type machineSnapshot struct {
+	id   string
+	data []byte
+}
+
+const machineUndoLimit = 200
+
+// recordMachineEdit pushes the previous serialization when the machine
+// changed since the last snapshot. Every mutation ends in touch, so the
+// snapshot taken then is what the next undo restores.
+func (m *Model) recordMachineEdit() {
+	if m.machine == nil || m.machineID == "" {
+		return
+	}
+	data, err := json.Marshal(m.machine)
+	if err != nil {
+		return
+	}
+	if m.machineSnap != nil && !bytes.Equal(data, m.machineSnap) {
+		m.machineUndo = append(m.machineUndo, machineSnapshot{id: m.machineID, data: m.machineSnap})
+		if len(m.machineUndo) > machineUndoLimit {
+			m.machineUndo = m.machineUndo[1:]
+		}
+	}
+	m.machineSnap = data
+}
+
+// resetMachineUndo forgets the history and snapshots the current machine:
+// what opening a bundle or switching machines does.
+func (m *Model) resetMachineUndo() {
+	m.machineUndo = nil
+	m.machineSnap = nil
+	if m.machine != nil && m.machineID != "" {
+		if data, err := json.Marshal(m.machine); err == nil {
+			m.machineSnap = data
+		}
+	}
+}
+
+// refreshMachineSnap absorbs a change into the snapshot without making it
+// undoable.
+func (m *Model) refreshMachineSnap() {
+	if m.machine == nil {
+		return
+	}
+	if data, err := json.Marshal(m.machine); err == nil {
+		m.machineSnap = data
+	}
+}
+
+// CanUndoMachineEdit reports an undo step for the machine on screen.
+func (m *Model) CanUndoMachineEdit() bool {
+	n := len(m.machineUndo)
+	return n > 0 && m.machineUndo[n-1].id == m.machineID
+}
+
+// UndoMachineEdit restores the machine as it was before the last edit.
+// Selection is kept where it still exists and falls back to the initial
+// state otherwise; the preview reports stale, as after any edit.
+func (m *Model) UndoMachineEdit() {
+	if m.blockEdit() || !m.CanUndoMachineEdit() {
+		return
+	}
+	snap := m.machineUndo[len(m.machineUndo)-1]
+	sm, err := lottie.ParseStateMachine(snap.data)
+	if err != nil {
+		m.setStatus("cannot undo: %v", err)
+		m.generation++
+		return
+	}
+	m.machineUndo = m.machineUndo[:len(m.machineUndo)-1]
+	// Layout is not logic: nodes keep where they are now, so undoing a
+	// guard edit does not also fling states back across the graph.
+	keep := map[string]image.Point{}
+	for i := range m.machine.States {
+		if p, ok := nodePos(&m.machine.States[i]); ok {
+			keep[m.machine.States[i].Name] = p
+		}
+	}
+	for i := range sm.States {
+		if p, ok := keep[sm.States[i].Name]; ok {
+			setNodePos(&sm.States[i], p)
+		}
+	}
+	m.machine = sm
+	m.refreshMachineSnap()
+	if _, ok := sm.State(m.selectedState); !ok {
+		m.selectedState = sm.Initial
+	}
+	if st, ok := sm.State(m.selectedState); !ok || m.selectedTrans >= len(st.Transitions) {
+		m.selectedTrans = -1
+	}
+	if m.selectedInput >= len(sm.Inputs) {
+		m.selectedInput = -1
+	}
+	m.syncMachine()
+	m.docGen++
+	m.generation++
+	m.setStatus("undid an edit to machine %q", m.machineID)
 }
 
 // CreateBundle materializes the New… choice at path and opens it in a
@@ -328,6 +477,7 @@ func (m *Model) Open(path string) {
 		m.bundle = lottie.NewBundle()
 		m.path = ""
 		m.machineID, m.machine = "", nil
+		m.resetMachineUndo()
 		m.sources = nil
 		m.resetCollisionSelection()
 		m.resetCollisionCache()
@@ -360,6 +510,7 @@ func (m *Model) Open(path string) {
 	m.sources = []string{path}
 	m.selectedState, m.selectedTrans = "", -1
 	m.machineID, m.machine = "", nil
+	m.resetMachineUndo()
 	m.resetCollisionSelection()
 	m.resetCollisionCache()
 	m.resetClipDocCache()
@@ -829,6 +980,7 @@ func (m *Model) SelectMachine(id string) {
 	m.machineID, m.machine = id, sm
 	m.selectedState, m.selectedTrans = sm.Initial, -1
 	m.setInspect(inspectMachine)
+	m.resetMachineUndo()
 	m.generation++
 	m.restartPreview()
 }
@@ -846,6 +998,7 @@ func (m *Model) NewMachine() {
 		return
 	}
 	m.machineID, m.machine = id, sm
+	m.resetMachineUndo()
 	m.selectedState, m.selectedTrans = "", -1
 	m.setInspect(inspectMachine)
 	m.setStatus("created machine %q", id)
@@ -924,6 +1077,11 @@ func (m *Model) RenameMachine(old, name string) {
 	}
 	if m.machineID == old {
 		m.machineID = name
+		for k := range m.machineUndo {
+			if m.machineUndo[k].id == old {
+				m.machineUndo[k].id = name
+			}
+		}
 	}
 	m.setStatus("renamed machine %q to %q", old, name)
 	m.docGen++
@@ -946,6 +1104,7 @@ func (m *Model) DeleteMachine(id string) {
 		return
 	}
 	m.machineID, m.machine = "", nil
+	m.resetMachineUndo()
 	m.selectedState, m.selectedTrans = "", -1
 	if ids := m.bundle.StateMachineIDs(); len(ids) > 0 {
 		m.generation++
@@ -1786,5 +1945,7 @@ func (m *Model) SetNodePos(index int, p image.Point) {
 	setNodePos(&m.machine.States[index], p)
 	// Positions do not affect playback, so skip the reserialization touch
 	// does; Save and Problems write the machine back before they need it.
+	// They are not undo steps either.
+	m.refreshMachineSnap()
 	m.generation++
 }

@@ -20,7 +20,7 @@ must:
   - save as v2 preserving unknown fields
 should:
   - done: validate missing initial, dangling toState, unknown animation id, unreachable state
-  - open: undo / redo
+  - undo: done 2026-09-02 for machine edits (states, transitions, guards, inputs; not node drags) as an Undo button in the state pane and the MCP undo tool; clip edits had their own stack already (requirement:pose-editing). Redo stays open
 deviations:
   - transitions are created in the inspector; the graph draws but does not author them
   - node positions live in State.Extra under "x-lottie-go-editor" (data:state-machine round-trip)
