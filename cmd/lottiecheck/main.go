@@ -24,6 +24,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	lottie "github.com/shibukawa/lottie-go"
+	lottietexture "github.com/shibukawa/lottie-go/plugin/texture"
 
 	// Part images may be WebP; the library decodes via image.Decode.
 	_ "golang.org/x/image/webp"
@@ -60,6 +61,11 @@ func main() {
 type renderJob struct {
 	name string
 	anim *lottie.Animation
+	// tex is the clip's texture document, when the bundle carries one.
+	// Without it a render shows the fills' fallback colours — what a
+	// player lacking the extension sees, which is accurate but useless
+	// for checking art that only exists as a texture.
+	tex *lottietexture.Doc
 }
 
 // check loads one file and reports per animation. It returns the decoded
@@ -110,7 +116,15 @@ func checkBundle(path string) ([]renderJob, bool) {
 		// Prefix the bundle's name: two bundles both holding a "main"
 		// clip must not overwrite each other's renders.
 		base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-		jobs = append(jobs, renderJob{name: base + "-" + id, anim: a})
+		job := renderJob{name: base + "-" + id, anim: a}
+		doc, err := lottietexture.Load(b, id)
+		if err != nil {
+			fmt.Printf("NG %s %s: texture document: %v\n", path, id, err)
+			ok = false
+			continue
+		}
+		job.tex = doc
+		jobs = append(jobs, job)
 	}
 	for _, id := range b.StateMachineIDs() {
 		if _, err := b.StateMachine(id); err != nil {
@@ -196,6 +210,11 @@ func writeAll(dir string, samples int, jobs []renderJob) error {
 		w, h := j.anim.Size()
 		dst := ebiten.NewImage(w, h)
 		p := j.anim.NewPlayer()
+		if j.tex != nil {
+			if err := j.tex.Apply(p); err != nil {
+				return fmt.Errorf("%s: texture document: %w", j.name, err)
+			}
+		}
 		in, out := p.Range()
 		last := out - 1
 		if last < in {
