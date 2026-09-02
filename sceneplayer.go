@@ -104,6 +104,7 @@ type ScenePlayer struct {
 
 	onPhaseChanged func(from, to string)
 	onPhaseEnd     func(phase string)
+	onNodeStart    func(node string, p *Player, sm *StateMachinePlayer)
 
 	onFocusChanged func(from, to string)
 	onCallback     func(node, name string)
@@ -212,7 +213,7 @@ func (s *Scene) NewScenePlayerWithLoader(l SceneLoader) (*ScenePlayer, error) {
 	if len(s.Phases) > 0 {
 		sp.phase = s.Phases[0].Name
 	}
-	sp.cam = s.CameraFor(sp.phase)
+	sp.cam = s.CameraFor(sp.phase).sanitized()
 	for i := range s.Nodes {
 		def := &s.Nodes[i]
 		n := &SceneNodePlayer{sp: sp, def: def, visible: true, started: def.Start <= 0, tf: def.Transform}
@@ -261,6 +262,7 @@ func (n *SceneNodePlayer) start() error {
 		} else {
 			p.Pause()
 		}
+		n.sp.nodeStarted(n)
 	case SceneNodeMachine:
 		b, err := bundle()
 		if err != nil {
@@ -274,6 +276,7 @@ func (n *SceneNodePlayer) start() error {
 			n.sp.note(fmt.Sprintf("node %q: unknown entry state %q", n.def.Name, n.def.Entry))
 		}
 		n.machine = m
+		n.sp.nodeStarted(n)
 	case SceneNodeImage:
 		img, ok := n.sp.images[n.def.Source.Image]
 		if !ok {
@@ -327,12 +330,14 @@ func (n *SceneNodePlayer) advanceChain() {
 	n.stepIdx = next
 	st := steps[next]
 	p := n.player
+	replaced := false
 	if st.Animation != "" && st.Animation != n.curAnim {
 		var err error
 		if p, err = n.loadClip(st.Animation); err != nil {
 			n.sp.note(fmt.Sprintf("node %q: %v", n.def.Name, err))
 			return
 		}
+		replaced = true
 	}
 	if st.Segment == "" {
 		p.SetRange(0, 0)
@@ -349,6 +354,17 @@ func (n *SceneNodePlayer) advanceChain() {
 	p.SetReverse(mode == PlayReverse)
 	p.Rewind()
 	p.Play()
+	if replaced {
+		n.sp.nodeStarted(n)
+	}
+}
+
+// nodeStarted reports a node's freshly built player or machine to the
+// OnNodeStart hook.
+func (sp *ScenePlayer) nodeStarted(n *SceneNodePlayer) {
+	if sp.onNodeStart != nil && (n.player != nil || n.machine != nil) {
+		sp.onNodeStart(n.def.Name, n.player, n.machine)
+	}
 }
 
 // Scene returns the document this player runs. Treat it as read-only while
@@ -374,6 +390,25 @@ func (sp *ScenePlayer) OnFocusChanged(f func(from, to string)) { sp.onFocusChang
 // the scene's outputs a game acts on. A cancel that no node handled
 // arrives with an empty node name and name "cancel".
 func (sp *ScenePlayer) OnCallback(f func(node, name string)) { sp.onCallback = f }
+
+// OnNodeStart registers a function to run whenever a node's player or
+// machine is (re)created: on entering a phase, on Restart, and when an
+// animation node's clip chain moves to another clip. Those rebuilds drop
+// whatever the game attached to the previous instance — a texture paint, a
+// marker callback, a collision tracker — so this is where it dresses the
+// new one. p is the animation node's player, sm the machine node's machine;
+// the other is nil. Registering also runs f once for every node already
+// running, so a game need not dress the initial instances by hand. It runs
+// during Update (or during the registering call); keep it short.
+func (sp *ScenePlayer) OnNodeStart(f func(node string, p *Player, sm *StateMachinePlayer)) {
+	sp.onNodeStart = f
+	if f == nil {
+		return
+	}
+	for _, n := range sp.nodes {
+		sp.nodeStarted(n)
+	}
+}
 
 // Err returns the first error hit while running. Playback continues past
 // it with whatever was already on screen.
@@ -469,7 +504,11 @@ func (sp *ScenePlayer) Camera() SceneCamera { return sp.cam }
 // Camera then reports the override, so a game easing toward the phase's
 // camera reads its target from the document — Scene().CameraFor(Phase())
 // — not from Camera, or it would chase itself.
-func (sp *ScenePlayer) SetCamera(c SceneCamera) { sp.cam = c }
+//
+// A negative or non-finite zoom is taken as absent (1), and a non-finite
+// pan or rotation as 0: raising a negative zoom to a fractional parallax
+// depth has no real value, and a NaN camera would blank every node.
+func (sp *ScenePlayer) SetCamera(c SceneCamera) { sp.cam = c.sanitized() }
 
 // cameraGeoM is the running camera's transform for one node's depth.
 func (sp *ScenePlayer) cameraGeoM(depth float64) ebiten.GeoM {
@@ -481,11 +520,7 @@ func (sp *ScenePlayer) cameraGeoM(depth float64) ebiten.GeoM {
 // A node whose Start time arrives this tick makes its entrance: it draws,
 // plays, and takes input from here on.
 func (sp *ScenePlayer) Update() {
-	tps := float64(ebiten.TPS())
-	if tps <= 0 {
-		tps = 60
-	}
-	sp.clock += 1 / tps
+	sp.clock += 1 / tickTPS()
 	entered := false
 	for _, n := range sp.nodes {
 		if !n.inPhase() {
@@ -567,7 +602,7 @@ func (sp *ScenePlayer) SetPhase(name string) bool {
 	sp.phase = name
 	sp.phaseEnded = false
 	sp.clock = 0
-	sp.cam = sp.scene.CameraFor(name)
+	sp.cam = sp.scene.CameraFor(name).sanitized()
 	sp.hovered, sp.pressed = nil, nil
 	sp.pointerDown = false
 	for _, n := range sp.nodes {
@@ -616,7 +651,7 @@ func (sp *ScenePlayer) Restart() {
 	if len(sp.scene.Phases) > 0 {
 		sp.phase = sp.scene.Phases[0].Name
 	}
-	sp.cam = sp.scene.CameraFor(sp.phase)
+	sp.cam = sp.scene.CameraFor(sp.phase).sanitized()
 	sp.phaseEnded = false
 	for _, n := range sp.nodes {
 		n.started = n.def.Start <= 0

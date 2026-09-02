@@ -7,7 +7,6 @@ import (
 	"math"
 	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/guigui-gui/guigui"
 	"github.com/guigui-gui/guigui/basicwidget"
@@ -850,8 +849,10 @@ func (c *collisionPanel) buildPoseButtons(context *guigui.Context, m *Model, add
 		if !committed {
 			return
 		}
-		if v, err := strconv.ParseFloat(strings.TrimSpace(text), 64); err == nil {
+		if v, ok := parseFinite(text); ok {
 			m.SetClipLength(v)
+		} else {
+			m.RejectNumber(text)
 		}
 	})
 	context.SetEnabled(&c.poseLenInput, onStage && !m.Viewer())

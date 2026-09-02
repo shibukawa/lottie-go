@@ -6,10 +6,12 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"image"
 	"image/color"
 	"image/png"
 	"math"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/vector"
@@ -164,20 +166,42 @@ func (s *mcpServer) serveCapture(screen *ebiten.Image) {
 	}
 }
 
+// windowCaptureTimeout bounds how long a capture waits for a frame. Draw
+// stops coming while the window is minimized or the loop is stalled, and
+// a call that never returns would hold the transport forever.
+const windowCaptureTimeout = 5 * time.Second
+
 // renderWindow waits for the next frame. It must not be called on the game
 // loop: the frame is only drawn once the loop is free.
-func (s *mcpServer) renderWindow() ([]byte, error) {
+func (s *mcpServer) renderWindow(ctx context.Context) ([]byte, error) {
 	req := &captureReq{done: make(chan []byte, 1)}
 	select {
 	case s.capture <- req:
 	default:
 		return nil, refuse("a window capture is already pending", "retry")
 	}
-	data := <-req.done
-	if data == nil {
-		return nil, refuse("window capture failed", "")
+	timer := time.NewTimer(windowCaptureTimeout)
+	defer timer.Stop()
+	select {
+	case data := <-req.done:
+		if data == nil {
+			return nil, refuse("window capture failed", "")
+		}
+		return data, nil
+	case <-ctx.Done():
+	case <-timer.C:
 	}
-	return data, nil
+	// Withdraw the request if Draw has not taken it yet, so the next
+	// capture is not refused as "already pending"; if it was taken, the
+	// buffered done channel absorbs the late frame.
+	select {
+	case <-s.capture:
+	default:
+	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	return nil, refuse("no frame was drawn in time", "is the window minimized? retry")
 }
 
 // mcpGame wraps the app so a window capture can read the finished frame.

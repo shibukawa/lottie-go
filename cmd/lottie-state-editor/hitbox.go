@@ -93,7 +93,11 @@ func (m *Model) touchTrack() {
 	if id := m.StageAnimID(); id != "" {
 		if t := m.StageTrack(); t != nil {
 			if err := lottieresolv.Store(m.bundle, id, t); err != nil {
+				// The cache must not keep what the bundle refused, or every
+				// later edit of this track would fail the same way and be
+				// lost; the next read parses the last stored bytes again.
 				m.setStatus("cannot serialize hitboxes: %v", err)
+				delete(m.trackCache, id)
 			}
 		}
 	}
@@ -407,7 +411,14 @@ func (m *Model) SetSpanRange(from, to float64) {
 		return
 	}
 	sp := m.SelectedSpan()
-	if sp == nil || to <= from {
+	if sp == nil {
+		return
+	}
+	if !finite(from, to) {
+		m.rejectValue("span")
+		return
+	}
+	if to <= from {
 		return
 	}
 	sp.From, sp.To = from, to
@@ -570,7 +581,9 @@ func (m *Model) editableCPBody() *lottiecp.Body {
 func (m *Model) touchCPBody() {
 	if body := m.loadCPBody(); body != nil {
 		if err := lottiecp.Store(m.bundle, editorCPBodyID, body); err != nil {
+			// Drop the refused value, as touchTrack does.
 			m.setStatus("cannot serialize body: %v", err)
+			m.cpBody, m.cpLoaded = nil, false
 		}
 	}
 	m.extGen++
@@ -754,7 +767,9 @@ func (m *Model) editableSockets() *lottiesockets.Set {
 func (m *Model) touchSockets() {
 	if set := m.loadSockets(); set != nil {
 		if err := lottiesockets.Store(m.bundle, set); err != nil {
+			// Drop the refused value, as touchTrack does.
 			m.setStatus("cannot serialize sockets: %v", err)
+			m.socketSet, m.socketsLoaded = nil, false
 		}
 	}
 	m.extGen++

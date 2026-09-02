@@ -88,9 +88,26 @@ func (p *Player) Animation() *Animation { return p.anim }
 // SetLoop makes playback restart from the beginning after the last frame.
 func (p *Player) SetLoop(loop bool) { p.loop = loop }
 
+// maxLoopCallbacksPerUpdate bounds how many OnLoopComplete calls one Update
+// makes. A runaway speed or a hair-thin range can cross the range end many
+// thousands of times in a single tick; the loop count still advances by
+// every crossing, but the callback fires at most this often, so a game's
+// per-loop hook cannot hang the game loop. It mirrors the state machine
+// player's maxTransitionsPerUpdate.
+const maxLoopCallbacksPerUpdate = 16
+
+// maxLoopCrossings bounds how many range crossings one Update accounts for,
+// which keeps the loop arithmetic inside int for any finite delta.
+const maxLoopCrossings = 1 << 30
+
 // SetSpeed sets the playback rate. 1.0 is normal speed; negative values are
-// clamped to 0. Use SetReverse to play backwards.
+// clamped to 0. NaN and infinite rates are ignored — the speed stays as it
+// was — since neither names a point on the timeline. Use SetReverse to play
+// backwards.
 func (p *Player) SetSpeed(s float64) {
+	if math.IsNaN(s) || math.IsInf(s, 0) {
+		return
+	}
 	if s < 0 {
 		s = 0
 	}
@@ -285,13 +302,17 @@ func (p *Player) timeNow() time.Time {
 	return time.Now()
 }
 
-// tickTPS is the tick rate Update advances by, with the headless fallback.
+// tickTPS is the tick rate Update advances by. With SyncWithFPS the
+// configured rate is -1 and ticks follow the display, so the measured rate
+// stands in; headless, with neither, 60.
 func tickTPS() float64 {
-	tps := float64(ebiten.TPS())
-	if tps <= 0 {
-		tps = 60
+	if tps := float64(ebiten.TPS()); tps > 0 {
+		return tps
 	}
-	return tps
+	if tps := ebiten.ActualTPS(); tps > 0 {
+		return tps
+	}
+	return 60
 }
 
 // DrawFrame is the frame for draw-side reads: the tick cursor plus however
@@ -357,6 +378,17 @@ func (p *Player) advance(delta float64) {
 	}
 	prev := p.frame
 	f := p.frame + delta
+	if math.IsNaN(f) || math.IsInf(f, 0) {
+		// Nothing finite to sweep through: park at the end the value lies
+		// beyond, the way finish does, and keep playing — the cursor must
+		// never hold a NaN.
+		if math.IsInf(f, 1) {
+			p.frame = out
+		} else {
+			p.frame = in
+		}
+		return
+	}
 	if f >= in && f < out {
 		p.frame = f
 		p.emitMarkers(min(prev, f), max(prev, f))
@@ -373,9 +405,9 @@ func (p *Player) advance(delta float64) {
 	// delta or a very short range can cross several at once.
 	crossed := 1
 	if f >= out {
-		crossed += int((f - out) / span)
+		crossed += int(math.Min((f-out)/span, maxLoopCrossings))
 	} else {
-		crossed += int((in - f) / span)
+		crossed += int(math.Min((in-f)/span, maxLoopCrossings))
 	}
 
 	switch {
@@ -414,7 +446,7 @@ func (p *Player) fireLoops(n int) {
 	if p.onLoopComplete == nil {
 		return
 	}
-	for range n {
+	for range min(n, maxLoopCallbacksPerUpdate) {
 		p.onLoopComplete()
 	}
 }
@@ -425,6 +457,9 @@ func (p *Player) fireLoops(n int) {
 // otherwise a scrub to 100% would silently stop without OnComplete.
 func (p *Player) clampFrame(f float64) float64 {
 	in, out := p.bounds()
+	if math.IsNaN(f) {
+		return in
+	}
 	if f < in {
 		return in
 	}
@@ -441,7 +476,10 @@ func (p *Player) clampFrame(f float64) float64 {
 }
 
 func mod(a, b float64) float64 {
-	m := a - float64(int(a/b))*b
+	m := math.Mod(a, b)
+	if math.IsNaN(m) {
+		return 0
+	}
 	if m < 0 {
 		m += b
 	}

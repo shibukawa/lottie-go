@@ -282,6 +282,22 @@ game animates it per frame:
 sp.SetCamera(lottie.SceneCamera{X: g.camX, Zoom: 1.2})
 ```
 
+Entering a phase, `Restart`, and a clip chain moving to another clip all
+rebuild the node's player, and whatever the game attached to the previous
+one — a texture paint, an `OnMarker` cue, a collision tracker — goes with
+it. `OnNodeStart` runs whenever a node's player or machine is (re)created,
+and once right away for the nodes already running, so it is the one place
+to dress them:
+
+```go
+sp.OnNodeStart(func(node string, p *lottie.Player, sm *lottie.StateMachinePlayer) {
+    if node == "hero" && p != nil {
+        p.SetTexture("skin", g.heroSkin)
+        p.OnMarker(g.onHeroCue)
+    }
+})
+```
+
 Beyond animations, a scene places static **images** and **text**. Text
 nodes carry font, size, alignment, and an anchor (a right-anchored score
 grows leftward), and are named so the game overwrites them at runtime:

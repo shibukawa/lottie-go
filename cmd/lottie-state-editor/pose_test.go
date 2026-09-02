@@ -5,6 +5,7 @@ import (
 	"math"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	lottie "github.com/shibukawa/lottie-go"
@@ -1570,4 +1571,37 @@ func rawName(t *testing.T, d *clipDoc, layer int, name string) {
 	}
 	lm["nm"] = name
 	d.index()
+}
+
+// Non-finite values never reach the clip: encoding/json refuses them, and
+// one in the document would make every later store-back fail.
+func TestPoseEditsRefuseNonFiniteValues(t *testing.T) {
+	m := posedModel(t, "punch-anim")
+	m.SelectPoseKey(7, -1)
+	m.SelectPosePart(partIndex(t, m, "forearm-near"))
+	before := storedRotation(t, m, "punch-anim", "forearm-near", 7)
+	gen := m.DocGeneration()
+
+	m.SetPoseValue("r", []float64{math.NaN()})
+	m.SetPoseValue("r", []float64{math.Inf(1)})
+	if got := storedRotation(t, m, "punch-anim", "forearm-near", 7); got != before {
+		t.Fatalf("rotation changed to %v", got)
+	}
+	length := m.ClipLength()
+	m.SetClipLength(math.Inf(1))
+	m.SetClipLength(math.NaN())
+	if m.ClipLength() != length {
+		t.Fatalf("clip length changed to %v", m.ClipLength())
+	}
+	if m.DocGeneration() != gen {
+		t.Fatalf("refused edits counted as document changes")
+	}
+	if !strings.Contains(m.Status(), "finite") {
+		t.Fatalf("no refusal in the status: %q", m.Status())
+	}
+	// The clip still takes edits afterwards.
+	m.SetPoseValue("r", []float64{before + 5})
+	if got := storedRotation(t, m, "punch-anim", "forearm-near", 7); got != before+5 {
+		t.Fatalf("edit after a refusal = %v; want %v", got, before+5)
+	}
 }

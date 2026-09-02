@@ -34,8 +34,9 @@ type timelinePane struct {
 	rows []int // document indices, display order (front first)
 
 	drag      timelineDrag
-	dragIndex int // document index of the dragged node (bar drag)
-	dragRow   int // display row being reordered (row drag)
+	dragIndex int    // document index of the dragged node (bar drag)
+	dragRow   int    // display row being reordered (row drag)
+	dragPhase string // viewed phase when the row drag began
 	dragSpan  float64
 	lastX     int
 
@@ -67,17 +68,37 @@ func (t *timelinePane) span(m *Model) float64 {
 	if t.drag == dragBar || t.drag == dragRuler {
 		return t.dragSpan
 	}
-	end := 5.0
+	end := minTimelineSpan
+	nodes := m.Scene().Nodes
 	for _, i := range t.rows {
-		n := &m.Scene().Nodes[i]
+		// rows can outlive the document for a frame (a scene opened from
+		// Tick lands after the last Build), so never trust them blindly.
+		if i < 0 || i >= len(nodes) {
+			continue
+		}
+		n := &nodes[i]
 		d, _ := m.NodeDuration(n)
 		if d == 0 {
 			d = 1
 		}
 		end = max(end, n.Start+d)
 	}
-	return math.Ceil(end)
+	// Draw steps through this span, so it must be a finite, bounded
+	// number whatever a file says: NaN compares false and falls to the
+	// minimum, an infinity to the maximum.
+	end = math.Ceil(end)
+	if !(end >= minTimelineSpan) {
+		end = minTimelineSpan
+	}
+	return min(end, maxTimelineSpan)
 }
+
+// Timeline span bounds, in seconds. The maximum leaves room for an
+// entrance at maxSceneSeconds plus its clip.
+const (
+	minTimelineSpan = 5.0
+	maxTimelineSpan = 2 * maxSceneSeconds
+)
 
 // syncRows recomputes which nodes show: the viewed phase's participants,
 // front layer first.
@@ -191,7 +212,10 @@ func (t *timelinePane) timeText(m *Model) string {
 	if sp := m.Player(); sp != nil {
 		clock = sp.Time()
 	}
-	return fmt.Sprintf("%5.2fs", clock)
+	// Tenths, not hundredths: the label's text is widget state, and every
+	// change of it rebuilds the whole tree next frame. At 60 TPS hundredths
+	// change on nearly every tick; tenths change six times a second.
+	return fmt.Sprintf("%5.1fs", clock)
 }
 
 // Tick keeps the clock readout current; the playhead itself is drawn, so
@@ -260,6 +284,9 @@ func (t *timelinePane) Draw(context *guigui.Context, widgetBounds *guigui.Widget
 		return
 	}
 	span := t.span(m)
+	if !(span > 0) || math.IsInf(span, 0) {
+		return
+	}
 	pps := float64(barW) / span // pixels per second
 	u := float32(basicwidget.UnitSize(context))
 	bottom := float32(rows.Min.Y + len(t.rows)*h)
@@ -269,10 +296,14 @@ func (t *timelinePane) Draw(context *guigui.Context, widgetBounds *guigui.Widget
 	vector.DrawFilledRect(dst, float32(barX), float32(ruler.Min.Y),
 		float32(barW), float32(ruler.Dy()), pal.track, false)
 	// Widen the tick step when a long span would pack them closer than a
-	// few pixels: denser is unreadable and the loop runs every frame.
+	// few pixels: denser is unreadable and the loop runs every frame. The
+	// step is at least one second and finite, so the loop always ends.
 	tick := 1.0
 	if pps < 4 {
 		tick = math.Ceil(4 / pps)
+	}
+	if !(tick >= 1) || math.IsInf(tick, 0) {
+		tick = 1
 	}
 	for s := 0.0; s <= span; s += tick {
 		x := float32(float64(barX) + s*pps)
@@ -284,6 +315,11 @@ func (t *timelinePane) Draw(context *guigui.Context, widgetBounds *guigui.Widget
 
 	sel := m.SelectedNodeIndex()
 	for row, i := range t.rows {
+		if i < 0 || i >= len(nodes) {
+			// Stale row: the document changed after the last Build (a
+			// scene opened from Tick). The next Build resyncs.
+			continue
+		}
 		n := &nodes[i]
 		y := float32(rows.Min.Y + row*h)
 		vector.DrawFilledRect(dst, float32(barX), y+float32(h)/4, float32(barW), float32(h)/2, pal.track, false)
@@ -360,6 +396,14 @@ func (t *timelinePane) HandlePointingInput(context *guigui.Context, widgetBounds
 		case dragRuler:
 			m.SeekScene(float64(cx-barX) / pps)
 		case dragReorder:
+			// The rows are rebuilt every Build; if the viewed phase moved
+			// under the drag (an auto-advance while playing), the dragged
+			// row no longer names the same node — or any node. Drop the
+			// drag rather than swap strangers or index past the end.
+			if m.ViewPhase() != t.dragPhase || t.dragRow < 0 || t.dragRow >= len(t.rows) {
+				t.drag = dragNone
+				return guigui.HandleInputByWidget(t)
+			}
 			if row, ok := t.rowAt(context, b, cy); ok && row != t.dragRow {
 				// Walk one swap at a time so a fast drag still passes
 				// through every slot in order.
@@ -380,9 +424,13 @@ func (t *timelinePane) HandlePointingInput(context *guigui.Context, widgetBounds
 		return guigui.HandleInputResult{}
 	}
 	cx, cy := ebiten.CursorPosition()
+	// Capture the span before the drag flag goes up: span() returns the
+	// captured value once a drag is on, so the other order would freeze
+	// whatever dragSpan held before — zero, on the first drag.
+	span := t.span(m)
 	if p := image.Pt(cx, cy); p.In(t.rulerBounds(context, b)) && cx >= barX {
+		t.dragSpan = span
 		t.drag = dragRuler
-		t.dragSpan = t.span(m)
 		m.SeekScene(float64(cx-barX) / pps)
 		return guigui.HandleInputByWidget(t)
 	}
@@ -392,13 +440,14 @@ func (t *timelinePane) HandlePointingInput(context *guigui.Context, widgetBounds
 	}
 	m.SelectNode(t.rows[row])
 	if cx < barX {
-		t.drag = dragReorder
 		t.dragRow = row
+		t.dragPhase = m.ViewPhase()
+		t.drag = dragReorder
 	} else {
-		t.drag = dragBar
 		t.dragIndex = t.rows[row]
-		t.dragSpan = t.span(m)
+		t.dragSpan = span
 		t.lastX = cx
+		t.drag = dragBar
 	}
 	return guigui.HandleInputByWidget(t)
 }

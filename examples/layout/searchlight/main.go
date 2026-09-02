@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"io"
 	"io/fs"
 	"log"
 	"os"
@@ -152,10 +153,15 @@ type byteReaderAt struct{ data []byte }
 func newByteReaderAt(data []byte) *byteReaderAt { return &byteReaderAt{data} }
 
 func (r *byteReaderAt) ReadAt(p []byte, off int64) (int, error) {
-	if off >= int64(len(r.data)) {
-		return 0, fmt.Errorf("EOF")
+	if off < 0 || off >= int64(len(r.data)) {
+		return 0, io.EOF
 	}
 	n := copy(p, r.data[off:])
+	if n < len(p) {
+		// io.ReaderAt: a short read must say why, and here it is only ever
+		// the end of the data.
+		return n, io.EOF
+	}
 	return n, nil
 }
 

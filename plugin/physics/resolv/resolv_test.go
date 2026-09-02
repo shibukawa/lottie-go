@@ -251,3 +251,57 @@ func TestRemoveFromSpace(t *testing.T) {
 		t.Fatalf("re-Sync: %d shapes in space, want 3", got)
 	}
 }
+
+// The track may gain or lose boxes between Syncs — an editor's live
+// document does — and the tracker follows without indexing off the end.
+func TestSyncFollowsBoxCountChanges(t *testing.T) {
+	space := resolv.NewSpace(640, 480, 16, 16)
+	track := sampleTrack()
+	tr := NewTracker(space, track)
+	tr.Sync(12)
+	if got := len(space.Shapes()); got != 3 {
+		t.Fatalf("frame 12: %d shapes, want 3", got)
+	}
+	track.Boxes = append(track.Boxes, Box{
+		Name: "tail", Kind: KindRect, Tags: []string{"hurt"},
+		Spans: []Span{{From: 0, To: 60, X: 0, Y: 0, W: 10, H: 10}},
+	})
+	tr.Sync(12)
+	if got := len(space.Shapes()); got != 4 {
+		t.Fatalf("after growing: %d shapes, want 4", got)
+	}
+	if d, ok := tr.Shapes("hurt")[len(tr.Shapes("hurt"))-1].Data().(BoxData); !ok || d.Name != "tail" || d.Index != 3 {
+		t.Fatalf("new box data: %+v", d)
+	}
+	track.Boxes = track.Boxes[:1]
+	tr.Sync(12)
+	if got := len(space.Shapes()); got != 1 {
+		t.Fatalf("after shrinking: %d shapes, want 1 (punch)", got)
+	}
+	if got := tr.Shapes(); len(got) != 1 || got[0].Data().(BoxData).Name != "punch" {
+		t.Fatalf("live shapes after shrinking: %v", got)
+	}
+}
+
+// A name without a tag bit — resolv's 64 are used up — must not turn a
+// query into "everything".
+func TestShapesIgnoresExhaustedTags(t *testing.T) {
+	tagMu.Lock()
+	tagBits["exhausted-check"] = 0
+	tagMu.Unlock()
+	if _, ok := TagKnown("exhausted-check"); ok {
+		t.Fatal("a zero tag reported as known")
+	}
+	space := resolv.NewSpace(640, 480, 16, 16)
+	tr := NewTracker(space, sampleTrack())
+	tr.Sync(12)
+	if got := tr.Shapes("exhausted-check"); len(got) != 0 {
+		t.Fatalf("query for an exhausted tag returned %d shapes; want none", len(got))
+	}
+	if got := tr.Shapes("exhausted-check", "hit"); len(got) != 1 {
+		t.Fatalf("mixed query returned %d shapes; want the one hit box", len(got))
+	}
+	if got := tr.Shapes(); len(got) != 3 {
+		t.Fatalf("unfiltered query returned %d shapes; want 3", len(got))
+	}
+}

@@ -741,6 +741,7 @@ func (r *renderer) shapeBounds(l *layerNode, lt float64, mat matrix) (image.Rect
 	r.nGeoms = 0
 	r.nDash = 0
 	r.nGrad = 0
+	r.nTex = 0
 	r.cmds = r.cmds[:0]
 	r.walkShapes(l.shapes, lt, mat, 1)
 

@@ -797,10 +797,13 @@ func gradientRamp(item map[string]any, frame float64) ([]gradStop, []gradAlphaSt
 	if !ok {
 		return nil, nil, false
 	}
-	n := int(count)
-	if n <= 0 || len(flat) < n*4 {
+	// Compared as floats before the conversion: a runaway p (NaN, Inf, or
+	// past the int range) must fail here rather than overflow n*4 and reach
+	// make with a garbage capacity.
+	if !(count >= 1) || count > float64(len(flat)/4) {
 		return nil, nil, false
 	}
+	n := int(count)
 	stops := make([]gradStop, 0, n)
 	for i := range n {
 		stops = append(stops, gradStop{flat[i*4], flat[i*4+1], flat[i*4+2], flat[i*4+3]})

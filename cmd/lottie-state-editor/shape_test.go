@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -922,5 +923,89 @@ func TestVertexInsertDeleteFromModel(t *testing.T) {
 	sh, _ = d.shapeItem(0, []int{0, 0})
 	if p, _ := pathAt(sh, 0, false); len(p.v) != 4 {
 		t.Fatalf("delete did not land: %d vertices", len(p.v))
+	}
+}
+
+// A star's point count comes from the document or a typed field, and the
+// editor's outline is rebuilt on every hover frame: it is capped the way
+// the renderer caps it, and a non-finite count falls back to the default.
+func TestStarPolygonCapsThePointCount(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		pt   float64
+		want int
+	}{
+		{"runaway", 1e9, 2 * maxStarPoints},
+		{"inf", math.Inf(1), 10},
+		{"nan", math.NaN(), 10},
+		{"normal", 6, 12},
+	} {
+		item := newStarItem(0, 0, 50)
+		item["pt"] = staticProp(tc.pt)
+		pts, ok := shapeItemPolygon(item, 0)
+		if !ok || len(pts) != tc.want {
+			t.Errorf("%s: polygon has %d points ok=%v; want %d", tc.name, len(pts), ok, tc.want)
+		}
+	}
+}
+
+// The hover pick is memoized on everything it depends on, and answers the
+// same as the real pick; an edit or a selection change moves the
+// generation and invalidates it.
+func TestShapeAtHoverMatchesShapeAt(t *testing.T) {
+	m := shapeModel(t)
+	for _, p := range [][3]float64{{100, 100, 0}, {100, 160, 0}, {5, 5, 0}, {40, 43, 4}} {
+		l1, p1, ok1 := m.ShapeAt(p[0], p[1], p[2])
+		l2, p2, ok2 := m.ShapeAtHover(p[0], p[1], p[2])
+		l3, p3, ok3 := m.ShapeAtHover(p[0], p[1], p[2])
+		if l1 != l2 || l2 != l3 || ok1 != ok2 || ok2 != ok3 ||
+			!slices.Equal(p1, p2) || !slices.Equal(p2, p3) {
+			t.Fatalf("hover pick at %v disagrees: %d %v %v / %d %v %v / %d %v %v",
+				p, l1, p1, ok1, l2, p2, ok2, l3, p3, ok3)
+		}
+	}
+	if !m.hoverShape.valid {
+		t.Fatal("hover pick was not cached")
+	}
+	m.SelectShape(0, []int{0, 0})
+	m.DeleteShapeItemAction()
+	if _, _, ok := m.ShapeAtHover(100, 100, 0); ok {
+		t.Fatal("hover pick still finds the deleted blob")
+	}
+}
+
+// Non-finite values are refused before they reach the document: json cannot
+// encode them, and one would make every later store-back fail.
+func TestShapeEditsRefuseNonFiniteValues(t *testing.T) {
+	m := shapeModel(t)
+	m.SelectShape(0, []int{1, 0})
+	before, _ := m.ShapeMemberValue("p")
+	gen := m.DocGeneration()
+	m.SetShapeMemberComponent("p", 0, math.NaN())
+	m.SetShapeMemberComponent("p", 1, math.Inf(-1))
+	if after, _ := m.ShapeMemberValue("p"); !slices.Equal(after, before) {
+		t.Fatalf("rect position changed to %v", after)
+	}
+	if m.DocGeneration() != gen {
+		t.Fatalf("a refused edit counted as a document change")
+	}
+	if !strings.Contains(m.Status(), "finite") {
+		t.Fatalf("no refusal in the status: %q", m.Status())
+	}
+	// The document still takes edits afterwards.
+	m.SetShapeMemberComponent("p", 0, 7)
+	if after, _ := m.ShapeMemberValue("p"); after[0] != 7 {
+		t.Fatalf("edit after a refusal did not land: %v", after)
+	}
+
+	m.SelectShape(0, []int{0, 0})
+	m.SelectShapeVert(0)
+	gen = m.DocGeneration()
+	m.SetShapeVertexValue(0, math.Inf(1))
+	if m.DocGeneration() != gen {
+		t.Fatalf("a non-finite vertex counted as a document change")
+	}
+	if p, _ := m.ShapePath(); !finite(p.v[0][0], p.v[0][1]) {
+		t.Fatalf("vertex holds %v", p.v[0])
 	}
 }

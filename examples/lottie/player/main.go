@@ -191,8 +191,8 @@ func (v *viewer) Update() error {
 	}
 	seekStep := func(dir time.Duration) {
 		step := 100 * time.Millisecond
-		if ebiten.IsKeyPressed(ebiten.KeyShift) {
-			step = time.Duration(float64(time.Second) / v.anim.FrameRate())
+		if fr := v.anim.FrameRate(); ebiten.IsKeyPressed(ebiten.KeyShift) && fr > 0 {
+			step = time.Duration(float64(time.Second) / fr)
 		}
 		p.Pause()
 		p.Seek(p.Position() + dir*step)

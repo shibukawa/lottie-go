@@ -318,3 +318,21 @@ func TestClipStillDecodesAfterShapeEdits(t *testing.T) {
 		t.Fatalf("edit introduced unsupported features: %v", u)
 	}
 }
+
+// A runaway stop count must fail the ramp read rather than overflow into
+// make: p comes straight from the file.
+func TestGradientRampRefusesRunawayCount(t *testing.T) {
+	d := vectorDoc(t)
+	gf, _ := d.shapeItem(0, []int{1, 1})
+	g := gf["g"].(map[string]any)
+	for _, p := range []any{1e300, math.Inf(1), math.NaN(), 0.0, -1.0, 3.0} {
+		g["p"] = p
+		if _, _, ok := gradientRamp(gf, 0); ok {
+			t.Errorf("p=%v: ramp read succeeded", p)
+		}
+	}
+	g["p"] = 2.0
+	if _, _, ok := gradientRamp(gf, 0); !ok {
+		t.Fatalf("a sane count is refused")
+	}
+}

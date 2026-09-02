@@ -221,11 +221,19 @@ func (s *mcpServer) startHTTP(spec string) error {
 func (s *mcpServer) stop() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.httpSrv != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		s.httpSrv.Shutdown(ctx)
-		cancel()
+	if srv := s.httpSrv; srv != nil {
 		s.httpSrv, s.url = nil, ""
+		// stop runs on the game loop (the Config pane toggles it), and a
+		// call in flight is waiting for that same loop to drain the queue;
+		// shutting down synchronously would hold the loop for the whole
+		// grace period. Let the reply go out and close afterwards.
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := srv.Shutdown(ctx); err != nil {
+				srv.Close()
+			}
+		}()
 	}
 	if s.stdio {
 		return
@@ -317,6 +325,7 @@ func addTool[In any](s *mcpServer, name, desc string, mutating bool, h func(In) 
 		var (
 			reply toolReply
 			herr  error
+			env   map[string]any
 		)
 		err := s.call(ctx, func() {
 			m := s.model
@@ -339,6 +348,13 @@ func addTool[In any](s *mcpServer, name, desc string, mutating bool, h func(In) 
 				}
 			}
 			reply, herr = h(in)
+			// The envelope reads the Model (focus, generation, validation
+			// problems, which re-serializes the machine), so it has to be
+			// built here, on the game loop, and not on the transport's
+			// goroutine after call returns.
+			if herr == nil && reply.raw == nil {
+				env = s.envelope(reply.payload, reply.changed)
+			}
 		})
 		if err != nil {
 			return refusalResult(err), nil, nil
@@ -349,7 +365,7 @@ func addTool[In any](s *mcpServer, name, desc string, mutating bool, h func(In) 
 		if reply.raw != nil {
 			return reply.raw, nil, nil
 		}
-		res := jsonText(s.envelope(reply.payload, reply.changed))
+		res := jsonText(env)
 		if reply.png != nil {
 			res.Content = append(res.Content, &mcp.ImageContent{Data: reply.png, MIMEType: "image/png"})
 		}

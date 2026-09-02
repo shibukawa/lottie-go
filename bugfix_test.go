@@ -3,6 +3,7 @@ package lottie
 import (
 	"bytes"
 	"encoding/json"
+	"math"
 	"strings"
 	"testing"
 )
@@ -295,5 +296,118 @@ func TestSetMachineDropsOldPlayer(t *testing.T) {
 	}
 	if m.Player() != nil {
 		t.Error("old machine's player survived SetMachine into a GlobalState initial")
+	}
+}
+
+// A fraction a hair past 1 — what trimAcross's share arithmetic yields for
+// a contour the range runs through — must still take the contour's final
+// segment; the end used to default to parameter 0 of the last segment and
+// drop it.
+func TestExtractPartKeepsFinalSegmentPastOne(t *testing.T) {
+	tr := &trimmer{}
+	g := geometry{alpha: 1}
+	g.bez = bezierShape{
+		V: [][2]float64{{0, 0}, {5, 0}, {10, 0}},
+		I: make([][2]float64, 3),
+		O: make([][2]float64, 3),
+	}
+	out := tr.extractPart(&g, 0.25, math.Nextafter(1, 2), nil)
+	if out == nil || len(out.bez.V) < 2 {
+		t.Fatalf("no output: %+v", out)
+	}
+	if last := out.bez.V[len(out.bez.V)-1]; !near(last[0], 10) {
+		t.Errorf("last vertex = %v; want x = 10, the contour's end", last)
+	}
+	if first := out.bez.V[0]; !near(first[0], 2.5) {
+		t.Errorf("first vertex = %v; want x = 2.5", first)
+	}
+}
+
+// Trimming across several contours to 100% must end every touched contour
+// where it ends, whatever the rounding of the per-contour shares.
+func TestTrimAcrossKeepsFinalSegments(t *testing.T) {
+	for _, lens := range [][]float64{{10, 20}, {10, 20, 30}, {7, 11, 13}, {3, 9, 27}} {
+		var r renderer
+		total := 0.0
+		for i, l := range lens {
+			g := r.nextGeom()
+			g.mat = identityMatrix
+			y := float64(i * 10)
+			g.bez = bezierShape{
+				V: [][2]float64{{0, y}, {l / 2, y}, {l, y}},
+				I: make([][2]float64, 3),
+				O: make([][2]float64, 3),
+			}
+			total += l
+		}
+		// Start a little into the second contour, run to the end.
+		startPct := (lens[0] + 1) / total * 100
+		n := &shapeNode{
+			kind:       "tm",
+			trimStart:  staticTrack(startPct),
+			trimEnd:    staticTrack(100),
+			trimOffset: staticTrack(0),
+			trimMode:   2,
+		}
+		r.applyTrim(n, 0, 0)
+		if r.nGeoms != len(lens)-1 {
+			t.Errorf("%v: nGeoms = %d; want %d", lens, r.nGeoms, len(lens)-1)
+			continue
+		}
+		for gi := 0; gi < r.nGeoms; gi++ {
+			b := &r.geoms[gi].bez
+			want := lens[gi+1]
+			if last := b.V[len(b.V)-1]; !near(last[0], want) {
+				t.Errorf("%v: contour %d ends at %v; want x = %v", lens, gi+1, last, want)
+			}
+		}
+	}
+}
+
+// A stop count that overflows count*4 must fall back like any malformed
+// gradient instead of slicing with a negative index.
+func TestGradientStopsAbsurdCountFallsBack(t *testing.T) {
+	var g gradientCmd
+	data := []float64{0, 1, 0, 0, 1, 0, 0, 1}
+	buildGradientStops(&g, data, math.MaxInt64/2, 1, nil)
+	if g.count != 2 || g.colors[0] != [4]float32{0, 0, 0, 1} {
+		t.Errorf("absurd count: count = %d colors = %v; want the black fallback", g.count, g.colors[:2])
+	}
+	buildGradientStops(&g, data, 2, 1, nil)
+	if g.colors[0] != [4]float32{1, 0, 0, 1} {
+		t.Errorf("sane count: colors = %v", g.colors[:2])
+	}
+}
+
+// Merge paths flips a contour's winding; a per-vertex UV bound to it must
+// flip with the vertices, and the binding the player holds must not.
+func TestMergeFlipCarriesUV(t *testing.T) {
+	var r renderer
+	g := r.nextGeom()
+	g.mat = identityMatrix
+	// Counter-clockwise with Y down (negative area), so "add" reverses it.
+	g.bez = bezierShape{
+		Closed: true,
+		V:      [][2]float64{{0, 0}, {0, 10}, {10, 10}, {10, 0}},
+		I:      make([][2]float64, 4),
+		O:      make([][2]float64, 4),
+	}
+	bound := [][2]float32{{0, 0}, {0, 1}, {1, 1}, {1, 0}}
+	g.uv = bound
+	if signedContourArea(&g.bez) >= 0 {
+		t.Fatal("fixture is not counter-clockwise")
+	}
+	r.applyMerge(&shapeNode{kind: "mm", mergeMode: 2}, 0)
+	if g.bez.V[0] != [2]float64{10, 0} {
+		t.Fatalf("contour not reversed: %v", g.bez.V)
+	}
+	if g.uv[0] != [2]float32{1, 0} || g.uv[3] != [2]float32{0, 0} {
+		t.Errorf("uv = %v; want reversed with the vertices", g.uv)
+	}
+	if bound[0] != [2]float32{0, 0} {
+		t.Errorf("the player's binding was reversed in place: %v", bound)
+	}
+	if !uvUsable(r.geoms, 0, 1) {
+		t.Error("uv no longer usable after the flip")
 	}
 }

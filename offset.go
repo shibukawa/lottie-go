@@ -51,6 +51,21 @@ func reverseContour(b *bezierShape) {
 	}
 }
 
+// reverseGeometry flips a geometry's contour, carrying its per-vertex UV
+// along so a textured path keeps each UV on the vertex it was authored for.
+func reverseGeometry(g *geometry) {
+	reverseContour(&g.bez)
+	if n := len(g.uv); n > 0 {
+		// The UV slice is shared with the player's binding (render.go hands
+		// the map's slice straight to the geometry), so reverse a copy.
+		uv := make([][2]float32, n)
+		for i, v := range g.uv {
+			uv[n-1-i] = v
+		}
+		g.uv = uv
+	}
+}
+
 // applyMerge combines the contours collected so far in the group by winding
 // rules: add makes every winding uniform so the non-zero rule fills the
 // union, subtract reverses everything after the first contour, and
@@ -61,11 +76,11 @@ func (r *renderer) applyMerge(n *shapeNode, groupStart int) {
 	switch n.mergeMode {
 	case 2: // add
 		for i := range geoms {
-			orientContour(&geoms[i].bez, true)
+			orientGeometry(&geoms[i], true)
 		}
 	case 3: // subtract: the first contour minus the rest
 		for i := range geoms {
-			orientContour(&geoms[i].bez, i == 0)
+			orientGeometry(&geoms[i], i == 0)
 		}
 	case 5: // exclude intersections
 		for i := range geoms {
@@ -74,14 +89,14 @@ func (r *renderer) applyMerge(n *shapeNode, groupStart int) {
 	}
 }
 
-// orientContour winds a closed contour clockwise (positive area with Y down)
-// or counter-clockwise.
-func orientContour(b *bezierShape, clockwise bool) {
-	if !b.Closed {
+// orientGeometry winds a closed contour clockwise (positive area with Y
+// down) or counter-clockwise, UV included.
+func orientGeometry(g *geometry, clockwise bool) {
+	if !g.bez.Closed {
 		return
 	}
-	if (signedContourArea(b) > 0) != clockwise {
-		reverseContour(b)
+	if (signedContourArea(&g.bez) > 0) != clockwise {
+		reverseGeometry(g)
 	}
 }
 

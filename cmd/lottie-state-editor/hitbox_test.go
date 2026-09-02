@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"math"
+	"strings"
 	"testing"
 
 	lottie "github.com/shibukawa/lottie-go"
@@ -486,5 +488,42 @@ func TestRemoveClipDropsTrack(t *testing.T) {
 	}
 	if m.StageTrack() != nil {
 		t.Fatal("cache still serves the removed clip's track")
+	}
+}
+
+// A span range that is not a number is refused, and a track the bundle
+// refuses to store is not kept in the cache: the next read parses the last
+// stored bytes, so one bad value cannot silently swallow every later edit.
+func TestTrackRefusesNonFiniteAndDropsARefusedCache(t *testing.T) {
+	m := stageModel(t)
+	m.AddHitbox(lottieresolv.KindRect)
+	sp := m.SelectedSpan()
+	if sp == nil {
+		t.Fatal("no span under the playhead")
+	}
+	from, to := sp.From, sp.To
+	m.SetSpanRange(math.NaN(), 10)
+	m.SetSpanRange(0, math.Inf(1))
+	if sp := m.SelectedSpan(); sp == nil || sp.From != from || sp.To != to {
+		t.Fatalf("span changed to %+v", sp)
+	}
+	if !strings.Contains(m.Status(), "finite") {
+		t.Fatalf("no refusal in the status: %q", m.Status())
+	}
+
+	// Poison the cached track directly, the way a value that slipped past
+	// every guard would, and store: the cache must come back clean.
+	m.StageTrack().Boxes[0].Spans[0].X = math.NaN()
+	m.touchTrack()
+	if !strings.Contains(m.Status(), "cannot serialize") {
+		t.Fatalf("store failure not reported: %q", m.Status())
+	}
+	if x := m.StageTrack().Boxes[0].Spans[0].X; !finite(x) {
+		t.Fatalf("the refused value is still cached: %v", x)
+	}
+	m.DragHitbox(3, 0)
+	stored, err := lottieresolv.Load(m.Bundle(), "attack")
+	if err != nil || stored == nil || len(stored.Boxes) != 1 || !finite(stored.Boxes[0].Spans[0].X) {
+		t.Fatalf("stored track after recovery: %+v err=%v", stored, err)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"strings"
 )
 
@@ -78,6 +79,25 @@ func (c SceneCamera) ZoomFactor() float64 {
 		return 1
 	}
 	return c.Zoom
+}
+
+// sanitized returns the camera with values the parallax math can use: a
+// negative, NaN, or infinite zoom becomes absent (1) — raising it to a
+// fractional depth has no real answer — and a non-finite pan or rotation
+// becomes 0. Validate reports the negative zoom; this keeps a document or
+// SetCamera that slipped past it from drawing NaN.
+func (c SceneCamera) sanitized() SceneCamera {
+	if c.Zoom < 0 || math.IsNaN(c.Zoom) || math.IsInf(c.Zoom, 0) {
+		c.Zoom = 0
+	}
+	finite := func(v float64) float64 {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return 0
+		}
+		return v
+	}
+	c.X, c.Y, c.Rotation = finite(c.X), finite(c.Y), finite(c.Rotation)
+	return c
 }
 
 // isIdentity reports whether the camera leaves the scene untouched.

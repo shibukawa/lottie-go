@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"image"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -321,5 +322,50 @@ func TestFreshlyOpenedBundleIsNotStale(t *testing.T) {
 	}
 	if reopened.PreviewStale() {
 		t.Error("rebuilding the inspector marked the fresh bundle as edited")
+	}
+}
+
+// Typed numbers go through parseFinite: strconv would happily return Inf
+// and NaN, and neither can be encoded into the document.
+func TestParseFiniteRejectsNonFinite(t *testing.T) {
+	for _, s := range []string{"inf", "-Inf", "nan", "NaN", "abc", "", "1e400"} {
+		if v, ok := parseFinite(s); ok {
+			t.Errorf("parseFinite(%q) = %v, accepted", s, v)
+		}
+	}
+	for _, s := range []string{" 1.5 ", "-2", "1e3"} {
+		if _, ok := parseFinite(s); !ok {
+			t.Errorf("parseFinite(%q) refused", s)
+		}
+	}
+}
+
+// A state's speed is refused when it is not a number and clamped when it
+// is absurd: the player fires one loop callback per loop crossed per tick,
+// so a runaway speed is a hang, not a fast clip.
+func TestStateSpeedIsClampedAndFinite(t *testing.T) {
+	m := NewModel()
+	m.AddState()
+	st := m.SelectedState()
+	if st == nil {
+		t.Fatal("no state")
+	}
+	m.SetStateSpeed(2)
+	if st.Speed != 2 {
+		t.Fatalf("speed = %v; want 2", st.Speed)
+	}
+	gen := m.DocGeneration()
+	m.SetStateSpeed(math.Inf(1))
+	m.SetStateSpeed(math.NaN())
+	m.SetStateSpeed(-1)
+	if st.Speed != 2 || m.DocGeneration() != gen {
+		t.Fatalf("a refused speed landed: %v (docGen %d → %d)", st.Speed, gen, m.DocGeneration())
+	}
+	m.SetStateSpeed(1e12)
+	if st.Speed != maxStateSpeed {
+		t.Fatalf("speed = %v; want the clamp %v", st.Speed, maxStateSpeed)
+	}
+	if !strings.Contains(m.Status(), "clamped") {
+		t.Fatalf("clamp not reported: %q", m.Status())
 	}
 }

@@ -189,3 +189,22 @@ func TestSceneValidateCameraZoom(t *testing.T) {
 		t.Errorf("negative zooms not reported: %v", errs)
 	}
 }
+
+// A negative zoom raised to a fractional depth is NaN; SetCamera takes it
+// as absent so the nodes keep drawing at finite positions.
+func TestSetCameraNegativeZoomStaysFinite(t *testing.T) {
+	_, sp := menuScene(t)
+	sp.SetCamera(SceneCamera{X: 10, Zoom: -2})
+	if got := sp.Camera(); got.Zoom != 0 || got.X != 10 {
+		t.Errorf("Camera() = %+v; want zoom dropped, pan kept", got)
+	}
+	g := sp.cameraGeoM(0.5)
+	x, y := g.Apply(200, 200)
+	if math.IsNaN(x) || math.IsNaN(y) || math.IsInf(x, 0) || math.IsInf(y, 0) {
+		t.Errorf("depth 0.5 under a negative zoom mapped (200, 200) to (%v, %v)", x, y)
+	}
+	sp.SetCamera(SceneCamera{X: math.NaN(), Zoom: math.Inf(1), Rotation: math.NaN()})
+	if got := sp.Camera(); !got.isIdentity() {
+		t.Errorf("non-finite camera = %+v; want identity", got)
+	}
+}

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"image"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -367,8 +368,8 @@ func (c *inspectorContent) buildCamera(context *guigui.Context, m *Model) {
 	commit := func() {
 		var v [4]float64
 		for i := range c.cmInputs {
-			f, err := strconv.ParseFloat(strings.TrimSpace(c.cmInputs[i].Value()), 64)
-			if err != nil {
+			f, ok := parseFinite(c.cmInputs[i].Value())
+			if !ok {
 				return
 			}
 			v[i] = f
@@ -441,7 +442,7 @@ func (c *inspectorContent) buildPhases(context *guigui.Context, m *Model) {
 		if !committed {
 			return
 		}
-		if v, err := strconv.ParseFloat(strings.TrimSpace(text), 64); err == nil && v >= 0 {
+		if v, ok := parseFinite(text); ok && v >= 0 {
 			if p := m.SelectedPhase(); p != nil {
 				p.Duration = v
 				m.touch()
@@ -491,8 +492,8 @@ func (c *inspectorContent) buildPhases(context *guigui.Context, m *Model) {
 			}
 			var v [4]float64
 			for i := range c.phCamInputs {
-				f, err := strconv.ParseFloat(strings.TrimSpace(c.phCamInputs[i].Value()), 64)
-				if err != nil {
+				f, ok := parseFinite(c.phCamInputs[i].Value())
+				if !ok {
 					return
 				}
 				v[i] = f
@@ -566,7 +567,7 @@ func (c *inspectorContent) buildTextPane(context *guigui.Context, m *Model, n *l
 		if !committed {
 			return
 		}
-		if v, err := strconv.ParseFloat(strings.TrimSpace(text), 64); err == nil && v > 0 {
+		if v, ok := parseFinite(text); ok && v > 0 {
 			if n := m.SelectedNode(); n != nil {
 				n.Text.Size = v
 				m.touch()
@@ -625,6 +626,18 @@ func (c *inspectorContent) buildTextPane(context *guigui.Context, m *Model, n *l
 		basicwidget.FormItem{PrimaryWidget: &c.txColorLabel, SecondaryWidget: &c.txColorInput},
 	)
 	c.txForm.SetItems(c.txFormItems)
+}
+
+// parseFinite parses a typed number, rejecting what ParseFloat accepts
+// but the document cannot hold: "inf", "nan", and out-of-range values.
+// Every numeric field commits through it, so an infinity never reaches
+// the scene (JSON cannot encode one) or the timeline's arithmetic.
+func parseFinite(s string) (float64, bool) {
+	v, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	if err != nil || math.IsNaN(v) || math.IsInf(v, 0) {
+		return 0, false
+	}
+	return v, true
 }
 
 // orDefault resolves an absent enum value to its default for display.
@@ -708,7 +721,7 @@ func (c *inspectorContent) buildNodePane(context *guigui.Context, m *Model, n *l
 		if !committed {
 			return
 		}
-		if v, err := strconv.ParseFloat(strings.TrimSpace(text), 64); err == nil && v >= 0 {
+		if v, ok := parseFinite(text); ok && v >= 0 {
 			m.SetNodeStart(idx, v)
 			m.CommitNodeStart()
 		}
@@ -802,8 +815,8 @@ func (c *inspectorContent) buildTransform(context *guigui.Context, m *Model, n *
 		}
 		var vals [6]float64
 		for i := range c.tfInputs {
-			v, err := strconv.ParseFloat(strings.TrimSpace(c.tfInputs[i].Value()), 64)
-			if err != nil {
+			v, ok := parseFinite(c.tfInputs[i].Value())
+			if !ok {
 				return
 			}
 			vals[i] = v
@@ -833,7 +846,7 @@ func (c *inspectorContent) buildTransform(context *guigui.Context, m *Model, n *
 		if !committed {
 			return
 		}
-		if v, err := strconv.ParseFloat(strings.TrimSpace(text), 64); err == nil {
+		if v, ok := parseFinite(text); ok {
 			m.SetNodeDepth(idx, v)
 		}
 	})
@@ -891,7 +904,13 @@ func (c *inspectorContent) buildPlayback(context *guigui.Context, m *Model, n *l
 		if !committed {
 			return
 		}
-		if v, err := strconv.ParseFloat(strings.TrimSpace(text), 64); err == nil && v >= 0 {
+		// Zero keeps the document's "absent" meaning (speed 1); anything
+		// else lands in the sane range, so a typo cannot make a clip's
+		// pass astronomically long or infinitely short.
+		if v, ok := parseFinite(text); ok && v >= 0 {
+			if v > 0 {
+				v = clampSpeed(v)
+			}
 			if n := m.SelectedNode(); n != nil {
 				n.Playback.Speed = v
 				m.touch()
@@ -1012,7 +1031,10 @@ func (c *inspectorContent) buildChain(context *guigui.Context, m *Model, n *lott
 		if !committed {
 			return
 		}
-		if v, err := strconv.ParseFloat(strings.TrimSpace(text), 64); err == nil && v >= 0 {
+		if v, ok := parseFinite(text); ok && v >= 0 {
+			if v > 0 {
+				v = clampSpeed(v)
+			}
 			if st := m.SelectedStep(); st != nil {
 				st.Speed = v
 				m.touch()

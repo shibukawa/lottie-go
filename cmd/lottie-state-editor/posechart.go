@@ -32,6 +32,7 @@ type poseChartView struct {
 	drag     poseDrag
 	dragRow  int     // layer index, or -1 for the pose row
 	dragFrom float64 // the key time being dragged, updated as it lands
+	watch    frameWatch
 }
 
 type poseDrag int
@@ -360,9 +361,16 @@ func (c *poseChartView) CursorShape(context *guigui.Context, widgetBounds *guigu
 	return 0, false
 }
 
-// Tick redraws so the playhead follows playback without rebuilding.
+// Tick redraws so the playhead follows playback without rebuilding, only
+// while it moves; the state key covers everything else.
 func (c *poseChartView) Tick(context *guigui.Context, widgetBounds *guigui.WidgetBounds) error {
-	guigui.RequestRedraw(c)
+	m := c.model(context)
+	if m == nil {
+		return nil
+	}
+	if c.watch.moved(m) || c.drag != poseDragNone {
+		guigui.RequestRedraw(c)
+	}
 	return nil
 }
 

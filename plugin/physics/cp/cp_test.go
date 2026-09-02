@@ -137,3 +137,28 @@ func TestExtraFieldsSurvive(t *testing.T) {
 		}
 	}
 }
+
+// Shapes without extent derive a zero moment; cp would make its inverse
+// infinite, so the body gets cp.INFINITY like one without shapes.
+func TestDerivedMomentZeroIsInfinite(t *testing.T) {
+	body, shapes := Build(&Body{
+		Type: BodyDynamic, Mass: 2,
+		Shapes: []Shape{{Type: ShapeCircle, Radius: 0}, {Type: ShapeBox, Width: 0, Height: 0}},
+	})
+	if len(shapes) != 2 {
+		t.Fatalf("got %d shapes, want 2", len(shapes))
+	}
+	if m := body.Moment(); m != cp.INFINITY {
+		t.Fatalf("moment: got %v, want cp.INFINITY", m)
+	}
+	// The body still simulates: a finite inverse moment is what cp needs.
+	space := cp.NewSpace()
+	space.AddBody(body)
+	space.SetGravity(cp.Vector{X: 0, Y: 100})
+	for range 10 {
+		space.Step(1.0 / 60)
+	}
+	if y := body.Position().Y; y <= 0 || y != y {
+		t.Fatalf("body did not fall: y=%v", y)
+	}
+}

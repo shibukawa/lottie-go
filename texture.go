@@ -303,14 +303,19 @@ func (a *Animation) shapeNodeAt(ref ShapeRef) (*shapeNode, error) {
 
 // imageAsset returns the animation's image asset by refId, decoding it on
 // first use; a miss is cached too, so a paint naming a broken asset does not
-// retry every frame.
+// retry every frame. An Animation is shared between players, and two of
+// them drawing from different goroutines would otherwise race on the map,
+// so the lookup takes the animation's image lock — uncontended, it costs a
+// few nanoseconds per textured style per frame.
 func (a *Animation) imageAsset(refID string) *ebiten.Image {
+	a.imagesMu.Lock()
+	defer a.imagesMu.Unlock()
 	if img, ok := a.images[refID]; ok {
 		return img
 	}
 	var img *ebiten.Image
 	if as, ok := a.imageAssets[refID]; ok {
-		img, _ = loadImageAsset(&as, a.resolver)
+		img, _ = loadImageAsset(&as, a.resolver, a.imgCache)
 	}
 	if a.images == nil {
 		a.images = map[string]*ebiten.Image{}

@@ -212,6 +212,10 @@ func (m *Model) SetShapeMemberValue(member string, v []float64) {
 	if d == nil || !ok {
 		return
 	}
+	if !finite(v...) {
+		m.rejectValue("shape " + member)
+		return
+	}
 	frame := m.shapeEditFrame()
 	animated := propAnimatedObj(item, member)
 	pushed := m.snapshotClip()
@@ -653,6 +657,12 @@ func (m *Model) setShapePath(p pathData) {
 	item, ok := m.SelectedShapeItem()
 	if d == nil || !ok {
 		return
+	}
+	for i := range p.v {
+		if !finite(p.v[i][0], p.v[i][1], p.i[i][0], p.i[i][1], p.o[i][0], p.o[i][1]) {
+			m.rejectValue("vertex")
+			return
+		}
 	}
 	frame := m.shapeEditFrame()
 	pushed := m.snapshotClip()
@@ -1663,6 +1673,11 @@ func (m *Model) shapeOutline(layer int, path []int, frame float64) ([][2]float64
 	return out, true
 }
 
+// maxStarPoints bounds a star's point count the way the core renderer does
+// (lottie-go's maxPolystarPoints), so the editor's outline never costs more
+// than the picture it traces.
+const maxStarPoints = 1024
+
 // shapeItemPolygon flattens a geometry item in its own space.
 func shapeItemPolygon(item map[string]any, frame float64) ([][2]float64, bool) {
 	ty, _ := item["ty"].(string)
@@ -1707,8 +1722,12 @@ func shapeItemPolygon(item map[string]any, frame float64) ([][2]float64, bool) {
 		}
 		pt, _ := propValueNearObj(item, "pt", frame)
 		n := 5.0
-		if len(pt) > 0 && pt[0] >= 3 {
-			n = pt[0]
+		// The count comes straight from the document (or a typed field),
+		// and this polygon is rebuilt on every hover frame: an uncapped
+		// value would loop the editor for as long as it took to allocate
+		// it. NaN fails the comparison and keeps the default.
+		if len(pt) > 0 && pt[0] >= 3 && !math.IsInf(pt[0], 0) {
+			n = min(pt[0], maxStarPoints)
 		}
 		ir := or
 		if v, ok := propValueNearObj(item, "ir", frame); ok && len(v) > 0 {
@@ -1845,6 +1864,39 @@ func (m *Model) ShapeAt(ax, ay, tol float64) (int, []int, bool) {
 		}
 	}
 	return 0, nil, false
+}
+
+// hoverShapeCache is the last hover pick and what it was answered for.
+// Every input to ShapeAt is in the key: an edit, a selection, a tab or a
+// view change moves generation, the playhead moves frame, and the cursor
+// moves the point — so a cursor resting on the stage costs one comparison
+// per frame instead of a walk over every shape.
+type hoverShapeCache struct {
+	valid       bool
+	generation  int
+	frame       float64
+	ax, ay, tol float64
+	layer       int
+	path        []int
+	ok          bool
+}
+
+// ShapeAtHover is ShapeAt for the per-frame cursor query, memoized on the
+// inputs above. Clicks keep calling ShapeAt: they are rare, and a pick that
+// commits should never come from a cache.
+func (m *Model) ShapeAtHover(ax, ay, tol float64) (int, []int, bool) {
+	c := &m.hoverShape
+	frame := m.stageFrame()
+	if c.valid && c.generation == m.generation && c.frame == frame &&
+		c.ax == ax && c.ay == ay && c.tol == tol {
+		return c.layer, c.path, c.ok
+	}
+	layer, path, ok := m.ShapeAt(ax, ay, tol)
+	*c = hoverShapeCache{
+		valid: true, generation: m.generation, frame: frame,
+		ax: ax, ay: ay, tol: tol, layer: layer, path: path, ok: ok,
+	}
+	return layer, path, ok
 }
 
 // SelectShape picks one item, switching the panel's layer with it when the
