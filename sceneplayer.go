@@ -93,6 +93,10 @@ type ScenePlayer struct {
 	phase      string
 	phaseEnded bool
 
+	// cam is the camera in effect, resolved from the document on start and
+	// on every phase entry, and overridden at runtime with SetCamera.
+	cam SceneCamera
+
 	// bindingDepth counts nested deliver calls: focus and phase actions
 	// re-enter deliver, and two bindings pointing at each other would
 	// otherwise recurse without bound.
@@ -208,6 +212,7 @@ func (s *Scene) NewScenePlayerWithLoader(l SceneLoader) (*ScenePlayer, error) {
 	if len(s.Phases) > 0 {
 		sp.phase = s.Phases[0].Name
 	}
+	sp.cam = s.CameraFor(sp.phase)
 	for i := range s.Nodes {
 		def := &s.Nodes[i]
 		n := &SceneNodePlayer{sp: sp, def: def, visible: true, started: def.Start <= 0, tf: def.Transform}
@@ -429,6 +434,44 @@ func (sp *ScenePlayer) ScreenGeoM() ebiten.GeoM {
 	return g
 }
 
+// GeoM is the camera's scene-to-view transform for a node at the given
+// parallax depth, over a w x h design box. Depth scales every component of
+// the camera's effect — the translation multiplies by it, the zoom raises
+// to its power, the rotation multiplies by it — so depth 0 is exactly the
+// identity (a screen-pinned HUD) and depth 1 is the full camera.
+func (c SceneCamera) GeoM(w, h int, depth float64) ebiten.GeoM {
+	var g ebiten.GeoM
+	if depth == 0 || c.isIdentity() {
+		return g
+	}
+	cx, cy := float64(w)/2, float64(h)/2
+	// The camera moves; the content shifts the opposite way. Zoom and
+	// rotation pivot on the design box's center.
+	g.Translate(-c.X*depth-cx, -c.Y*depth-cy)
+	if r := c.Rotation * depth; r != 0 {
+		g.Rotate(-r * math.Pi / 180)
+	}
+	if z := c.ZoomFactor(); z != 1 {
+		s := math.Pow(z, depth)
+		g.Scale(s, s)
+	}
+	g.Translate(cx, cy)
+	return g
+}
+
+// Camera returns the camera in effect right now.
+func (sp *ScenePlayer) Camera() SceneCamera { return sp.cam }
+
+// SetCamera overrides the camera at runtime — a game panning or zooming
+// per frame. Like SetTransform it is not persisted: entering a phase (or
+// Restart) resolves the camera from the document again.
+func (sp *ScenePlayer) SetCamera(c SceneCamera) { sp.cam = c }
+
+// cameraGeoM is the running camera's transform for one node's depth.
+func (sp *ScenePlayer) cameraGeoM(depth float64) ebiten.GeoM {
+	return sp.cam.GeoM(sp.scene.Size.W, sp.scene.Size.H, depth)
+}
+
 // Update advances the scene clock and every started node. Call it once
 // per tick from ebiten.Game's Update, after pushing this frame's input.
 // A node whose Start time arrives this tick makes its entrance: it draws,
@@ -520,6 +563,7 @@ func (sp *ScenePlayer) SetPhase(name string) bool {
 	sp.phase = name
 	sp.phaseEnded = false
 	sp.clock = 0
+	sp.cam = sp.scene.CameraFor(name)
 	sp.hovered, sp.pressed = nil, nil
 	sp.pointerDown = false
 	for _, n := range sp.nodes {
@@ -557,7 +601,9 @@ func (sp *ScenePlayer) Time() float64 { return sp.clock }
 // Restart replays the scene from the top: the clock returns to zero,
 // every node's playback is rebuilt, entrances wait for their Start times
 // again, and focus returns to the scene's initial choice. Runtime
-// visibility and transform overrides survive; they belong to the host.
+// visibility and transform overrides survive; they belong to the host. A
+// SetCamera override does not: the camera resolves from the document
+// again, the way entering a phase resolves it.
 func (sp *ScenePlayer) Restart() {
 	sp.clock = 0
 	sp.focused, sp.hovered, sp.pressed = nil, nil, nil
@@ -566,6 +612,7 @@ func (sp *ScenePlayer) Restart() {
 	if len(sp.scene.Phases) > 0 {
 		sp.phase = sp.scene.Phases[0].Name
 	}
+	sp.cam = sp.scene.CameraFor(sp.phase)
 	sp.phaseEnded = false
 	for _, n := range sp.nodes {
 		n.started = n.def.Start <= 0
@@ -579,18 +626,24 @@ func (sp *ScenePlayer) Restart() {
 }
 
 // Draw renders every visible node in document order, first at the back,
-// through the screen mapping. opts may be nil; its GeoM applies after the
-// mapping, its ColorScale to every node.
+// through the camera and the screen mapping. opts may be nil; its GeoM
+// applies after the mapping, its ColorScale to every node.
 func (sp *ScenePlayer) Draw(dst *ebiten.Image, opts *DrawOptions) {
 	base := sp.ScreenGeoM()
 	if opts != nil {
 		base.Concat(opts.GeoM)
 	}
+	camera := !sp.cam.isIdentity()
 	for _, n := range sp.nodes {
 		if !n.visible || !n.started || !n.inPhase() {
 			continue
 		}
-		o := DrawOptions{GeoM: n.geoM(base)}
+		nb := base
+		if camera {
+			nb = sp.cameraGeoM(n.def.ParallaxDepth())
+			nb.Concat(base)
+		}
+		o := DrawOptions{GeoM: n.geoM(nb)}
 		if opts != nil {
 			o.ColorScale = opts.ColorScale
 			o.DisableAntiAlias = opts.DisableAntiAlias
@@ -775,27 +828,36 @@ func (n *SceneNodePlayer) localRect() (x0, y0, w, h float64) {
 // transform — for an editor drawing selection outlines.
 func (n *SceneNodePlayer) LocalRect() (x, y, w, h float64) { return n.localRect() }
 
-// center is the node's center in scene coordinates.
-func (n *SceneNodePlayer) center() (x, y float64) {
-	x0, y0, w, h := n.localRect()
+// viewGeoM is the node's local-to-view transform: its own placement, then
+// the camera at its depth — the same chain Draw composes before the screen
+// mapping, so hit tests and focus geometry match what is on screen.
+func (n *SceneNodePlayer) viewGeoM() ebiten.GeoM {
 	var g ebiten.GeoM
 	g.Scale(n.tf.scaleX(), n.tf.scaleY())
 	g.Rotate(n.tf.Rotation * math.Pi / 180)
 	g.Translate(n.tf.X, n.tf.Y)
+	if !n.sp.cam.isIdentity() {
+		g.Concat(n.sp.cameraGeoM(n.def.ParallaxDepth()))
+	}
+	return g
+}
+
+// center is the node's center in view coordinates (scene coordinates as
+// the camera shows them).
+func (n *SceneNodePlayer) center() (x, y float64) {
+	x0, y0, w, h := n.localRect()
+	g := n.viewGeoM()
 	return g.Apply(x0+w/2, y0+h/2)
 }
 
-// contains reports whether the scene-space point falls in the node's hit
+// contains reports whether the view-space point falls in the node's hit
 // region: the transformed local box (requirement's box-first rule).
 func (n *SceneNodePlayer) contains(x, y float64) bool {
 	x0, y0, w, h := n.localRect()
 	if w <= 0 || h <= 0 {
 		return false
 	}
-	var g ebiten.GeoM
-	g.Scale(n.tf.scaleX(), n.tf.scaleY())
-	g.Rotate(n.tf.Rotation * math.Pi / 180)
-	g.Translate(n.tf.X, n.tf.Y)
+	g := n.viewGeoM()
 	if !g.IsInvertible() {
 		return false
 	}

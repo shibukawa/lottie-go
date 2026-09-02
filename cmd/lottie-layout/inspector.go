@@ -53,6 +53,13 @@ type inspectorContent struct {
 	scForm       basicwidget.Form
 	scFormItems  []basicwidget.FormItem
 
+	// Camera, inside the scene pane.
+	cmTitle     basicwidget.Text
+	cmLabels    [4]basicwidget.Text
+	cmInputs    [4]basicwidget.TextInput
+	cmForm      basicwidget.Form
+	cmFormItems []basicwidget.FormItem
+
 	// Phase editing, inside the scene pane.
 	phTitle     basicwidget.Text
 	phList      basicwidget.List[int]
@@ -64,6 +71,10 @@ type inspectorContent struct {
 	phNameInput basicwidget.TextInput
 	phDurInput  basicwidget.TextInput
 	phNextSel   basicwidget.Select[string]
+	phCamLabel  basicwidget.Text
+	phCamCheck  basicwidget.Checkbox
+	phCamLabels [4]basicwidget.Text
+	phCamInputs [4]basicwidget.TextInput
 	phForm      basicwidget.Form
 	phFormItems []basicwidget.FormItem
 	phItems     []basicwidget.ListItem[int]
@@ -86,21 +97,23 @@ type inspectorContent struct {
 	ndFormItems   []basicwidget.FormItem
 
 	// Playback chain (animation nodes): what plays after the clip ends.
-	thTitle     basicwidget.Text
-	thList      basicwidget.List[int]
-	thAdd       basicwidget.Button
-	thDel       basicwidget.Button
-	tsAnimLabel basicwidget.Text
-	tsSegLabel  basicwidget.Text
-	tsLoopLabel basicwidget.Text
-	tsAnimSel   basicwidget.Select[string]
-	tsSegSel    basicwidget.Select[string]
-	tsLoopCheck basicwidget.Checkbox
-	tsForm      basicwidget.Form
-	tsFormItems []basicwidget.FormItem
-	thItems     []basicwidget.ListItem[int]
-	thBtnRow    guigui.LinearLayout
-	thBtnItems  []guigui.LinearLayoutItem
+	thTitle      basicwidget.Text
+	thList       basicwidget.List[int]
+	thAdd        basicwidget.Button
+	thDel        basicwidget.Button
+	tsAnimLabel  basicwidget.Text
+	tsSegLabel   basicwidget.Text
+	tsLoopLabel  basicwidget.Text
+	tsSpeedLabel basicwidget.Text
+	tsAnimSel    basicwidget.Select[string]
+	tsSegSel     basicwidget.Select[string]
+	tsLoopCheck  basicwidget.Checkbox
+	tsSpeedInput basicwidget.TextInput
+	tsForm       basicwidget.Form
+	tsFormItems  []basicwidget.FormItem
+	thItems      []basicwidget.ListItem[int]
+	thBtnRow     guigui.LinearLayout
+	thBtnItems   []guigui.LinearLayoutItem
 
 	// Text pane (text nodes).
 	txTitle      basicwidget.Text
@@ -121,11 +134,13 @@ type inspectorContent struct {
 	txForm       basicwidget.Form
 	txFormItems  []basicwidget.FormItem
 
-	tfTitle     basicwidget.Text
-	tfLabels    [6]basicwidget.Text
-	tfInputs    [6]basicwidget.TextInput
-	tfForm      basicwidget.Form
-	tfFormItems []basicwidget.FormItem
+	tfTitle      basicwidget.Text
+	tfLabels     [6]basicwidget.Text
+	tfInputs     [6]basicwidget.TextInput
+	tfDepthLabel basicwidget.Text
+	tfDepthInput basicwidget.TextInput
+	tfForm       basicwidget.Form
+	tfFormItems  []basicwidget.FormItem
 
 	// Playback (animation nodes).
 	pbTitle      basicwidget.Text
@@ -209,7 +224,8 @@ func (c *inspectorContent) Build(context *guigui.Context, adder *guigui.ChildAdd
 	switch m.InspectTarget() {
 	case inspectScene:
 		for _, w := range []guigui.Widget{
-			&c.scTitle, &c.scForm, &c.phTitle, &c.phList, &c.phAdd, &c.phDel,
+			&c.scTitle, &c.scForm, &c.cmTitle, &c.cmForm,
+			&c.phTitle, &c.phList, &c.phAdd, &c.phDel,
 		} {
 			adder.AddWidget(w)
 		}
@@ -217,6 +233,7 @@ func (c *inspectorContent) Build(context *guigui.Context, adder *guigui.ChildAdd
 			adder.AddWidget(&c.phForm)
 		}
 		c.buildScenePane(context, m)
+		c.buildCamera(context, m)
 		c.buildPhases(context, m)
 	default:
 		for _, w := range []guigui.Widget{
@@ -335,6 +352,47 @@ func (c *inspectorContent) buildScenePane(context *guigui.Context, m *Model) {
 	c.scForm.SetItems(c.scFormItems)
 }
 
+// buildCamera edits the scene's 2D camera: where it sits, how far it
+// zooms, how it tilts. Nodes follow it by their depth (Transform pane);
+// the canvas shows the framing as an overlay while arranging.
+func (c *inspectorContent) buildCamera(context *guigui.Context, m *Model) {
+	setBold(&c.cmTitle, "Camera")
+	names := [4]string{"x", "y", "zoom", "rotation °"}
+	cam := m.Scene().Camera
+	vals := [4]float64{cam.X, cam.Y, cam.ZoomFactor(), cam.Rotation}
+	for i := range names {
+		label(&c.cmLabels[i], names[i])
+		c.cmInputs[i].SetValue(strconv.FormatFloat(vals[i], 'g', -1, 64))
+	}
+	commit := func() {
+		var v [4]float64
+		for i := range c.cmInputs {
+			f, err := strconv.ParseFloat(strings.TrimSpace(c.cmInputs[i].Value()), 64)
+			if err != nil {
+				return
+			}
+			v[i] = f
+		}
+		if v[2] < 0 {
+			return
+		}
+		m.SetSceneCamera(lottie.SceneCamera{X: v[0], Y: v[1], Zoom: v[2], Rotation: v[3]})
+	}
+	for i := range c.cmInputs {
+		c.cmInputs[i].OnValueChanged(func(context *guigui.Context, text string, committed bool) {
+			if committed {
+				commit()
+			}
+		})
+	}
+	c.cmFormItems = slices.Delete(c.cmFormItems, 0, len(c.cmFormItems))
+	for i := range names {
+		c.cmFormItems = append(c.cmFormItems,
+			basicwidget.FormItem{PrimaryWidget: &c.cmLabels[i], SecondaryWidget: &c.cmInputs[i]})
+	}
+	c.cmForm.SetItems(c.cmFormItems)
+}
+
 // buildPhases edits the scene's phase list: an intro, the screen, an
 // outro, with durations and automatic advances.
 func (c *inspectorContent) buildPhases(context *guigui.Context, m *Model) {
@@ -402,12 +460,71 @@ func (c *inspectorContent) buildPhases(context *guigui.Context, m *Model) {
 		m.touch()
 	})
 
+	// A phase can override the scene camera — a zoomed-in intro pulling
+	// back to the main screen. The checkbox seeds the override from the
+	// scene's camera so ticking it changes nothing until a field does.
+	label(&c.phCamLabel, "camera override")
+	c.phCamCheck.SetValue(p.Camera != nil)
+	c.phCamCheck.OnValueChanged(func(context *guigui.Context, value bool) {
+		p := m.SelectedPhase()
+		if p == nil || (p.Camera != nil) == value {
+			return
+		}
+		if value {
+			cam := m.Scene().Camera
+			m.SetPhaseCamera(m.SelectedPhaseIndex(), &cam)
+		} else {
+			m.SetPhaseCamera(m.SelectedPhaseIndex(), nil)
+		}
+	})
+	if p.Camera != nil {
+		camNames := [4]string{"cam x", "cam y", "cam zoom", "cam rotation °"}
+		camVals := [4]float64{p.Camera.X, p.Camera.Y, p.Camera.ZoomFactor(), p.Camera.Rotation}
+		for i := range camNames {
+			label(&c.phCamLabels[i], camNames[i])
+			c.phCamInputs[i].SetValue(strconv.FormatFloat(camVals[i], 'g', -1, 64))
+		}
+		commitCam := func() {
+			p := m.SelectedPhase()
+			if p == nil || p.Camera == nil {
+				return
+			}
+			var v [4]float64
+			for i := range c.phCamInputs {
+				f, err := strconv.ParseFloat(strings.TrimSpace(c.phCamInputs[i].Value()), 64)
+				if err != nil {
+					return
+				}
+				v[i] = f
+			}
+			if v[2] < 0 {
+				return
+			}
+			m.SetPhaseCamera(m.SelectedPhaseIndex(),
+				&lottie.SceneCamera{X: v[0], Y: v[1], Zoom: v[2], Rotation: v[3]})
+		}
+		for i := range c.phCamInputs {
+			c.phCamInputs[i].OnValueChanged(func(context *guigui.Context, text string, committed bool) {
+				if committed {
+					commitCam()
+				}
+			})
+		}
+	}
+
 	c.phFormItems = slices.Delete(c.phFormItems, 0, len(c.phFormItems))
 	c.phFormItems = append(c.phFormItems,
 		basicwidget.FormItem{PrimaryWidget: &c.phNameLabel, SecondaryWidget: &c.phNameInput},
 		basicwidget.FormItem{PrimaryWidget: &c.phDurLabel, SecondaryWidget: &c.phDurInput},
 		basicwidget.FormItem{PrimaryWidget: &c.phNextLabel, SecondaryWidget: &c.phNextSel},
+		basicwidget.FormItem{PrimaryWidget: &c.phCamLabel, SecondaryWidget: &c.phCamCheck},
 	)
+	if p.Camera != nil {
+		for i := range c.phCamInputs {
+			c.phFormItems = append(c.phFormItems,
+				basicwidget.FormItem{PrimaryWidget: &c.phCamLabels[i], SecondaryWidget: &c.phCamInputs[i]})
+		}
+	}
 	c.phForm.SetItems(c.phFormItems)
 }
 
@@ -657,6 +774,7 @@ func (c *inspectorContent) buildNodePane(context *guigui.Context, m *Model, n *l
 	for i := range c.tfInputs {
 		context.SetEnabled(&c.tfInputs[i], enabled)
 	}
+	context.SetEnabled(&c.tfDepthInput, enabled)
 }
 
 // buildTransform wires the six placement fields. They patch the live node
@@ -702,11 +820,30 @@ func (c *inspectorContent) buildTransform(context *guigui.Context, m *Model, n *
 			}
 		})
 	}
+	// Depth is how strongly the scene camera moves the node: 1 follows
+	// fully, 0 pins to the screen (a HUD), between the two a background
+	// drifts slower.
+	label(&c.tfDepthLabel, "depth (parallax)")
+	if n != nil {
+		c.tfDepthInput.SetValue(strconv.FormatFloat(n.ParallaxDepth(), 'g', -1, 64))
+	} else {
+		c.tfDepthInput.SetValue("")
+	}
+	c.tfDepthInput.OnValueChanged(func(context *guigui.Context, text string, committed bool) {
+		if !committed {
+			return
+		}
+		if v, err := strconv.ParseFloat(strings.TrimSpace(text), 64); err == nil {
+			m.SetNodeDepth(idx, v)
+		}
+	})
 	c.tfFormItems = slices.Delete(c.tfFormItems, 0, len(c.tfFormItems))
 	for i := range names {
 		c.tfFormItems = append(c.tfFormItems,
 			basicwidget.FormItem{PrimaryWidget: &c.tfLabels[i], SecondaryWidget: &c.tfInputs[i]})
 	}
+	c.tfFormItems = append(c.tfFormItems,
+		basicwidget.FormItem{PrimaryWidget: &c.tfDepthLabel, SecondaryWidget: &c.tfDepthInput})
 	c.tfForm.SetItems(c.tfFormItems)
 }
 
@@ -810,6 +947,9 @@ func (c *inspectorContent) buildChain(context *guigui.Context, m *Model, n *lott
 		if st.Loop {
 			key = "loop"
 		}
+		if s := st.PlaybackSpeed(); s != 1 {
+			key += fmt.Sprintf(" ×%g", s)
+		}
 		c.thItems = append(c.thItems, basicwidget.ListItem[int]{
 			Text: fmt.Sprintf("%d. %s", i+1, txt), KeyText: key, Value: i,
 		})
@@ -834,6 +974,7 @@ func (c *inspectorContent) buildChain(context *guigui.Context, m *Model, n *lott
 	label(&c.tsAnimLabel, "clip")
 	label(&c.tsSegLabel, "segment")
 	label(&c.tsLoopLabel, "loop")
+	label(&c.tsSpeedLabel, "speed")
 	stepIdx := m.SelectedStepIndex()
 
 	setOptionsWithDefault(&c.tsAnimSel, "(same clip)", m.BundleAnimations(n)...)
@@ -866,12 +1007,25 @@ func (c *inspectorContent) buildChain(context *guigui.Context, m *Model, n *lott
 			m.touch()
 		}
 	})
+	c.tsSpeedInput.SetValue(strconv.FormatFloat(st.PlaybackSpeed(), 'g', -1, 64))
+	c.tsSpeedInput.OnValueChanged(func(context *guigui.Context, text string, committed bool) {
+		if !committed {
+			return
+		}
+		if v, err := strconv.ParseFloat(strings.TrimSpace(text), 64); err == nil && v >= 0 {
+			if st := m.SelectedStep(); st != nil {
+				st.Speed = v
+				m.touch()
+			}
+		}
+	})
 
 	c.tsFormItems = slices.Delete(c.tsFormItems, 0, len(c.tsFormItems))
 	c.tsFormItems = append(c.tsFormItems,
 		basicwidget.FormItem{PrimaryWidget: &c.tsAnimLabel, SecondaryWidget: &c.tsAnimSel},
 		basicwidget.FormItem{PrimaryWidget: &c.tsSegLabel, SecondaryWidget: &c.tsSegSel},
 		basicwidget.FormItem{PrimaryWidget: &c.tsLoopLabel, SecondaryWidget: &c.tsLoopCheck},
+		basicwidget.FormItem{PrimaryWidget: &c.tsSpeedLabel, SecondaryWidget: &c.tsSpeedInput},
 	)
 	c.tsForm.SetItems(c.tsFormItems)
 }
@@ -1148,6 +1302,8 @@ func (c *inspectorContent) layout(context *guigui.Context) guigui.LinearLayout {
 		c.items = append(c.items,
 			guigui.LinearLayoutItem{Widget: &c.scTitle, Size: guigui.FixedSize(u)},
 			guigui.LinearLayoutItem{Widget: &c.scForm},
+			guigui.LinearLayoutItem{Widget: &c.cmTitle, Size: guigui.FixedSize(u)},
+			guigui.LinearLayoutItem{Widget: &c.cmForm},
 			guigui.LinearLayoutItem{Widget: &c.phTitle, Size: guigui.FixedSize(u)},
 			guigui.LinearLayoutItem{Widget: &c.phList, Size: guigui.FixedSize(4 * u)},
 			guigui.LinearLayoutItem{Size: guigui.FixedSize(u), Layout: &c.phBtnRow},

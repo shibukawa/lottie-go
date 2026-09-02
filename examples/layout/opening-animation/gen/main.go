@@ -108,7 +108,7 @@ func scene() *lottie.Scene {
 		Fonts: []lottie.SceneAsset{
 			// The stopwatch sample's CC-licensed display font, shared
 			// rather than duplicated.
-			{Alias: "display", Path: "../../../stopwatch/assets/LuckiestGuy-Regular.ttf"},
+			{Alias: "display", Path: "../../../lottie/stopwatch/assets/LuckiestGuy-Regular.ttf"},
 		},
 		Phases: []lottie.ScenePhase{
 			// The card holds exactly as long as its clip, then the

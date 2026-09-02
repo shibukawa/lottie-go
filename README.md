@@ -271,6 +271,17 @@ sp.OnPhaseEnd(func(phase string) {
 })
 ```
 
+A scene also carries a 2D **camera** — position, zoom, rotation — that
+each phase may override, with per-node parallax: a node's `depth` scales
+how strongly the camera moves it (1 tracks fully, 0 pins to the screen
+like a HUD, values between let a background drift slower, above 1 a
+foreground leads). Hit tests and focus geometry follow the camera, and a
+game animates it per frame:
+
+```go
+sp.SetCamera(lottie.SceneCamera{X: g.camX, Zoom: 1.2})
+```
+
 Beyond animations, a scene places static **images** and **text**. Text
 nodes carry font, size, alignment, and an anchor (a right-anchored score
 grows leftward), and are named so the game overwrites them at runtime:
@@ -322,6 +333,11 @@ go run ./examples/lottie/stopwatch
 # a game opening built as one scene: skippable vanity card, a Hokusai-
 # styled breaking wave settling into a calm sea, title, PRESS START
 go run ./examples/layout/opening-animation
+
+# the scene camera and parallax depth as a story: a searchlight sweeps a
+# dark kitchen — the beam is a screen-pinned depth-0 mask, each stop a
+# phase's camera — and finally catches a mouse eating the cheese
+go run ./examples/layout/searchlight
 
 # performance target verification (5+ concurrent animations)
 go run ./examples/lottie/stress
