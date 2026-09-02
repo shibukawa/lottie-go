@@ -27,6 +27,7 @@ timeline:
   - "n.Started() bool   // whether the node's entrance happened; editors keep unentered nodes arrangeable"
 camera: # requirement:scene-camera — 2D camera with per-node parallax depth
   - "sp.Camera() SceneCamera / sp.SetCamera(c)  // runtime override, not persisted; entering a phase or Restart re-resolves from the document (scene camera, or the phase's override)"
+  - "easing toward a phase camera: target = sp.Scene().CameraFor(sp.Phase()), never sp.Camera() — after SetCamera that is the override itself (pitfall hit in the searchlight sample)"
   - "c.GeoM(w, h, depth) ebiten.GeoM  // scene-to-view transform; depth scales every component: translation ×depth, zoom^depth, rotation ×depth — depth 0 is exactly identity (screen-pinned HUD)"
   - Draw composes per node camera(depth) -> screen mapping; Pointer, NodeAt, and directional focus geometry apply the same chain, so hits and focus match what is on screen
   - zoom/rotation pivot on the design box center; moving the camera shifts content the opposite way

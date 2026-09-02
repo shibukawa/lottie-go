@@ -465,6 +465,10 @@ func (sp *ScenePlayer) Camera() SceneCamera { return sp.cam }
 // SetCamera overrides the camera at runtime — a game panning or zooming
 // per frame. Like SetTransform it is not persisted: entering a phase (or
 // Restart) resolves the camera from the document again.
+//
+// Camera then reports the override, so a game easing toward the phase's
+// camera reads its target from the document — Scene().CameraFor(Phase())
+// — not from Camera, or it would chase itself.
 func (sp *ScenePlayer) SetCamera(c SceneCamera) { sp.cam = c }
 
 // cameraGeoM is the running camera's transform for one node's depth.
