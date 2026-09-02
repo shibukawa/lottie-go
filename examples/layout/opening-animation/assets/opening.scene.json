@@ -29,7 +29,7 @@
   "fonts": [
     {
       "alias": "display",
-      "path": "../../../stopwatch/assets/LuckiestGuy-Regular.ttf"
+      "path": "../../../lottie/stopwatch/assets/LuckiestGuy-Regular.ttf"
     }
   ],
   "phases": [

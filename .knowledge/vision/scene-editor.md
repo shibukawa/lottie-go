@@ -18,7 +18,9 @@ scope:
     - layout containers, text flow, 9-slice; placement is fixed coordinates
 built_with: system:guigui
 tool_name: layout — ships as the cmd/lottie-layout/ Go module, a sibling of cmd/lottie-state-editor/; scene files save as *.scene.json
-sample: examples/layout/opening-animation — a full game opening (phases, entrance timeline, chained playback, text, callbacks) runnable and editor-openable
+samples:
+  - examples/layout/opening-animation — a full game opening (phases, entrance timeline, chained playback, text, callbacks) runnable and editor-openable
+  - examples/layout/searchlight — requirement:scene-camera as a story; a depth-0 mask is the searchlight, per-phase cameras are the stops, the game eases between them; a complete-event binding startles the found mouse
 document: data:scene-document
 decided:
   - storage: standalone file referencing bundles (decision:scene-references-bundles)

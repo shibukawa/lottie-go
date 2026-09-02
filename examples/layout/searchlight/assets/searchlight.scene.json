@@ -1,0 +1,281 @@
+{
+  "name": "searchlight",
+  "size": {
+    "w": 1280,
+    "h": 720
+  },
+  "camera": {
+    "x": -439.99,
+    "y": -319.99,
+    "zoom": 2
+  },
+  "bundles": [
+    {
+      "alias": "wall",
+      "path": "wall.lottie"
+    },
+    {
+      "alias": "shelf",
+      "path": "shelf.lottie"
+    },
+    {
+      "alias": "table",
+      "path": "table.lottie"
+    },
+    {
+      "alias": "mouse",
+      "path": "mouse.lottie"
+    },
+    {
+      "alias": "plant",
+      "path": "plant.lottie"
+    },
+    {
+      "alias": "mask",
+      "path": "mask.lottie"
+    },
+    {
+      "alias": "alert",
+      "path": "alert.lottie"
+    }
+  ],
+  "fonts": [
+    {
+      "alias": "display",
+      "path": "LuckiestGuy-Regular.ttf"
+    }
+  ],
+  "phases": [
+    {
+      "name": "look-picture",
+      "duration": 2.2,
+      "next": "look-clock",
+      "camera": {
+        "x": -439.99,
+        "y": -319.99,
+        "zoom": 2,
+        "rotation": -3
+      }
+    },
+    {
+      "name": "look-clock",
+      "duration": 1.8,
+      "next": "look-window",
+      "camera": {
+        "y": -339.99,
+        "zoom": 2
+      }
+    },
+    {
+      "name": "look-window",
+      "duration": 2.2,
+      "next": "look-shelf",
+      "camera": {
+        "x": 680,
+        "y": -259.99,
+        "zoom": 2,
+        "rotation": 3
+      }
+    },
+    {
+      "name": "look-shelf",
+      "duration": 2.2,
+      "next": "look-plant",
+      "camera": {
+        "x": -728.56,
+        "y": 14.29,
+        "zoom": 2,
+        "rotation": -2
+      }
+    },
+    {
+      "name": "look-plant",
+      "duration": 2,
+      "next": "look-floor",
+      "camera": {
+        "x": -371.42,
+        "y": 71.43,
+        "zoom": 1.2,
+        "rotation": 2
+      }
+    },
+    {
+      "name": "look-floor",
+      "duration": 1.8,
+      "next": "found",
+      "camera": {
+        "y": 300,
+        "zoom": 2
+      }
+    },
+    {
+      "name": "found",
+      "camera": {
+        "x": 160,
+        "y": 40,
+        "zoom": 2.6
+      }
+    }
+  ],
+  "nodes": [
+    {
+      "name": "wall",
+      "kind": "animation",
+      "source": {
+        "bundle": "wall",
+        "id": "wall-anim"
+      },
+      "depth": 0.5,
+      "playback": {
+        "loop": true,
+        "autoplay": true
+      }
+    },
+    {
+      "name": "shelf",
+      "kind": "animation",
+      "source": {
+        "bundle": "shelf",
+        "id": "shelf-anim"
+      },
+      "transform": {
+        "x": 0,
+        "y": 160
+      },
+      "depth": 0.7,
+      "playback": {
+        "loop": true,
+        "autoplay": true
+      }
+    },
+    {
+      "name": "table",
+      "kind": "animation",
+      "source": {
+        "bundle": "table",
+        "id": "table-anim"
+      },
+      "transform": {
+        "x": 560,
+        "y": 300
+      },
+      "playback": {
+        "loop": true,
+        "autoplay": true
+      }
+    },
+    {
+      "name": "mouse",
+      "kind": "animation",
+      "source": {
+        "bundle": "mouse",
+        "id": "mouse-anim"
+      },
+      "transform": {
+        "x": 690,
+        "y": 300
+      },
+      "playback": {
+        "segment": "eat-seg",
+        "loop": true,
+        "autoplay": true
+      }
+    },
+    {
+      "name": "alert",
+      "kind": "animation",
+      "source": {
+        "bundle": "alert",
+        "id": "alert-anim"
+      },
+      "transform": {
+        "x": 840,
+        "y": 180
+      },
+      "playback": {
+        "segment": "pop-seg",
+        "autoplay": true
+      },
+      "start": 0.5,
+      "phase": "found",
+      "bindings": [
+        {
+          "on": "complete",
+          "do": "playSegment",
+          "arg": "startled-seg",
+          "target": "mouse"
+        }
+      ]
+    },
+    {
+      "name": "plant",
+      "kind": "animation",
+      "source": {
+        "bundle": "plant",
+        "id": "plant-anim"
+      },
+      "transform": {
+        "x": -40,
+        "y": 210
+      },
+      "depth": 1.4,
+      "playback": {
+        "loop": true,
+        "autoplay": true
+      }
+    },
+    {
+      "name": "searchlight",
+      "kind": "animation",
+      "source": {
+        "bundle": "mask",
+        "id": "mask-anim"
+      },
+      "depth": 0,
+      "playback": {
+        "loop": true,
+        "autoplay": true
+      }
+    },
+    {
+      "name": "caption",
+      "kind": "text",
+      "source": {},
+      "transform": {
+        "x": 640,
+        "y": 46
+      },
+      "depth": 0,
+      "text": {
+        "value": "Somebody is nibbling my cheese...",
+        "font": "display",
+        "size": 40,
+        "align": "center",
+        "anchorX": "center",
+        "anchorY": "middle",
+        "color": "#c9c2ad"
+      }
+    },
+    {
+      "name": "found-text",
+      "kind": "text",
+      "source": {},
+      "transform": {
+        "x": 640,
+        "y": 650
+      },
+      "depth": 0,
+      "start": 1,
+      "phase": "found",
+      "text": {
+        "value": "FOUND YOU!",
+        "font": "display",
+        "size": 84,
+        "align": "center",
+        "anchorX": "center",
+        "anchorY": "middle",
+        "color": "#f9cc40"
+      }
+    }
+  ]
+}
