@@ -348,7 +348,7 @@ func (s *mcpServer) registerRender() {
 		)
 		switch in.What {
 		case "window":
-			png, herr = s.renderWindow()
+			png, herr = s.renderWindow(ctx)
 		case "", "stage":
 			if err := s.call(ctx, func() { png, herr = s.renderStage(in.Width, in.Frame, in.Overlays) }); err != nil {
 				return refusalResult(err), nil, nil

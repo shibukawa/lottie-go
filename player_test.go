@@ -126,3 +126,66 @@ func TestDrawFrameFollowsSpeed(t *testing.T) {
 		t.Errorf("DrawFrame = %v; want %v", got, want)
 	}
 }
+
+// A NaN or infinite rate names no point on the timeline; SetSpeed leaves
+// the speed alone rather than poisoning every later frame.
+func TestSetSpeedIgnoresNonFinite(t *testing.T) {
+	p, _ := drawFramePlayer(t, 60)
+	p.SetSpeed(2)
+	for _, s := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+		p.SetSpeed(s)
+		if p.speed != 2 {
+			t.Errorf("SetSpeed(%v) changed the speed to %v", s, p.speed)
+		}
+	}
+	p.SetSpeed(-1)
+	if p.speed != 0 {
+		t.Errorf("negative speed = %v; want 0", p.speed)
+	}
+}
+
+// A hair-thin range crosses its end many times per tick. The loop count
+// keeps every crossing, but the callback fires a bounded number of times,
+// so a per-loop hook cannot stall the tick.
+func TestLoopCallbacksCappedPerUpdate(t *testing.T) {
+	p, _ := drawFramePlayer(t, 60)
+	p.SetLoop(true)
+	p.SetRange(10, 10.001)
+	calls := 0
+	p.OnLoopComplete(func() { calls++ })
+	p.Update() // one frame of delta across a 0.001-frame range
+	if calls != maxLoopCallbacksPerUpdate {
+		t.Errorf("OnLoopComplete ran %d times; want the cap of %d", calls, maxLoopCallbacksPerUpdate)
+	}
+	if p.loopsDone < 900 {
+		t.Errorf("loopsDone = %d; every crossing must still count", p.loopsDone)
+	}
+	if f := p.Frame(); f < 10 || f >= 10.001 {
+		t.Errorf("Frame = %v; want inside the range", f)
+	}
+}
+
+// The cursor must never hold a NaN: a seek with one lands at the range
+// start, and an advance that produces one parks at the boundary.
+func TestFrameNeverHoldsNaN(t *testing.T) {
+	p, _ := drawFramePlayer(t, 60)
+	p.SetFrame(math.NaN())
+	if p.Frame() != 0 {
+		t.Errorf("SetFrame(NaN): Frame = %v; want 0", p.Frame())
+	}
+	p.SetProgress(math.NaN())
+	if p.Frame() != 0 {
+		t.Errorf("SetProgress(NaN): Frame = %v; want 0", p.Frame())
+	}
+	p.frame = math.Inf(1)
+	p.Update()
+	if f := p.Frame(); math.IsNaN(f) || math.IsInf(f, 0) {
+		t.Errorf("Update from +Inf left Frame = %v", f)
+	}
+	p.SetLoop(true)
+	p.frame = math.Inf(-1)
+	p.Update()
+	if f := p.Frame(); f != 0 {
+		t.Errorf("Update from -Inf while looping left Frame = %v; want 0", f)
+	}
+}

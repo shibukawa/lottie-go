@@ -283,6 +283,12 @@ func (t *trimmer) extract(g *geometry, f0, f1 float64) {
 // closed contour runs through the seam. It returns the contour written to.
 func (t *trimmer) extractPart(g *geometry, f0, f1 float64, cont *geometry) *geometry {
 	total := t.contourLength(&g.bez)
+	// Fractions arrive from arithmetic on other fractions (trimAcross maps
+	// a share of the whole run back onto one contour), so a full contour can
+	// read as 1.0000000000000002. Clamp: past the end there is no more
+	// contour to take, and nothing before its start.
+	f0 = math.Max(f0, 0)
+	f1 = math.Min(f1, 1)
 	if total <= 0 || f1 <= f0 {
 		return cont
 	}
@@ -302,8 +308,10 @@ func (t *trimmer) extractPart(g *geometry, f0, f1 float64, cont *geometry) *geom
 	// Locate start and end segments.
 	segs := len(t.segLens)
 	acc := 0.0
+	// The end defaults to the very end of the contour, so a length that the
+	// sampled chords sum just short of still keeps the final segment.
 	startSeg, endSeg := -1, segs-1
-	var startU, endU float64
+	startU, endU := 0.0, 1.0
 	for s := 0; s < segs; s++ {
 		l := t.segLens[s]
 		if startSeg < 0 && acc+l >= lenStart {

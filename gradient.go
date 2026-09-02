@@ -102,7 +102,10 @@ type alphaStop struct{ pos, a float64 }
 // plus optional trailing alpha stops (pos,a)* into premultiplied RGBA stops.
 // scratch is reused across calls and the grown slice is returned.
 func buildGradientStops(g *gradientCmd, data []float64, count int, alpha float64, scratch []alphaStop) []alphaStop {
-	if count <= 0 || len(data) < count*4 {
+	// Compare through a division: count comes straight from the file, and
+	// count*4 can wrap negative for an absurd value, which would slice data
+	// with a negative index below.
+	if count <= 0 || count > len(data)/4 {
 		// Malformed: fall back to opaque black -> transparent.
 		g.count = 2
 		g.stops = [maxGradStops]float32{0, 1}

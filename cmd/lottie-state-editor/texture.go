@@ -116,16 +116,61 @@ func (m *Model) storeClipDoc(d *clipDoc) error {
 	return lottietexture.Store(m.bundle, d.id, doc)
 }
 
+// cachedTexDoc is one parsed texture document and the bytes it was parsed
+// from; the bytes decide whether it is still current.
+type cachedTexDoc struct {
+	data []byte
+	doc  *lottietexture.Doc
+}
+
+// textureDoc returns the clip's parsed texture document, re-parsing only
+// when the stored bytes changed. A stage player is rebuilt on every drag
+// step, and the document is the same bytes step after step.
+func (m *Model) textureDoc(id string) (*lottietexture.Doc, error) {
+	data, ok := m.bundle.ExtensionFile(lottietexture.File(id))
+	if !ok {
+		delete(m.texDocs, id)
+		return nil, nil
+	}
+	if c, ok := m.texDocs[id]; ok && bytes.Equal(c.data, data) {
+		return c.doc, nil
+	}
+	doc, err := lottietexture.Parse(data)
+	if err != nil {
+		delete(m.texDocs, id)
+		return nil, err
+	}
+	if m.texDocs == nil {
+		m.texDocs = map[string]cachedTexDoc{}
+	}
+	m.texDocs[id] = cachedTexDoc{data: bytes.Clone(data), doc: doc}
+	return doc, nil
+}
+
 // applyTextures dresses a clip player with the bundle's texture document,
 // the step every preview player takes after it is created.
 func (m *Model) applyTextures(id string, p *lottie.Player) {
-	doc, err := lottietexture.Load(m.bundle, id)
+	doc, err := m.textureDoc(id)
 	if err != nil || doc == nil {
 		return
 	}
 	if err := doc.Apply(p); err != nil {
 		m.setStatus("texture: %v", err)
 	}
+}
+
+// resetTextureImages drops the decoded texture images. Everywhere the
+// bundle's images can change — another bundle opened, a clip removed — the
+// cache would otherwise keep showing the old picture under the old file
+// name, and keep its GPU memory for the rest of the session.
+func (m *Model) resetTextureImages() {
+	for _, img := range m.texImages {
+		if img != nil {
+			img.Deallocate()
+		}
+	}
+	m.texImages = nil
+	m.texDocs = nil
 }
 
 // carryTextures moves or copies a clip's texture document along with the
@@ -414,6 +459,10 @@ func (m *Model) ShapeTexTransformAdjacent(member string, dir int) ([]float64, fl
 func (m *Model) SetShapeTexTransform(member string, v []float64) {
 	d := m.StageClipDoc()
 	if d == nil {
+		return
+	}
+	if !finite(v...) {
+		m.rejectValue("texture " + member)
 		return
 	}
 	frame := m.shapeEditFrame()
@@ -707,6 +756,15 @@ func (m *Model) editUV(fn func(item map[string]any, uv [][2]float64) ([][2]float
 	uv, _ := m.ShapeUVs()
 	pushed := m.snapshotClip()
 	next, changed := fn(item, uv)
+	if changed {
+		for _, p := range next {
+			if !finite(p[0], p[1]) {
+				m.rejectValue("uv")
+				changed = false
+				break
+			}
+		}
+	}
 	if !changed {
 		if pushed {
 			m.dropLastSnapshot()
@@ -1005,6 +1063,9 @@ func (m *Model) ImportTextureImage(path string) {
 	}
 	name := filepath.Base(path)
 	m.bundle.SetImage(name, data)
+	if old := m.texImages[name]; old != nil {
+		old.Deallocate()
+	}
 	delete(m.texImages, name)
 	m.docGen++
 	m.BindTextureFile(name)

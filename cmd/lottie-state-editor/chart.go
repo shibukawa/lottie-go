@@ -34,6 +34,7 @@ type chartView struct {
 	dragStart float64 // frame under the cursor at press
 	origFrom  float64 // dragged span's bounds at press
 	origTo    float64
+	watch     frameWatch
 }
 
 type chartDrag int
@@ -333,9 +334,16 @@ func (c *chartView) CursorShape(context *guigui.Context, widgetBounds *guigui.Wi
 	return 0, false
 }
 
-// Tick redraws so the playhead follows playback without rebuilding.
+// Tick redraws so the playhead follows playback without rebuilding, only
+// while it moves; the state key covers everything else.
 func (c *chartView) Tick(context *guigui.Context, widgetBounds *guigui.WidgetBounds) error {
-	guigui.RequestRedraw(c)
+	m := c.model(context)
+	if m == nil {
+		return nil
+	}
+	if c.watch.moved(m) || c.drag != chartDragNone {
+		guigui.RequestRedraw(c)
+	}
 	return nil
 }
 

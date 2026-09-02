@@ -9,6 +9,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // Manifest is the manifest.json of a dotLottie archive. Members this package
@@ -81,7 +82,11 @@ type ManifestStateMachine struct {
 // version 1 (animations/ images/). Encode always writes version 2.
 //
 // Animations are decoded on first use, so opening a bundle to inspect its
-// manifest does not pay for every clip in it.
+// manifest does not pay for every clip in it. The decoded animations, state
+// machines, and image assets are cached, and those caches are safe to use
+// from several goroutines at once — a loader warming Animation while the
+// game loop decodes another clip — as are the methods that add and remove
+// members. Manifest edits through the live pointer are not.
 type Bundle struct {
 	manifest Manifest
 
@@ -99,8 +104,14 @@ type Bundle struct {
 	// policy:robustness).
 	extFiles map[string][]byte
 
+	// mu guards the members above and the caches below. It is never held
+	// while a clip decodes, so a slow decode does not stall a reader, nor
+	// on any Draw path: an animation reaches its images through its own
+	// map once they are loaded.
+	mu    sync.Mutex
 	anims map[string]*Animation
 	sms   map[string]*StateMachine
+	imgs  *imageCache
 }
 
 // NewBundle returns an empty version 2 bundle.
@@ -121,6 +132,7 @@ func newBundle() *Bundle {
 		extFiles: map[string][]byte{},
 		anims:    map[string]*Animation{},
 		sms:      map[string]*StateMachine{},
+		imgs:     newImageCache(),
 	}
 }
 
@@ -275,6 +287,8 @@ func (b *Bundle) StateMachineIDs() []string {
 
 // AnimationJSON returns the raw Lottie document for an id.
 func (b *Bundle) AnimationJSON(id string) ([]byte, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	data, ok := b.animJSON[id]
 	return data, ok
 }
@@ -282,16 +296,29 @@ func (b *Bundle) AnimationJSON(id string) ([]byte, bool) {
 // Animation decodes and returns the animation with the given id. Repeated
 // calls return the same value, which is safe to share across players.
 func (b *Bundle) Animation(id string) (*Animation, error) {
-	if a, ok := b.anims[id]; ok {
+	b.mu.Lock()
+	a, cached := b.anims[id]
+	data, ok := b.animJSON[id]
+	b.mu.Unlock()
+	if cached {
 		return a, nil
 	}
-	data, ok := b.animJSON[id]
 	if !ok {
 		return nil, fmt.Errorf("lottie: no animation %q in bundle", id)
 	}
-	a, err := decodeJSON(data, b.resolveAsset)
+	// Decode outside the lock: two callers may race to decode the same
+	// clip, and the first to finish wins, so both hand out one value.
+	a, err := decodeJSON(data, b.resolveAsset, b.imgs)
 	if err != nil {
 		return nil, fmt.Errorf("lottie: animation %q: %w", id, err)
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if prev, ok := b.anims[id]; ok {
+		return prev, nil
+	}
+	if _, still := b.animJSON[id]; !still {
+		return nil, fmt.Errorf("lottie: no animation %q in bundle", id)
 	}
 	b.anims[id] = a
 	return a, nil
@@ -299,6 +326,8 @@ func (b *Bundle) Animation(id string) (*Animation, error) {
 
 // StateMachine parses and returns the state machine with the given id.
 func (b *Bundle) StateMachine(id string) (*StateMachine, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	if s, ok := b.sms[id]; ok {
 		return s, nil
 	}
@@ -348,11 +377,11 @@ func (b *Bundle) InitialStateMachine() (*StateMachine, bool, error) {
 // from the asset's "u" and "p" members, which point at either archive
 // layout, so fall back to matching on file name alone.
 func (b *Bundle) resolveAsset(dir, name string) ([]byte, error) {
-	if dir != "" {
-		if data, ok := b.files[path.Clean(path.Join(strings.TrimPrefix(dir, "/"), name))]; ok {
-			return data, nil
-		}
-	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	// The image and font stores are what SetImage edits and what Encode
+	// writes, so they answer first; the raw archive members only stand in
+	// for a path that points somewhere else.
 	base := path.Base(name)
 	if data, ok := b.images[base]; ok {
 		return data, nil
@@ -360,21 +389,30 @@ func (b *Bundle) resolveAsset(dir, name string) ([]byte, error) {
 	if data, ok := b.fonts[base]; ok {
 		return data, nil
 	}
+	if dir != "" {
+		if data, ok := b.files[path.Clean(path.Join(strings.TrimPrefix(dir, "/"), name))]; ok {
+			return data, nil
+		}
+	}
 	return nil, fmt.Errorf("lottie: asset %s not found in bundle", path.Join(dir, name))
 }
 
 // SetAnimation adds or replaces an animation. The document is parsed to
 // reject a file that is not a usable Lottie animation before it enters the
-// bundle.
+// bundle, and that decoded animation is what Animation then returns, so an
+// editor storing a clip pays for one decode, not two.
 func (b *Bundle) SetAnimation(id string, lottieJSON []byte) error {
 	if id == "" {
 		return fmt.Errorf("lottie: animation id must not be empty")
 	}
-	if _, err := decodeJSON(lottieJSON, b.resolveAsset); err != nil {
+	a, err := decodeJSON(lottieJSON, b.resolveAsset, b.imgs)
+	if err != nil {
 		return fmt.Errorf("lottie: animation %q: %w", id, err)
 	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	b.animJSON[id] = bytes.Clone(lottieJSON)
-	delete(b.anims, id)
+	b.anims[id] = a
 	b.syncManifest()
 	return nil
 }
@@ -383,6 +421,8 @@ func (b *Bundle) SetAnimation(id string, lottieJSON []byte) error {
 // Extension files stay: the core cannot know which of them describe this
 // clip, so a plugin's data is for its plugin (or the editor) to clean up.
 func (b *Bundle) RemoveAnimation(id string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	delete(b.animJSON, id)
 	delete(b.anims, id)
 	b.syncManifest()
@@ -397,6 +437,8 @@ func (b *Bundle) SetStateMachine(id string, sm *StateMachine) error {
 	if err != nil {
 		return fmt.Errorf("lottie: state machine %q: %w", id, err)
 	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	b.smJSON[id] = data
 	b.sms[id] = sm
 	b.syncManifest()
@@ -405,6 +447,8 @@ func (b *Bundle) SetStateMachine(id string, sm *StateMachine) error {
 
 // RemoveStateMachine drops a state machine and any manifest entry for it.
 func (b *Bundle) RemoveStateMachine(id string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	delete(b.smJSON, id)
 	delete(b.sms, id)
 	b.syncManifest()
@@ -454,14 +498,20 @@ func (b *Bundle) ExtensionFiles(prefix string) []string {
 	return out
 }
 
-// SetImage adds or replaces a shared image, stored under i/ on encode.
+// SetImage adds or replaces a shared image, stored under i/ on encode. An
+// animation decoded earlier keeps the picture it decoded; one decoded after
+// this call sees the new bytes.
 func (b *Bundle) SetImage(name string, data []byte) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	b.images[path.Base(name)] = bytes.Clone(data)
 }
 
 // ImageNames lists the shared images the bundle holds, by base name,
 // sorted — the names an image asset's p member can point at.
 func (b *Bundle) ImageNames() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	names := make([]string, 0, len(b.images))
 	for name := range b.images {
 		names = append(names, name)
@@ -472,6 +522,8 @@ func (b *Bundle) ImageNames() []string {
 
 // Image returns a shared image's bytes by base name.
 func (b *Bundle) Image(name string) ([]byte, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	data, ok := b.images[path.Base(name)]
 	return data, ok
 }
@@ -494,7 +546,7 @@ func (b *Bundle) Validate() []error {
 			if st.Animation == "" {
 				continue
 			}
-			if _, ok := b.animJSON[st.Animation]; !ok {
+			if _, ok := b.AnimationJSON(st.Animation); !ok {
 				problems = append(problems, fmt.Errorf("state machine %q: state %q names unknown animation %q", id, st.Name, st.Animation))
 				continue
 			}
@@ -516,6 +568,8 @@ func (b *Bundle) Validate() []error {
 
 // Encode writes the bundle as a version 2 dotLottie archive.
 func (b *Bundle) Encode(w io.Writer) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	// An archive with no animations is not loadable, so refuse to write one
 	// rather than produce a file that cannot be reopened.
 	if len(b.animJSON) == 0 {

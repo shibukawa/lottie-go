@@ -13,6 +13,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
 	lottie "github.com/shibukawa/lottie-go"
+	lottiecp "github.com/shibukawa/lottie-go/plugin/physics/cp"
 	lottieresolv "github.com/shibukawa/lottie-go/plugin/physics/resolv"
 	lottiesockets "github.com/shibukawa/lottie-go/plugin/sockets"
 )
@@ -28,6 +29,19 @@ func setBold(t *basicwidget.Text, s string) {
 func label(t *basicwidget.Text, s string) {
 	t.SetValue(s)
 	t.SetVerticalAlign(basicwidget.VerticalAlignMiddle)
+}
+
+// parseFinite reads a typed number. strconv accepts "inf" and "nan", and a
+// non-finite value would poison the document it lands in — encoding/json
+// refuses it, so every later store-back of that document would fail. Every
+// numeric field commits through here, and the model refuses the same
+// values again (finite) for edits that arrive already parsed.
+func parseFinite(text string) (float64, bool) {
+	v, err := strconv.ParseFloat(strings.TrimSpace(text), 64)
+	if err != nil || !finite(v) {
+		return 0, false
+	}
+	return v, true
 }
 
 // setOptions fills a dropdown whose values are their own labels. Dropdowns
@@ -432,9 +446,14 @@ func (c *inspectorContent) buildHitboxPane(context *guigui.Context, m *Model) {
 		c.hbToInput.SetValue("")
 	}
 	commitRange := func() {
-		from, err1 := strconv.ParseFloat(strings.TrimSpace(c.hbFromInput.Value()), 64)
-		to, err2 := strconv.ParseFloat(strings.TrimSpace(c.hbToInput.Value()), 64)
-		if err1 == nil && err2 == nil {
+		from, ok1 := parseFinite(c.hbFromInput.Value())
+		to, ok2 := parseFinite(c.hbToInput.Value())
+		switch {
+		case !ok1:
+			m.RejectNumber(c.hbFromInput.Value())
+		case !ok2:
+			m.RejectNumber(c.hbToInput.Value())
+		default:
 			m.SetSpanRange(from, to)
 		}
 	}
@@ -494,28 +513,24 @@ func (c *inspectorContent) buildCPShapePane(context *guigui.Context, m *Model) {
 		c.cpElasticInput.SetValue("")
 		c.cpSensorCheck.SetValue(false)
 	}
-	c.cpFrictInput.OnValueChanged(func(context *guigui.Context, text string, committed bool) {
-		if !committed {
-			return
-		}
-		if v, err := strconv.ParseFloat(strings.TrimSpace(text), 64); err == nil && v >= 0 {
+	material := func(dst func(*lottiecp.Shape) *float64) func(*guigui.Context, string, bool) {
+		return func(context *guigui.Context, text string, committed bool) {
+			if !committed {
+				return
+			}
+			v, ok := parseFinite(text)
+			if !ok || v < 0 {
+				m.RejectNumber(text)
+				return
+			}
 			if s := m.SelectedCPShape(); s != nil {
-				s.Friction = v
+				*dst(s) = v
 				m.touchCPBody()
 			}
 		}
-	})
-	c.cpElasticInput.OnValueChanged(func(context *guigui.Context, text string, committed bool) {
-		if !committed {
-			return
-		}
-		if v, err := strconv.ParseFloat(strings.TrimSpace(text), 64); err == nil && v >= 0 {
-			if s := m.SelectedCPShape(); s != nil {
-				s.Elasticity = v
-				m.touchCPBody()
-			}
-		}
-	})
+	}
+	c.cpFrictInput.OnValueChanged(material(func(s *lottiecp.Shape) *float64 { return &s.Friction }))
+	c.cpElasticInput.OnValueChanged(material(func(s *lottiecp.Shape) *float64 { return &s.Elasticity }))
 	c.cpSensorCheck.OnValueChanged(func(context *guigui.Context, value bool) {
 		if s := m.SelectedCPShape(); s != nil {
 			s.Sensor = value
@@ -576,11 +591,14 @@ func (c *inspectorContent) buildSocketPane(context *guigui.Context, m *Model) {
 			if !committed {
 				return
 			}
-			if v, err := strconv.ParseFloat(strings.TrimSpace(text), 64); err == nil {
-				if s := m.SelectedSocket(); s != nil {
-					*dst(s) = v
-					m.touchSockets()
-				}
+			v, ok := parseFinite(text)
+			if !ok {
+				m.RejectNumber(text)
+				return
+			}
+			if s := m.SelectedSocket(); s != nil {
+				*dst(s) = v
+				m.touchSockets()
 			}
 		}
 	}
@@ -727,10 +745,14 @@ func (c *inspectorContent) buildStateForm(context *guigui.Context, m *Model, st 
 		if !committed {
 			return
 		}
-		if v, err := strconv.ParseFloat(strings.TrimSpace(text), 64); err == nil && v >= 0 {
-			st.Speed = v
-			m.Touch()
+		// The model refuses and clamps (maxStateSpeed): a runaway speed
+		// turns one player tick into billions of loop callbacks.
+		v, ok := parseFinite(text)
+		if !ok || v < 0 {
+			m.RejectNumber(text)
+			return
 		}
+		m.SetStateSpeed(v)
 	})
 
 	c.loopCheck.SetValue(st.Loop)
@@ -1257,8 +1279,9 @@ func (c *inspectorContent) buildPosePane(context *guigui.Context, m *Model, adde
 			if !committed {
 				return
 			}
-			n, err := strconv.ParseFloat(strings.TrimSpace(text), 64)
-			if err != nil {
+			n, okN := parseFinite(text)
+			if !okN {
+				m.RejectNumber(text)
 				return
 			}
 			cur, ok := m.PoseValue(f.prop)

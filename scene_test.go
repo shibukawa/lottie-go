@@ -765,3 +765,42 @@ func TestSceneScreenMapping(t *testing.T) {
 	sp.SetScreenMapping(800, 800, ScaleCenter)
 	check(ScaleCenter, 0, 0, 200, 300)
 }
+
+// OnNodeStart hands the game every player or machine a node is built
+// with: the ones already running when it registers, and again whenever a
+// phase entry or Restart rebuilds them.
+func TestOnNodeStartFiresOnEveryRebuild(t *testing.T) {
+	_, sp := menuScene(t)
+	seen := map[string][]*Player{}
+	machines := 0
+	sp.OnNodeStart(func(node string, p *Player, sm *StateMachinePlayer) {
+		if p != nil {
+			seen[node] = append(seen[node], p)
+		}
+		if sm != nil {
+			machines++
+		}
+	})
+	if len(seen["logo"]) != 1 {
+		t.Fatalf("registering did not report the running logo player: %v", seen)
+	}
+	if machines == 0 {
+		t.Fatal("registering did not report the running button machines")
+	}
+	logo, _ := sp.Node("logo")
+	if seen["logo"][0] != logo.Player() {
+		t.Error("the reported player is not the node's player")
+	}
+	sp.Restart()
+	if len(seen["logo"]) != 2 || seen["logo"][1] == seen["logo"][0] {
+		t.Errorf("Restart did not report a fresh logo player: %v", seen["logo"])
+	}
+	if seen["logo"][1] != logo.Player() {
+		t.Error("the player reported on Restart is not the node's new player")
+	}
+	sp.OnNodeStart(nil)
+	sp.Restart()
+	if len(seen["logo"]) != 2 {
+		t.Error("a cleared hook still fired")
+	}
+}

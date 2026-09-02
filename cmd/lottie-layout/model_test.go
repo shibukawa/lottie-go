@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	lottie "github.com/shibukawa/lottie-go"
@@ -518,5 +520,221 @@ func TestPhaseCameraOverride(t *testing.T) {
 	m.SetPhaseCamera(0, nil)
 	if p.Camera != nil {
 		t.Fatal("phase camera override not cleared")
+	}
+}
+
+// writeTestPNG writes a tiny PNG into dir and returns its path.
+func writeTestPNG(t *testing.T, dir, name string) string {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 8, 4))
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestFailedPlayerBuildNotRetried(t *testing.T) {
+	m, _ := testModel(t)
+	m.PlaceSource(m.Sources()[0])
+	ref := m.scene.Bundles[0]
+	m.RemoveBundle("ui")
+	if m.Player() != nil {
+		t.Fatal("player built against a missing bundle")
+	}
+	if m.PlayerErr() == nil {
+		t.Fatal("failed build left no error")
+	}
+	// Repair the document behind the model's back — no touch, so docGen
+	// stays put. A retry would now succeed; the point is that none runs
+	// until the document changes, since every attempt decodes every asset.
+	m.scene.Bundles = append(m.scene.Bundles, ref)
+	m.loadBundle("ui")
+	if m.Player() != nil {
+		t.Fatal("failed build was retried without a document change")
+	}
+	m.touch()
+	if m.Player() == nil {
+		t.Fatalf("rebuild after a document change failed: %v", m.PlayerErr())
+	}
+}
+
+func TestSaveAsRebasesAssetPaths(t *testing.T) {
+	m, dir := testModel(t)
+	m.AddImage(writeTestPNG(t, dir, "badge.png"))
+	if got := m.scene.Images[0].Path; got != "badge.png" {
+		t.Fatalf("image stored as %q, want scene-relative", got)
+	}
+	sub := filepath.Join(dir, "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m.Save(filepath.Join(sub, "moved.scene.json"))
+	if !strings.HasPrefix(m.Status(), "saved") {
+		t.Fatalf("status = %q", m.Status())
+	}
+	if got := m.scene.Images[0].Path; got != "../badge.png" {
+		t.Errorf("image path after Save As = %q, want ../badge.png", got)
+	}
+	if got := m.scene.Bundles[0].Path; got != "../ui.lottie" {
+		t.Errorf("bundle path after Save As = %q, want ../ui.lottie", got)
+	}
+	if _, ok := m.Image("badge"); !ok {
+		t.Errorf("image no longer loads after Save As: %v", m.assetErrs)
+	}
+	if len(m.Problems()) != 0 {
+		t.Errorf("problems after Save As: %v", m.Problems())
+	}
+}
+
+func TestSaveKeepsFileWhenEncodeFails(t *testing.T) {
+	m, dir := testModel(t)
+	placeClip(t, m)
+	scenePath := filepath.Join(dir, "menu.scene.json")
+	m.Save(scenePath)
+	before, err := os.ReadFile(scenePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// JSON cannot hold an infinity; the previous save must survive the
+	// failed one untouched.
+	m.scene.Nodes[0].Transform.X = math.Inf(1)
+	m.Save(scenePath)
+	if !strings.HasPrefix(m.Status(), "save failed") {
+		t.Fatalf("status = %q, want a save failure", m.Status())
+	}
+	after, err := os.ReadFile(scenePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatalf("failed save changed the file on disk (%d -> %d bytes)", len(before), len(after))
+	}
+	// No temp file left behind either.
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".tmp") {
+			t.Errorf("temp file left behind: %s", e.Name())
+		}
+	}
+}
+
+func TestSeekSceneSkipsRepeatsAndCaps(t *testing.T) {
+	m, _ := testModel(t)
+	placeClip(t, m)
+	m.SeekScene(0.4)
+	gen := m.Generation()
+	sp := m.Player()
+	// The same target again on an unmoved player is a no-op: a held ruler
+	// drag must not replay the scene every tick.
+	m.SeekScene(0.4)
+	if m.Generation() != gen {
+		t.Error("repeated seek to the same time replayed the scene")
+	}
+	if got := sp.Time(); got < 0.39 || got > 0.41 {
+		t.Errorf("time after repeat = %v, want ~0.4", got)
+	}
+	// Once something moved the clock, the same target seeks again.
+	m.TogglePlayback()
+	m.EditTick()
+	m.SeekScene(0.4)
+	if got := sp.Time(); got < 0.39 || got > 0.41 {
+		t.Errorf("time after re-seek = %v, want ~0.4", got)
+	}
+	// A scrub cannot cost more than maxSeekSeconds of replay.
+	m.SeekScene(maxSceneSeconds)
+	if got := sp.Time(); got < maxSeekSeconds-0.02 || got > maxSeekSeconds+0.02 {
+		t.Errorf("time after a far seek = %v, want the %v cap", got, maxSeekSeconds)
+	}
+	m.SeekScene(math.NaN())
+	if got := sp.Time(); got != 0 {
+		t.Errorf("NaN seek landed at %v, want 0", got)
+	}
+}
+
+func TestParseFinite(t *testing.T) {
+	good := map[string]float64{"1": 1, " -2.5 ": -2.5, "1e3": 1000, "0": 0}
+	for in, want := range good {
+		if got, ok := parseFinite(in); !ok || got != want {
+			t.Errorf("parseFinite(%q) = %v %v, want %v true", in, got, ok, want)
+		}
+	}
+	for _, in := range []string{"inf", "+Inf", "-infinity", "nan", "NaN", "1e400", "", "x"} {
+		if got, ok := parseFinite(in); ok {
+			t.Errorf("parseFinite(%q) = %v, want rejection", in, got)
+		}
+	}
+}
+
+func TestClampSpeedKeepsDurationFinite(t *testing.T) {
+	if got := clampSpeed(0); got != 1 {
+		t.Errorf("clampSpeed(0) = %v, want 1", got)
+	}
+	if got := clampSpeed(math.Inf(1)); got != 1 {
+		t.Errorf("clampSpeed(Inf) = %v, want 1", got)
+	}
+	if got := clampSpeed(1e-310); got != minSpeed {
+		t.Errorf("clampSpeed(denormal) = %v, want %v", got, minSpeed)
+	}
+	if got := clampSpeed(1e9); got != maxSpeed {
+		t.Errorf("clampSpeed(1e9) = %v, want %v", got, maxSpeed)
+	}
+	m, _ := testModel(t)
+	placeClip(t, m)
+	n := &m.scene.Nodes[0]
+	n.Playback.Speed = 1e-310 // what a file, not the inspector, could say
+	d, _ := m.NodeDuration(n)
+	if math.IsInf(d, 0) || math.IsNaN(d) || d != 0.5/minSpeed {
+		t.Errorf("duration at a denormal speed = %v, want %v", d, 0.5/minSpeed)
+	}
+}
+
+func TestTogglePreviewReportsRebuiltPlayer(t *testing.T) {
+	m, _ := testModel(t)
+	placeClip(t, m)
+	m.TogglePreview()
+	if !m.PreviewMode() || !strings.HasPrefix(m.Status(), "preview: Tab") {
+		t.Fatalf("status entering preview = %q", m.Status())
+	}
+	m.TogglePreview()
+	m.RemoveBundle("ui")
+	m.TogglePreview()
+	if m.Status() != "preview: fix the scene errors first" {
+		t.Fatalf("status entering preview with a broken scene = %q", m.Status())
+	}
+}
+
+func TestTimelineSpanIsFiniteAndTolerantOfStaleRows(t *testing.T) {
+	m, _ := testModel(t)
+	placeClip(t, m)
+	tl := &timelinePane{}
+	tl.syncRows(m)
+	if got := tl.span(m); got != minTimelineSpan {
+		t.Errorf("span of a short clip = %v, want the %v minimum", got, minTimelineSpan)
+	}
+	// A row left over from a bigger document must be skipped, not indexed.
+	tl.rows = append(tl.rows, 7)
+	if got := tl.span(m); got != minTimelineSpan {
+		t.Errorf("span with a stale row = %v", got)
+	}
+	// Whatever a file says, the span Draw steps through stays bounded.
+	m.scene.Nodes[0].Start = math.Inf(1)
+	if got := tl.span(m); got != maxTimelineSpan {
+		t.Errorf("span with an infinite start = %v, want %v", got, maxTimelineSpan)
+	}
+	m.scene.Nodes[0].Start = math.NaN()
+	if got := tl.span(m); got != minTimelineSpan {
+		t.Errorf("span with a NaN start = %v, want %v", got, minTimelineSpan)
+	}
+	// A drag holds the span it captured.
+	m.scene.Nodes[0].Start = 12
+	tl.dragSpan, tl.drag = tl.span(m), dragBar
+	m.scene.Nodes[0].Start = 40
+	if got := tl.span(m); got != 13 {
+		t.Errorf("span during a drag = %v, want the captured 13", got)
 	}
 }

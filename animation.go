@@ -12,6 +12,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -34,11 +35,16 @@ type Animation struct {
 
 	// Retained for texture paints (texture.go): precomp layer trees by
 	// asset id, image assets by refId with the images decoded so far, and
-	// the resolver external files load through.
+	// the resolver external files load through. images is filled lazily at
+	// draw time and an Animation is shared between players, so imagesMu
+	// guards it; imgCache is the bundle's cache of decoded assets, nil for
+	// a plain Decode.
 	comps       map[string][]*layerNode
 	imageAssets map[string]rawAsset
+	imagesMu    sync.Mutex
 	images      map[string]*ebiten.Image
 	resolver    AssetResolver
+	imgCache    *imageCache
 
 	// Compiled at decode; see analyzeCompositing.
 	snapshotOK      bool
@@ -54,7 +60,7 @@ func Decode(r io.Reader) (*Animation, error) {
 	if err != nil {
 		return nil, fmt.Errorf("lottie: read: %w", err)
 	}
-	return decodeJSON(data, nil)
+	return decodeJSON(data, nil, nil)
 }
 
 // DecodeWithAssets parses a Lottie JSON document, using resolver to load
@@ -64,7 +70,7 @@ func DecodeWithAssets(r io.Reader, resolver AssetResolver) (*Animation, error) {
 	if err != nil {
 		return nil, fmt.Errorf("lottie: read: %w", err)
 	}
-	return decodeJSON(data, resolver)
+	return decodeJSON(data, resolver, nil)
 }
 
 // AssetResolver loads external asset files referenced by an animation, such
@@ -72,7 +78,74 @@ func DecodeWithAssets(r io.Reader, resolver AssetResolver) (*Animation, error) {
 // name come from the asset's "u" and "p" fields.
 type AssetResolver func(dir, name string) ([]byte, error)
 
-func decodeJSON(data []byte, resolver AssetResolver) (*Animation, error) {
+// imageCache shares decoded image assets between the animations of one
+// bundle: re-decoding a clip an editor keeps storing, or two clips carrying
+// the same picture, then reuse one *ebiten.Image instead of paying
+// image.Decode and a texture upload each time. Embedded assets key on their
+// data URI; external ones on their resolved (dir, name), checked against
+// the bytes they decoded from so a replaced file decodes afresh. Layer
+// images are never deallocated by this package, so sharing them between
+// Animations is safe. A nil cache caches nothing.
+type imageCache struct {
+	mu     sync.Mutex
+	byURI  map[string]*ebiten.Image
+	byFile map[string]cachedFile
+}
+
+type cachedFile struct {
+	data []byte
+	img  *ebiten.Image
+}
+
+func newImageCache() *imageCache {
+	return &imageCache{byURI: map[string]*ebiten.Image{}, byFile: map[string]cachedFile{}}
+}
+
+func (c *imageCache) uri(key string) (*ebiten.Image, bool) {
+	if c == nil {
+		return nil, false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	img, ok := c.byURI[key]
+	return img, ok
+}
+
+func (c *imageCache) putURI(key string, img *ebiten.Image) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.byURI[key] = img
+}
+
+func (c *imageCache) file(key string, data []byte) (*ebiten.Image, bool) {
+	if c == nil {
+		return nil, false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	f, ok := c.byFile[key]
+	if !ok || !bytes.Equal(f.data, data) {
+		return nil, false
+	}
+	return f.img, true
+}
+
+func (c *imageCache) putFile(key string, data []byte, img *ebiten.Image) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.byFile[key] = cachedFile{data: data, img: img}
+}
+
+// fileCacheKey identifies an external asset by where the resolver found it.
+func fileCacheKey(dir, name string) string { return dir + "\x00" + name }
+
+func decodeJSON(data []byte, resolver AssetResolver, cache *imageCache) (*Animation, error) {
 	var raw rawAnimation
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("lottie: parse JSON: %w", err)
@@ -100,6 +173,7 @@ func decodeJSON(data []byte, resolver AssetResolver) (*Animation, error) {
 		images:   map[string]*ebiten.Image{},
 		fonts:    map[string]rawFont{},
 		resolver: resolver,
+		imgCache: cache,
 	}
 	for i := range raw.Assets {
 		as := &raw.Assets[i]
@@ -116,6 +190,7 @@ func decodeJSON(data []byte, resolver AssetResolver) (*Animation, error) {
 	a.comps = b.comps
 	a.images = b.images
 	a.resolver = resolver
+	a.imgCache = cache
 	a.imageAssets = map[string]rawAsset{}
 	for id, as := range b.assets {
 		if as.Layers == nil {
@@ -461,6 +536,7 @@ type builder struct {
 	images   map[string]*ebiten.Image
 	fonts    map[string]rawFont // font name -> family/style
 	resolver AssetResolver
+	imgCache *imageCache // bundle-wide decoded images; nil caches nothing
 	depth    int
 }
 
@@ -640,7 +716,7 @@ func (b *builder) buildImage(refID string) *ebiten.Image {
 		b.anim.note(fmt.Sprintf("missing image asset %q", refID))
 		return nil
 	}
-	img, note := loadImageAsset(as, b.resolver)
+	img, note := loadImageAsset(as, b.resolver, b.imgCache)
 	if note != "" {
 		b.anim.note(note)
 	}
@@ -650,11 +726,16 @@ func (b *builder) buildImage(refID string) *ebiten.Image {
 
 // loadImageAsset decodes one image asset. Embedded data URIs decode
 // directly; external files go through the resolver when one is configured.
-// A failure comes back as the note to record, with a nil image.
-func loadImageAsset(as *rawAsset, resolver AssetResolver) (*ebiten.Image, string) {
+// A failure comes back as the note to record, with a nil image. cache, when
+// non-nil, hands back an image decoded earlier from the same source.
+func loadImageAsset(as *rawAsset, resolver AssetResolver, cache *imageCache) (*ebiten.Image, string) {
 	var data []byte
+	var store func(*ebiten.Image)
 	switch {
 	case strings.HasPrefix(as.FileName, "data:"):
+		if img, ok := cache.uri(as.FileName); ok {
+			return img, ""
+		}
 		idx := strings.Index(as.FileName, "base64,")
 		if idx < 0 {
 			return nil, "image asset with non-base64 data URI"
@@ -664,12 +745,19 @@ func loadImageAsset(as *rawAsset, resolver AssetResolver) (*ebiten.Image, string
 			return nil, "undecodable embedded image"
 		}
 		data = raw
+		uri := as.FileName
+		store = func(img *ebiten.Image) { cache.putURI(uri, img) }
 	case resolver != nil:
 		raw, err := resolver(as.Path, as.FileName)
 		if err != nil {
 			return nil, fmt.Sprintf("unresolvable image asset %q", as.FileName)
 		}
+		key := fileCacheKey(as.Path, as.FileName)
+		if img, ok := cache.file(key, raw); ok {
+			return img, ""
+		}
 		data = raw
+		store = func(img *ebiten.Image) { cache.putFile(key, raw, img) }
 	default:
 		return nil, fmt.Sprintf("external image asset %q", as.FileName)
 	}
@@ -677,7 +765,9 @@ func loadImageAsset(as *rawAsset, resolver AssetResolver) (*ebiten.Image, string
 	if err != nil {
 		return nil, "undecodable embedded image"
 	}
-	return ebiten.NewImageFromImage(src), ""
+	img := ebiten.NewImageFromImage(src)
+	store(img)
+	return img, ""
 }
 
 func (b *builder) buildMasks(raws []rawMask) []maskNode {

@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/hajimehoshi/ebiten/v2"
+
 	lottietexture "github.com/shibukawa/lottie-go/plugin/texture"
 )
 
@@ -324,5 +326,53 @@ func TestBindTextureFileAddsTheImageAsset(t *testing.T) {
 	m.BindTextureFile("skin.png")
 	if assets, _ := storedDoc(t, m).root["assets"].([]any); len(assets) != 1 {
 		t.Fatalf("asset duplicated: %v", assets)
+	}
+}
+
+// Opening another bundle drops the decoded texture images: the cache is
+// keyed by file name, and the new bundle may carry a different picture
+// under the same name.
+func TestOpeningABundleDropsTheTextureImageCache(t *testing.T) {
+	m := texturedModel(t)
+	m.texImages = map[string]*ebiten.Image{"skin.png": nil}
+	m.texDocs = map[string]cachedTexDoc{"vec": {}}
+	dir := t.TempDir()
+	m.Open(writeClip(t, dir, "other", 10, ""))
+	if m.texImages != nil || m.texDocs != nil {
+		t.Fatalf("caches survived Open: %v %v", m.texImages, m.texDocs)
+	}
+	m = texturedModel(t)
+	m.texImages = map[string]*ebiten.Image{"skin.png": nil}
+	m.RemoveClip("vec")
+	if m.texImages != nil {
+		t.Fatalf("cache survived RemoveClip: %v", m.texImages)
+	}
+}
+
+// The texture document is parsed once per stored bytes: a stage player
+// rebuilt on every drag step dresses itself from the same parse.
+func TestTextureDocIsParsedOncePerChange(t *testing.T) {
+	m := texturedModel(t)
+	d1, err := m.textureDoc("vec")
+	if err != nil || d1 == nil {
+		t.Fatalf("textureDoc: %v %v", d1, err)
+	}
+	d2, _ := m.textureDoc("vec")
+	if d1 != d2 {
+		t.Fatalf("unchanged document was parsed again")
+	}
+	m.SelectShapeNode([]int{0, 0})
+	m.SelectPoseKey(0, -1)
+	m.MoveShapeUV(0, 0.1, 0)
+	d3, err := m.textureDoc("vec")
+	if err != nil || d3 == nil || d3 == d1 {
+		t.Fatalf("changed document was not parsed again: %v %v", d3, err)
+	}
+	if got := d3.UVs[0].V[0][0]; got != 0.1 {
+		t.Fatalf("fresh parse reads %v; want 0.1", got)
+	}
+	m.texDocs = nil
+	if _, err := m.textureDoc("no-such-clip"); err != nil {
+		t.Fatalf("a clip without a document errs: %v", err)
 	}
 }

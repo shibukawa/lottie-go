@@ -389,6 +389,10 @@ func (m *Model) SetPoseValue(prop string, v []float64) {
 	if d == nil || !ok || m.posePart < 0 {
 		return
 	}
+	if !finite(v...) {
+		m.rejectValue("pose " + prop)
+		return
+	}
 	pushed := m.snapshotClip()
 	if !d.setValue(m.posePart, prop, frame, v) {
 		if pushed {
@@ -435,7 +439,11 @@ func (m *Model) touchClipDoc() {
 	}
 	// The clip is stored pure, its texture document beside it (texture.go).
 	if err := m.storeClipDoc(d); err != nil {
+		// The document in memory still holds the refused edit; the status
+		// has to repaint, or the refusal is invisible until something else
+		// rebuilds. Undo restores the stored bytes and drops the document.
 		m.setStatus("clip edit rejected: %v", err)
+		m.generation++
 		return
 	}
 	m.rebuildStageClip(d.id)
@@ -1188,12 +1196,17 @@ func (m *Model) SetClipLength(op float64) {
 	if d == nil {
 		return
 	}
+	if !finite(op) {
+		m.rejectValue("clip length")
+		return
+	}
 	pushed := m.snapshotClip()
 	if !d.setLength(math.Round(op)) {
 		if pushed {
 			m.dropLastSnapshot()
 		}
 		m.setStatus("clip length must be past the last pose")
+		m.generation++
 		return
 	}
 	m.touchClipDoc()

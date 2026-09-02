@@ -104,8 +104,10 @@ func (g *game) Draw(screen *ebiten.Image) {
 		ox, oy := float64(col*cellW), float64(row*cellH)
 		g.drawTile(screen, it, it.player, ox, oy, tileSize)
 		label := it.name
-		if len(label) > 20 {
-			label = label[:20]
+		// Cut on runes, not bytes: a byte cut through a multi-byte name
+		// leaves a broken sequence at the end.
+		if r := []rune(label); len(r) > 20 {
+			label = string(r[:20])
 		}
 		ebitenutil.DebugPrintAt(screen, label, col*cellW+2, row*cellH+labelPadY)
 		if len(it.unsup) > 0 {

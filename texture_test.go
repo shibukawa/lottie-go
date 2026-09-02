@@ -340,3 +340,24 @@ func TestFlattenStepsScaleWithLength(t *testing.T) {
 		t.Fatalf("steps short %d long %d", short, long)
 	}
 }
+
+// shapeBounds walks the shapes without drawing them; the texture command
+// arena it fills must reset with the others, or every bounds query grows
+// it until the next draw.
+func TestShapeBoundsResetsTextureArena(t *testing.T) {
+	p := texTestPlayer(t)
+	fill := ShapeRef{Layer: 1, Item: []int{0, 2}}
+	if err := p.SetTexturePaint(fill, &TexturePaint{Texture: "skin"}); err != nil {
+		t.Fatal(err)
+	}
+	r := &p.r
+	l := p.anim.layers[0]
+	for i := 0; i < 3; i++ {
+		if _, ok := r.shapeBounds(l, 0, identityMatrix); !ok {
+			t.Fatal("no bounds")
+		}
+		if r.nTex != 1 {
+			t.Fatalf("after %d bounds walks nTex = %d; want 1", i+1, r.nTex)
+		}
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"image"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -146,6 +147,14 @@ type Model struct {
 	texExtra    map[string]lottie.ExtraFields
 	texImages   map[string]*ebiten.Image
 	selUVVert   int
+	// texDocs caches each clip's parsed texture document beside the bytes
+	// it came from, so dressing a rebuilt stage player does not re-parse a
+	// document that did not change (texture.go).
+	texDocs map[string]cachedTexDoc
+
+	// hoverShape remembers the last stage hover pick (shape.go), so a
+	// cursor resting on the stage does not walk every shape every frame.
+	hoverShape hoverShapeCache
 
 	// Clip edits are undoable on their own stack; a drag writes on every
 	// mouse move, so it collapses into one step between Begin and End.
@@ -232,6 +241,66 @@ func (m *Model) Bundle() *lottie.Bundle        { return m.bundle }
 
 func (m *Model) setStatus(format string, args ...any) {
 	m.status = fmt.Sprintf(format, args...)
+}
+
+// finite reports whether every value is a real number. Every document this
+// editor writes goes through encoding/json, which refuses NaN and ±Inf, so
+// a non-finite value would not merely be wrong: it would make every later
+// store-back of that document fail. The model refuses them at the door.
+func finite(vs ...float64) bool {
+	for _, v := range vs {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return false
+		}
+	}
+	return true
+}
+
+// RejectNumber reports a typed value that is not a finite number. The field
+// keeps what it had: the rebuild re-reads it from the document.
+func (m *Model) RejectNumber(text string) {
+	m.setStatus("not a finite number: %q", strings.TrimSpace(text))
+	m.generation++
+}
+
+// rejectValue is RejectNumber for a value that arrived already parsed — a
+// model call from the MCP side rather than a typed field.
+func (m *Model) rejectValue(what string) {
+	m.setStatus("%s must be a finite number", what)
+	m.generation++
+}
+
+// maxStateSpeed bounds a state's playback speed. The player crosses
+// speed×(frame rate/TPS) frames per tick and fires the loop callback once
+// per loop crossed, so a runaway speed does not just play fast: it turns
+// one tick into billions of callbacks. A hundred times real time is already
+// past anything a game would author, and past anything the stage can show.
+const maxStateSpeed = 100
+
+// SetStateSpeed writes the selected state's playback speed, refusing a
+// non-finite or negative value and clamping to maxStateSpeed.
+func (m *Model) SetStateSpeed(v float64) {
+	if m.blockEdit() {
+		return
+	}
+	st := m.SelectedState()
+	if st == nil {
+		return
+	}
+	if !finite(v) || v < 0 {
+		m.rejectValue("speed")
+		return
+	}
+	if v > maxStateSpeed {
+		m.setStatus("speed clamped to %v×", maxStateSpeed)
+		v = maxStateSpeed
+	}
+	if st.Speed == v {
+		m.generation++
+		return
+	}
+	st.Speed = v
+	m.touch()
 }
 
 // Touch records an edit made directly against the document, which the
@@ -457,7 +526,13 @@ func spawnEditor(args ...string) error {
 		return err
 	}
 	cmd := exec.Command(exe, args...)
-	return cmd.Start()
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	// The window lives on its own; reaping it when it closes keeps a zombie
+	// from sitting in the process table for the rest of this session.
+	go func() { _ = cmd.Wait() }()
+	return nil
 }
 
 // Open loads a .lottie bundle, or a bare .json clip into a fresh bundle.
@@ -482,6 +557,7 @@ func (m *Model) Open(path string) {
 		m.resetCollisionSelection()
 		m.resetCollisionCache()
 		m.resetClipDocCache()
+		m.resetTextureImages()
 		m.ImportClip(path)
 		m.reshowClip(prevClip)
 		return
@@ -514,6 +590,7 @@ func (m *Model) Open(path string) {
 	m.resetCollisionSelection()
 	m.resetCollisionCache()
 	m.resetClipDocCache()
+	m.resetTextureImages()
 	m.generation++
 	if ids := b.StateMachineIDs(); len(ids) > 0 {
 		m.SelectMachine(ids[0])
@@ -793,6 +870,9 @@ func (m *Model) RemoveClip(id string) {
 	delete(m.texExtra, id)
 	delete(m.trackCache, id)
 	delete(m.clipDocs, id)
+	// The decoded images were the clip's textures; whatever the next stage
+	// clip needs is decoded again on demand.
+	m.resetTextureImages()
 	m.setStatus("removed clip %q", id)
 	m.generation++
 }

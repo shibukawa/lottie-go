@@ -31,6 +31,7 @@ type timelineView struct {
 	fwdBtn  basicwidget.Button
 
 	dragging bool
+	watch    frameWatch
 }
 
 func (t *timelineView) model(context *guigui.Context) *Model {
@@ -236,12 +237,17 @@ func (t *timelineView) syncReadout(m *Model) {
 	t.readout.SetValue(t.readoutText(m))
 }
 
-// Tick redraws so the playhead follows playback without rebuilding the tree.
+// Tick redraws so the playhead follows playback without rebuilding the
+// tree, and only while it moves; the state key covers everything else.
 func (t *timelineView) Tick(context *guigui.Context, widgetBounds *guigui.WidgetBounds) error {
-	if m := t.model(context); m != nil {
-		t.syncReadout(m)
+	m := t.model(context)
+	if m == nil {
+		return nil
 	}
-	guigui.RequestRedraw(t)
+	t.syncReadout(m)
+	if t.watch.moved(m) || t.dragging {
+		guigui.RequestRedraw(t)
+	}
 	return nil
 }
 

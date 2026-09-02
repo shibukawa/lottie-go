@@ -81,10 +81,21 @@ type Model struct {
 
 	// player is what the canvas draws in both modes; it lazily rebuilds
 	// when docGen moves. Transform drags patch the live node instead of
-	// bumping docGen, so dragging never restarts playback.
+	// bumping docGen, so dragging never restarts playback. playerGen is
+	// the docGen the last build attempt — successful or not — was for; a
+	// failed attempt stays failed until the document changes, so a broken
+	// scene does not re-decode every asset on every frame.
 	player    *lottie.ScenePlayer
 	playerErr error
 	playerGen int
+
+	// seekTarget and seekTime remember the last scrub: the time asked for
+	// and the clock it landed on. A repeat of the same target on a player
+	// nothing has advanced since is a no-op, so a held ruler drag does not
+	// replay the scene every tick.
+	seekTarget float64
+	seekTime   float64
+	seekValid  bool
 
 	generation int
 	docGen     int
@@ -111,6 +122,7 @@ func NewModel() *Model {
 		selStep:    -1,
 		selPhase:   -1,
 		inspect:    inspectScene,
+		playerGen:  -1, // no build attempted yet
 		dialog:     make(chan dialogResult, 1),
 	}
 	m.status = "New scene. Add a bundle to begin."
@@ -196,17 +208,17 @@ func (m *Model) Save(path string) {
 		m.generation++
 		return
 	}
-	f, err := os.Create(path)
-	if err != nil {
+	// Encode first: a document that cannot be serialized (an Inf that
+	// slipped into a field, say) must not truncate the file already on
+	// disk. Then write beside the target and rename over it, so a crash
+	// mid-write leaves the previous save intact too.
+	var buf bytes.Buffer
+	if err := m.scene.Encode(&buf); err != nil {
 		m.setStatus("save failed: %v", err)
 		m.generation++
 		return
 	}
-	err = m.scene.Encode(f)
-	if cerr := f.Close(); err == nil {
-		err = cerr
-	}
-	if err != nil {
+	if err := writeFileAtomic(path, buf.Bytes()); err != nil {
 		m.setStatus("write failed: %v", err)
 		m.generation++
 		return
@@ -223,19 +235,55 @@ func (m *Model) Save(path string) {
 	m.generation++
 }
 
-// rebasePaths rewrites relative bundle paths after the scene file moved.
+// writeFileAtomic writes data to a temporary file in path's directory and
+// renames it into place, so the target is either the old or the new
+// content, never a truncated mix.
+func writeFileAtomic(path string, data []byte) error {
+	dir, base := filepath.Split(path)
+	if dir == "" {
+		dir = "."
+	}
+	tmp, err := os.CreateTemp(dir, "."+base+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	_, werr := tmp.Write(data)
+	if cerr := tmp.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr == nil {
+		werr = os.Rename(tmpPath, path)
+	}
+	if werr != nil {
+		os.Remove(tmpPath)
+		return werr
+	}
+	return nil
+}
+
+// rebasePaths rewrites relative bundle, image, and font paths after the
+// scene file moved, so every reference keeps pointing at the same file.
 func (m *Model) rebasePaths(oldDir string) {
-	for i := range m.scene.Bundles {
-		b := &m.scene.Bundles[i]
-		if filepath.IsAbs(b.Path) {
-			continue
+	rebase := func(p *string) {
+		if filepath.IsAbs(*p) {
+			return
 		}
-		abs := filepath.Join(oldDir, b.Path)
+		abs := filepath.Join(oldDir, *p)
 		if rel, err := filepath.Rel(m.sceneDir(), abs); err == nil {
-			b.Path = filepath.ToSlash(rel)
+			*p = filepath.ToSlash(rel)
 		} else {
-			b.Path = abs
+			*p = abs
 		}
+	}
+	for i := range m.scene.Bundles {
+		rebase(&m.scene.Bundles[i].Path)
+	}
+	for i := range m.scene.Images {
+		rebase(&m.scene.Images[i].Path)
+	}
+	for i := range m.scene.Fonts {
+		rebase(&m.scene.Fonts[i].Path)
 	}
 }
 
@@ -825,12 +873,31 @@ const maxSceneSeconds = 3600
 // CommitNodeStart applies a finished timeline drag.
 func (m *Model) CommitNodeStart() { m.touch() }
 
+// Playback speed bounds. The inspector clamps what is typed and the
+// duration estimates clamp what a file says, so a pass is always a finite
+// length: a denormal speed would otherwise make the timeline's span
+// infinite and its tick loop endless.
+const (
+	minSpeed = 0.01
+	maxSpeed = 100
+)
+
+// clampSpeed bounds a playback speed to [minSpeed, maxSpeed]; a non-finite
+// or non-positive value resolves to the default 1.
+func clampSpeed(v float64) float64 {
+	if math.IsNaN(v) || math.IsInf(v, 0) || v <= 0 {
+		return 1
+	}
+	return min(max(v, minSpeed), maxSpeed)
+}
+
 // passSeconds is one pass of a clip, optionally narrowed to a marker.
 func (m *Model) passSeconds(alias, animID, segment string, speed float64) (float64, bool) {
 	b, ok := m.bundles[alias]
 	if !ok {
 		return 0, false
 	}
+	speed = clampSpeed(speed)
 	anim, err := b.Animation(animID)
 	if err != nil {
 		return 0, false
@@ -1127,7 +1194,7 @@ func (m *Model) TogglePreview() {
 	m.preview = !m.preview
 	if m.preview {
 		m.docGen++ // force a fresh player
-		if m.player == nil || m.playerErr != nil {
+		if m.Player() == nil {
 			m.setStatus("preview: fix the scene errors first")
 		} else {
 			m.setStatus("preview: Tab/arrows move focus, Enter activates, Esc cancels")
@@ -1159,7 +1226,10 @@ func (m *Model) ReplayScene() {
 // structural edit. It is nil while the scene has an error that prevents
 // starting — a missing bundle, say.
 func (m *Model) Player() *lottie.ScenePlayer {
-	if m.player == nil || m.playerGen != m.docGen {
+	// Only the document generation decides: a nil player whose build
+	// already failed for this generation is not retried, since every
+	// attempt decodes every image and font the scene references.
+	if m.playerGen != m.docGen {
 		m.rebuildPlayer()
 	}
 	return m.player
@@ -1170,6 +1240,7 @@ func (m *Model) PlayerErr() error { return m.playerErr }
 func (m *Model) rebuildPlayer() {
 	m.playerGen = m.docGen
 	m.player, m.playerErr = nil, nil
+	m.seekValid = false
 	byPath := map[string]*lottie.Bundle{}
 	for _, ref := range m.scene.Bundles {
 		if b, ok := m.bundles[ref.Alias]; ok {
@@ -1242,15 +1313,30 @@ func (m *Model) ContentEnd() float64 {
 	return end
 }
 
+// maxSeekSeconds bounds how far a scrub replays: the replay runs
+// synchronously on the game loop, one Update per tick of scene time, so
+// ten minutes (36,000 updates at 60 TPS) is the most a single scrub may
+// cost. Entrances can sit further out (maxSceneSeconds); the playhead
+// then parks at this limit.
+const maxSeekSeconds = 600
+
 // SeekScene scrubs the scene to an absolute time by replaying from zero
 // — the only deterministic way to land mid-choreography. Scrubbing parks
-// the transport; Play resumes from here.
+// the transport; Play resumes from here. Asking again for the time the
+// scene already sits at is free, so a held ruler drag costs nothing until
+// the cursor moves.
 func (m *Model) SeekScene(sec float64) {
 	sp := m.Player()
 	if sp == nil {
 		return
 	}
-	sec = min(max(0, sec), maxSceneSeconds)
+	if math.IsNaN(sec) {
+		sec = 0
+	}
+	sec = min(max(0, sec), maxSeekSeconds)
+	if m.seekValid && sec == m.seekTarget && sp.Time() == m.seekTime && !m.playing {
+		return
+	}
 	sp.Restart()
 	if m.viewPhase != "" {
 		sp.SetPhase(m.viewPhase)
@@ -1263,6 +1349,7 @@ func (m *Model) SeekScene(sec float64) {
 	for range int(sec*tps + 0.5) {
 		sp.Update()
 	}
+	m.seekTarget, m.seekTime, m.seekValid = sec, sp.Time(), true
 	m.playing = false
 	m.generation++
 }

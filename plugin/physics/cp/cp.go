@@ -1,6 +1,8 @@
 package lottiecp
 
 import (
+	"math"
+
 	cp "github.com/jakecoffman/cp/v2"
 )
 
@@ -9,7 +11,10 @@ import (
 // Most games want AddToSpace.
 //
 // A dynamic body with Moment zero gets one derived from its shapes, with
-// the mass split evenly among them.
+// the mass split evenly among them. Shapes without extent — a circle of
+// radius zero, a box with no width — derive no moment; the body then gets
+// cp.INFINITY, like a body without shapes, rather than a zero that would
+// make its inverse infinite.
 func Build(def *Body) (*cp.Body, []*cp.Shape) {
 	var body *cp.Body
 	switch def.Type {
@@ -121,6 +126,9 @@ func derivedMoment(mass float64, shapes []Shape) float64 {
 	if n == 0 {
 		return cp.INFINITY
 	}
+	if mass <= 0 || math.IsNaN(mass) || math.IsInf(mass, 0) {
+		return cp.INFINITY
+	}
 	part := mass / float64(n)
 	total := 0.0
 	for _, s := range shapes {
@@ -134,6 +142,12 @@ func derivedMoment(mass float64, shapes []Shape) float64 {
 				total += cp.MomentForPoly(part, len(verts), verts, cp.Vector{}, s.Radius)
 			}
 		}
+	}
+	// A moment of zero (or a non-number) is what degenerate geometry sums
+	// to; cp would turn it into an infinite inverse, so treat it as "no
+	// valid shapes". The negated comparison also catches NaN.
+	if !(total > 0) || math.IsInf(total, 0) {
+		return cp.INFINITY
 	}
 	return total
 }

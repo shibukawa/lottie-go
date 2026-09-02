@@ -143,19 +143,44 @@ type previewStage struct {
 	// able to pause the clip.
 	ghost     *lottie.Player
 	ghostAnim *lottie.Animation
+
+	watch frameWatch
 }
 
 // ghostPlayer is the paused, non-looping player the onion skin draws with.
-// It is rebuilt only when the animation behind the stage is replaced, which
-// an edit does on every drag step.
+// It is rebuilt when the animation behind the stage is replaced — except
+// mid-drag, where every step replaces it: a drag writes the parked key
+// alone, so the neighbouring keys the ghosts show are the same drawings
+// step after step, and the ghost is refreshed once when the drag ends.
 func (s *previewStage) ghostPlayer(m *Model, anim *lottie.Animation) *lottie.Player {
-	if s.ghostAnim != anim {
+	if s.ghost == nil || (s.ghostAnim != anim && !m.StageDragOpen()) {
 		s.ghost = anim.NewPlayer()
 		m.applyTextures(m.StageAnimID(), s.ghost)
 		s.ghost.Pause()
 		s.ghostAnim = anim
 	}
 	return s.ghost
+}
+
+// frameWatch notices the stage moving between ticks: the playhead
+// advancing, or the player behind the stage being swapped for another. It
+// is what lets a widget ask for a redraw only when there is something new
+// to draw, without a state key on the frame — that would rebuild the whole
+// tree every tick while playing.
+type frameWatch struct {
+	player *lottie.Player
+	frame  float64
+	seen   bool
+}
+
+// moved reports whether the stage changed since the last call, or is
+// playing (a playing player renders between ticks, so the picture moves
+// even when the tick frame repeats).
+func (w *frameWatch) moved(m *Model) bool {
+	p, f := m.PreviewPlayer(), m.stageFrame()
+	changed := !w.seen || p != w.player || f != w.frame
+	w.player, w.frame, w.seen = p, f, true
+	return changed || m.PreviewPlaying()
 }
 
 // drawOnionSkin paints the neighbouring keyframes under the current one.
@@ -279,15 +304,34 @@ func (s *previewStage) model(context *guigui.Context) *Model {
 }
 
 // Tick advances playback. The frame changes without any tree change, so it
-// asks for a redraw rather than a rebuild.
+// asks for a redraw rather than a rebuild — and only while there is
+// something new to draw: a playhead moving, a player swapped, a drag in
+// progress. Everything else that changes the picture moves the generation,
+// which the state key below turns into a redraw.
 func (s *previewStage) Tick(context *guigui.Context, widgetBounds *guigui.WidgetBounds) error {
 	m := s.model(context)
 	if m == nil {
 		return nil
 	}
 	m.PreviewUpdate()
-	guigui.RequestRedraw(s)
+	if s.watch.moved(m) || s.dragMode != dragNone {
+		guigui.RequestRedraw(s)
+	}
 	return nil
+}
+
+// WriteStateKey makes every model change — selection, tab, zoom, an edit,
+// the onion skin or rig toggles — repaint the stage, now that Tick no
+// longer repaints it unconditionally.
+func (s *previewStage) WriteStateKey(context *guigui.Context, w *guigui.StateKeyWriter) {
+	m := s.model(context)
+	if m == nil {
+		return
+	}
+	w.WriteInt(m.Generation())
+	w.WriteString(m.ActiveState())
+	w.WriteString(m.StageAnimID())
+	w.WriteBool(m.PreviewPlaying())
 }
 
 func (s *previewStage) Draw(context *guigui.Context, widgetBounds *guigui.WidgetBounds, dst *ebiten.Image) {
@@ -369,6 +413,15 @@ func (s *previewStage) HandlePointingInput(context *guigui.Context, widgetBounds
 		return guigui.HandleInputByWidget(s)
 	}
 	if !m.OverlayVisible() {
+		// A drag whose overlay went away under it — the tab was switched by
+		// something other than the mouse — ends here, the way a release
+		// would end it below; otherwise the drag state and the open undo
+		// step would outlive the gesture.
+		if s.dragMode != dragNone {
+			s.dragMode = dragNone
+			m.EndPoseEdit()
+			return guigui.HandleInputByWidget(s)
+		}
 		// No overlay to hit-test, but the view still drags.
 		return s.pressToPan(widgetBounds)
 	}

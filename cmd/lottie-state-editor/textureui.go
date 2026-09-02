@@ -153,8 +153,10 @@ func (p *shapeInspector) buildTextureRows(context *guigui.Context, m *Model, add
 			if !committed {
 				return
 			}
-			if x, err := strconv.ParseFloat(strings.TrimSpace(text), 64); err == nil {
+			if x, ok := parseFinite(text); ok {
 				m.SetShapeTexTransformComponent(f.member, f.comp, x)
+			} else {
+				m.RejectNumber(text)
 			}
 		})
 		context.SetEnabled(in, writable)

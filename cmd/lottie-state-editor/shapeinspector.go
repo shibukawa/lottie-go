@@ -6,7 +6,6 @@ import (
 	"image/color"
 	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/guigui-gui/guigui"
 	"github.com/guigui-gui/guigui/basicwidget"
@@ -686,8 +685,10 @@ func (p *shapeInspector) buildPathRows(context *guigui.Context, m *Model, adder 
 			if !committed {
 				return
 			}
-			if v, err := strconv.ParseFloat(strings.TrimSpace(text), 64); err == nil {
+			if v, ok := parseFinite(text); ok {
 				m.SetShapeVertexValue(f.comp, v)
+			} else {
+				m.RejectNumber(text)
 			}
 		})
 		// The handle vectors only mean something while handles are on.
@@ -751,8 +752,10 @@ func (p *shapeInspector) buildNumericRows(context *guigui.Context, m *Model, add
 			if !committed {
 				return
 			}
-			if n, err := strconv.ParseFloat(strings.TrimSpace(text), 64); err == nil {
+			if n, ok := parseFinite(text); ok {
 				m.SetShapeMemberComponent(f.member, f.comp, n)
+			} else {
+				m.RejectNumber(text)
 			}
 		})
 		context.SetEnabled(in, writable)

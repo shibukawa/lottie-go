@@ -541,7 +541,9 @@ func shapeCursorShape(m *Model, tr stageTransform, u float32, cx, cy int) (ebite
 		return ebiten.CursorShapeMove, true
 	}
 	ax, ay := tr.toAnim(cx, cy)
-	if _, _, ok := m.ShapeAt(ax, ay, float64(handleSize(u))/tr.scale); ok {
+	// Asked every frame the cursor rests on the stage, so the pick is
+	// memoized (ShapeAtHover); the click below re-picks for real.
+	if _, _, ok := m.ShapeAtHover(ax, ay, float64(handleSize(u))/tr.scale); ok {
 		if shapeEditLive(m) {
 			return ebiten.CursorShapeMove, true
 		}

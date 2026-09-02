@@ -21,18 +21,37 @@ var (
 	tagBits = map[string]resolv.Tags{}
 )
 
+// MaxTags is how many distinct tag names resolv can represent in a process:
+// one bit each of its 64-bit tag set, shared with every other resolv.NewTag
+// caller in the program.
+const MaxTags = 64
+
 // Tag returns the resolv tag bit for a track tag name, allocating it on
 // first use. Use it to query shapes this package inserted: a shape tagged
 // "hurt" in the editor answers space queries for Tag("hurt").
+//
+// Once the process has used up resolv's MaxTags bits, every further name
+// returns 0 — no bit at all. A shape carrying only such a tag answers no
+// tagged query, and Shapes ignores the name rather than matching every
+// shape. TagKnown tells the two apart before a query is built.
 func Tag(name string) resolv.Tags {
+	t, _ := TagKnown(name)
+	return t
+}
+
+// TagKnown is Tag reporting whether the name has a bit: false once the
+// process's MaxTags tag bits are used up.
+func TagKnown(name string) (resolv.Tags, bool) {
 	tagMu.Lock()
 	defer tagMu.Unlock()
 	if t, ok := tagBits[name]; ok {
-		return t
+		return t, t != 0
 	}
+	// resolv.NewTag hands out zero forever once its shift runs off the end
+	// of the word, which is the exhaustion signal.
 	t := resolv.NewTag(name)
 	tagBits[name] = t
-	return t
+	return t, t != 0
 }
 
 // BoxData is stored as each inserted shape's Data, so a collision callback
@@ -77,8 +96,11 @@ func (t *Tracker) SetOffset(x, y float64) {
 
 // Sync makes the space match the track at the given frame, typically
 // player.Frame(). Shapes are rebuilt only when their box steps to another
-// span; a moving character just slides them.
+// span; a moving character just slides them. The track may have gained or
+// lost boxes since NewTracker — an editor's live document does — and the
+// tracker follows: shapes of boxes that no longer exist leave the space.
 func (t *Tracker) Sync(frame float64) {
+	t.fit()
 	for i := range t.track.Boxes {
 		b := &t.track.Boxes[i]
 		tb := &t.boxes[i]
@@ -123,12 +145,40 @@ func (t *Tracker) Sync(frame float64) {
 	}
 }
 
+// fit sizes the box table to the track, removing the shapes of boxes the
+// track no longer has.
+func (t *Tracker) fit() {
+	n := len(t.track.Boxes)
+	if n == len(t.boxes) {
+		return
+	}
+	for i := n; i < len(t.boxes); i++ {
+		if t.boxes[i].shape != nil {
+			t.space.Remove(t.boxes[i].shape)
+			t.boxes[i].shape = nil
+		}
+	}
+	if n < len(t.boxes) {
+		clear(t.boxes[n:])
+		t.boxes = t.boxes[:n]
+		return
+	}
+	for len(t.boxes) < n {
+		t.boxes = append(t.boxes, trackedBox{span: -1})
+	}
+}
+
 // Shapes returns this tracker's live shapes, keeping only those carrying
-// at least one of the named tags; with none, every live shape returns.
+// at least one of the named tags; with none, every live shape returns. A
+// name without a tag bit (see Tag) counts as absent: naming only such tags
+// returns nothing, not everything.
 func (t *Tracker) Shapes(tags ...string) []resolv.IShape {
 	var mask resolv.Tags
 	for _, name := range tags {
 		mask |= Tag(name)
+	}
+	if mask == 0 && len(tags) > 0 {
+		return nil
 	}
 	var out []resolv.IShape
 	for i := range t.boxes {

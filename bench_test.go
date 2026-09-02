@@ -13,7 +13,7 @@ func BenchmarkEvaluateFrame(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	anim, err := decodeJSON(data, nil)
+	anim, err := decodeJSON(data, nil, nil)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func BenchmarkDecode(b *testing.B) {
 	}
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := decodeJSON(data, nil); err != nil {
+		if _, err := decodeJSON(data, nil, nil); err != nil {
 			b.Fatal(err)
 		}
 	}
