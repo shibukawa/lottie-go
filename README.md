@@ -587,6 +587,34 @@ generated in-repository. Its bundle is embedded, so it runs from anywhere:
 go run github.com/shibukawa/lottie-go/examples/lottie/octopus@latest
 ```
 
+### Importing Spine skeletons
+
+The same extension is what makes a [Spine](http://esotericsoftware.com/)
+rig importable: a Spine mesh is a set of vertices with UVs that bones and
+deform keys move, which is exactly what a textured path with per-vertex
+UV is. `lottierepack -import-spine` reads the JSON export of Spine 4.x
+(with its `.atlas`, or loose images) and bakes it into a bundle:
+
+```bash
+go run github.com/shibukawa/lottie-go/cmd/lottierepack -import-spine hero.json -dir work -out hero.lottie
+```
+
+Every animation becomes a clip; every slot a shape layer; every region or
+mesh attachment a group of keyframed paths (one per triangle by default,
+`-mesh hull` for the outline only) whose fill paints the atlas page
+through the mesh's own UV. Bones with every inherit mode, IK and
+transform constraints, weighted meshes, deform keys, slot colors,
+attachment swaps and blend modes are evaluated at every frame and written
+as keys; events become markers, and a state machine with one looping
+state and one event per animation is generated so `sm.Fire("run")` works
+on the first load. The clips are plain Lottie, so a player without the
+extension still shows the shapes in their slot colors. Path and physics
+constraints, clipping and draw-order keys are not converted and are
+listed as notes. `-skin`, `-fps`, `-scale`, `-bounds skeleton` and
+`-bones` tune the result; the package behind the flag is
+`plugin/spine`. Spine is a trademark of Esoteric Software; the importer
+reads the exported files and needs no Spine runtime.
+
 ## Supported features
 
 **Layers**: shape, null, solid, precomposition (offscreen with clipping and

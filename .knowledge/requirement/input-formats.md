@@ -15,6 +15,9 @@ formats:
   - format: dotlottie v2 (.lottie)
     priority: P1
     note: ZIP; a/ i/ s/ t/ f/; implemented, read and write (data:bundle-layout)
+  - format: spine (.json + .atlas)
+    priority: P2
+    note: import only, baked into a bundle by cmd/lottierepack (requirement:spine-import); not a runtime format
 unsupported:
   - externally referenced assets (URL-fetched images)
 ```
