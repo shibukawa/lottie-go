@@ -410,6 +410,17 @@ project's `.claude/skills/` (or point your coding agent at it) and ask
 for "a samurai version of this character" or "a livelier walk". Presets
 regenerate from source with `cd cmd/lottie-state-editor && go run ./genpresets`.
 
+A second skill, [skills/lottie-character-forge](skills/lottie-character-forge/SKILL.md),
+is the design for making a character that does not exist yet: it writes
+the prompts an image model (Gemini, Grok) needs to draw the art already
+split into rig parts on a grid, specifies how the returned sheets are cut
+into parts and rebuilt as a textured vector rig — each part a path with
+per-vertex UV, inheriting every clip of a preset — and how morph motion
+(breathing, bends, squash, follow-through) is baked on top. The
+`lottieforge` command it names is specified but not yet built; see
+`.knowledge/requirement/ai-character-forge.md` for the status and the
+two small changes `lottierepack` and `lottiecheck` need first.
+
 ## Collision plugins
 
 dotLottie says nothing about physics, so collision data rides in the
