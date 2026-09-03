@@ -15,10 +15,31 @@
 //
 // Repacking starts from the dumped bundle's manifest when -base points at
 // one (or when the output already exists), so fields the directory does
-// not carry survive the round trip. Animations present in the bundle but
+// not carry survive the round trip, and JSON is stored compact however the
+// directory indents it. Animations present in the bundle but
 // missing from the directory are removed — deleting a clip's file deletes
 // the clip. The same holds for extension files once work/extensions/
 // exists; a directory without one leaves the base's payloads untouched.
+//
+// It also imports a Spine skeleton (JSON export, 4.x) into the same layout:
+//
+//	go run github.com/shibukawa/lottie-go/cmd/lottierepack -import-spine hero.json -dir work -out hero.lottie
+//
+// Every animation becomes a clip in which each slot is a shape layer and
+// each region or mesh attachment a keyframed path painted through the
+// texture extension (plugin/texture), so the meshes keep deforming with
+// their art. The atlas (hero.atlas beside the JSON, or -atlas) supplies the
+// images; without one, the loose images under the skeleton's images
+// directory (or -images) do. -skin shows a skin over the default one, -fps
+// and -scale set the sampling, -mesh triangles keeps every mesh triangle
+// (exact inner deformation, about five times the size of the default hull),
+// -tolerance sets how far a baked frame may stray from the straight line
+// between keys before it is kept as a key (1 px by default, 0 keeps every
+// frame) and -timing-tolerance how far along that line the easing fitted
+// to each key may put it early or late (3 px; 0 for linear keys),
+// -bounds skeleton keeps the declared size instead of growing it to what
+// the animations reach, and -bones adds a null layer per bone. What the
+// importer skipped is printed as notes.
 package main
 
 import (
@@ -40,19 +61,41 @@ func main() {
 	dir := flag.String("dir", "", "directory holding the exploded bundle")
 	out := flag.String("out", "", "bundle to write when repacking (default: the input of -dump, or -base)")
 	base := flag.String("base", "", "existing bundle whose manifest and stray files carry over on repack")
+	spineSrc := flag.String("import-spine", "", "Spine skeleton JSON to import into -dir (and -out when given)")
+	spineAtlas := flag.String("atlas", "", "Spine atlas file (default: the skeleton's name with .atlas)")
+	spineImages := flag.String("images", "", "directory of loose attachment images when there is no atlas (default: the skeleton's images path)")
+	spineSkin := flag.String("skin", "", "comma-separated skins to show over the default skin")
+	spineFPS := flag.Float64("fps", 30, "frames per second to bake the Spine animations at")
+	spineScale := flag.Float64("scale", 1, "scale applied to every Spine coordinate")
+	spineMesh := flag.String("mesh", "hull", "how a Spine mesh becomes paths: hull (the outline, light) or triangles (every triangle, exact)")
+	spineBones := flag.Bool("bones", false, "add a null layer per Spine bone with its baked transform")
+	spineTol := flag.Float64("tolerance", 1, "pixels a baked frame may stray from the straight line between keys before it becomes a key; 0 keeps every frame")
+	spineTTol := flag.Float64("timing-tolerance", 3, "pixels along that line a frame may run early or late under the easing fitted to the keys; 0 writes linear keys only")
+	spineBounds := flag.String("bounds", "union", "composition size: union (the skeleton's bounds widened to every animation's reach) or skeleton (the declared bounds only)")
+	spineMachine := flag.Bool("machine", true, "generate a state machine with one state and one event per animation")
 	flag.Parse()
 	if *dir == "" {
-		fmt.Fprintln(os.Stderr, "usage: lottierepack -dump -dir work file.lottie | lottierepack -dir work [-base file.lottie] [-out file.lottie]")
+		fmt.Fprintln(os.Stderr, "usage: lottierepack -dump -dir work file.lottie | lottierepack -dir work [-base file.lottie] [-out file.lottie] | lottierepack -import-spine skeleton.json -dir work [-out file.lottie]")
 		os.Exit(2)
 	}
 	var err error
-	if *dump {
+	switch {
+	case *spineSrc != "":
+		err = importSpine(*spineSrc, *dir, spineOptions{
+			atlas: *spineAtlas, images: *spineImages, skins: *spineSkin,
+			fps: *spineFPS, scale: *spineScale, mesh: *spineMesh, bones: *spineBones, machine: *spineMachine,
+			bounds: *spineBounds, tolerance: *spineTol, timing: *spineTTol,
+		})
+		if err == nil && *out != "" {
+			err = repack(*dir, *base, *out)
+		}
+	case *dump:
 		if flag.NArg() != 1 {
 			fmt.Fprintln(os.Stderr, "lottierepack -dump needs exactly one .lottie argument")
 			os.Exit(2)
 		}
 		err = dumpBundle(flag.Arg(0), *dir)
-	} else {
+	default:
 		err = repack(*dir, *base, *out)
 	}
 	if err != nil {
@@ -202,7 +245,7 @@ func syncExtensions(b *lottie.Bundle, dir string) error {
 		if err != nil {
 			return err
 		}
-		if err := b.SetExtensionFile(name, data); err != nil {
+		if err := b.SetExtensionFile(name, compactJSON(data)); err != nil {
 			return fmt.Errorf("%s: %w", p, err)
 		}
 		present[name] = true
@@ -267,7 +310,7 @@ func repack(dir, base, out string) error {
 		if err != nil {
 			return err
 		}
-		if err := b.SetAnimation(id, data); err != nil {
+		if err := b.SetAnimation(id, compactJSON(data)); err != nil {
 			return fmt.Errorf("%s: %w", path, err)
 		}
 		present[id] = true
@@ -332,6 +375,21 @@ func repack(dir, base, out string) error {
 // Windows a '\' in one would escape -dir (path.Base does not split on it).
 func safeComponent(name string) bool {
 	return name != "" && name != "." && name != ".." && !strings.ContainsAny(name, `/\`)
+}
+
+// compactJSON strips the indentation the directory carries for editing:
+// the bundle is what a game loads, and a pretty-printed clip is several
+// times the bytes to store and parse. Anything that is not JSON passes
+// through untouched.
+func compactJSON(raw []byte) []byte {
+	if !json.Valid(raw) {
+		return raw
+	}
+	var buf bytes.Buffer
+	if err := json.Compact(&buf, raw); err != nil {
+		return raw
+	}
+	return buf.Bytes()
 }
 
 func writeIndented(path string, raw []byte) error {

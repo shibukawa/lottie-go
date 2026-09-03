@@ -587,6 +587,40 @@ generated in-repository. Its bundle is embedded, so it runs from anywhere:
 go run github.com/shibukawa/lottie-go/examples/lottie/octopus@latest
 ```
 
+### Importing Spine skeletons
+
+The same extension is what makes a [Spine](http://esotericsoftware.com/)
+rig importable: a Spine mesh is a set of vertices with UVs that bones and
+deform keys move, which is exactly what a textured path with per-vertex
+UV is. `lottierepack -import-spine` reads the JSON export of Spine 4.x
+(with its `.atlas`, or loose images) and bakes it into a bundle:
+
+```bash
+go run github.com/shibukawa/lottie-go/cmd/lottierepack -import-spine hero.json -dir work -out hero.lottie
+```
+
+Every animation becomes a clip; every slot a shape layer; every region or
+mesh attachment a keyframed path — the mesh's hull by default, or one
+path per triangle with `-mesh triangles` when the inner vertices carry
+the deformation, at about five times the size — whose fill paints the
+atlas page through the mesh's own UV. Bones with every inherit mode, IK and
+transform constraints, weighted meshes, deform keys, slot colors,
+attachment swaps and blend modes are evaluated at every frame and written
+as keys; events become markers, and a state machine with one looping
+state and one event per animation is generated so `sm.Fire("run")` works
+on the first load. The clips are plain Lottie, so a player without the
+extension still shows the shapes in their slot colors. Spine's own
+spineboy (JSON, atlas and page: 467 KB) imports to a 504 KB bundle. Path and physics
+constraints, clipping and draw-order keys are not converted and are
+listed as notes. Keys are kept only where the motion leaves the straight
+line between keys by more than `-tolerance` pixels (1 by default; 0
+keeps every frame), and each key carries an easing fitted to the frames
+it replaces, allowed to run them `-timing-tolerance` pixels early or
+late (3 by default); `-skin`, `-fps`, `-scale`, `-bounds skeleton` and
+`-bones` tune the rest, and the package behind the flag is
+`plugin/spine`. Spine is a trademark of Esoteric Software; the importer
+reads the exported files and needs no Spine runtime.
+
 ## Supported features
 
 **Layers**: shape, null, solid, precomposition (offscreen with clipping and
