@@ -16,7 +16,7 @@ type spineOptions struct {
 	fps, scale           float64
 	mesh, bounds         string
 	bones, machine       bool
-	tolerance            float64
+	tolerance, timing    float64
 }
 
 // importSpine converts a Spine skeleton into the exploded layout under dir:
@@ -39,6 +39,10 @@ func importSpine(src, dir string, o spineOptions) error {
 	}
 	if o.tolerance == 0 {
 		opts.Tolerance = -1 // the flag's 0 means every frame
+	}
+	opts.TimingTolerance = o.timing
+	if o.timing == 0 {
+		opts.TimingTolerance = -1 // the flag's 0 means linear keys
 	}
 	switch o.bounds {
 	case "union", "":

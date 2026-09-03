@@ -57,6 +57,13 @@ type Options struct {
 	// percent for the bone layers. Zero means 1; negative keeps every frame
 	// that is not exactly on that line.
 	Tolerance float64
+	// TimingTolerance lets a key's easing curve stand in for the frames
+	// between two keys: the motion must stay within Tolerance of the
+	// straight line joining the keys, and the eased timing fitted to it may
+	// then put a frame this far, in pixels along that line, early or late.
+	// The two add up in the worst case. Zero means 3; negative writes
+	// linear keys only, with Tolerance as the whole budget.
+	TimingTolerance float64
 	// SkeletonBounds sizes the composition by the skeleton's declared
 	// bounds alone. By default they are widened to whatever any animation
 	// reaches, so nothing is ever clipped.
@@ -212,6 +219,9 @@ func Convert(sk *Skeleton, opts Options) (*Result, error) {
 		opts.Tolerance = 1
 	case opts.Tolerance < 0:
 		opts.Tolerance = exactTol
+	}
+	if opts.TimingTolerance == 0 {
+		opts.TimingTolerance = 3
 	}
 	if opts.Mesh != MeshTriangles && opts.Mesh != MeshHull {
 		return nil, fmt.Errorf("lottiespine: unknown mesh mode %q", opts.Mesh)
@@ -792,9 +802,22 @@ type track struct {
 	values [][]float64
 	hold   []bool
 	// tol is how far a dropped sample may sit from the line between the
-	// keys around it, in the values' own units.
-	tol float64
+	// keys around it, in the values' own units; ttol is how far along that
+	// line the fitted easing may place it early or late (<= 0: linear keys
+	// only, tol the whole budget).
+	tol, ttol float64
+	// eases holds the easing fitted to each accepted span, by its first
+	// frame; filled by keyFrames.
+	eases map[int]easeFit
 }
+
+// easeFit is one key's cubic-bezier timing curve, as Lottie's o and i:
+// (x1, y1) leaving the key, (x2, y2) arriving at the next.
+type easeFit struct {
+	x1, y1, x2, y2 float64
+}
+
+var linearFit = easeFit{1.0 / 3, 1.0 / 3, 2.0 / 3, 2.0 / 3}
 
 // exactTol keeps every sample that is not exactly on the line.
 const exactTol = 1e-4
@@ -821,16 +844,24 @@ func sameVec(a, b []float64) bool {
 }
 
 // keyFrames returns the indices of the samples that become keys: from
-// each key the next is pushed as far as every sample in between stays
-// within tol of the line joining them. A hold frame is always a key and
-// so is the frame after it, since the value jumps there.
+// each key the next is pushed as far as every sample in between is
+// reproduced by the two keys and the easing fitted to them. A hold frame
+// is always a key and so is the frame after it, since the value jumps
+// there.
 func (t *track) keyFrames() []int {
 	n := len(t.values)
+	t.eases = map[int]easeFit{}
 	keep := []int{0}
 	for last := 0; last < n-1; {
 		next := last + 1
+		t.eases[last] = linearFit
 		if t.hold == nil || !t.hold[last] {
-			for next+1 < n && t.spanFits(last, next+1) {
+			for next+1 < n {
+				fit, ok := t.spanFits(last, next+1)
+				if !ok {
+					break
+				}
+				t.eases[last] = fit
 				next++
 			}
 		}
@@ -841,22 +872,154 @@ func (t *track) keyFrames() []int {
 }
 
 // spanFits reports whether keys at a and b alone reproduce every sample
-// between them within tol, with no hold frame inside the span.
-func (t *track) spanFits(a, b int) bool {
+// between them, with no hold frame inside the span, and returns the
+// easing that does it. Every sample must lie within tol of the straight
+// line the two keys interpolate along; with a timing tolerance, a
+// cubic-bezier easing is then fitted to how far along that line each
+// sample sits, and may place it up to ttol early or late.
+func (t *track) spanFits(a, b int) (easeFit, bool) {
 	va, vb := t.values[a], t.values[b]
 	for j := a + 1; j < b; j++ {
 		if t.hold != nil && t.hold[j] {
-			return false
-		}
-		f := float64(j-a) / float64(b-a)
-		for k, vj := range t.values[j] {
-			if math.Abs(va[k]+(vb[k]-va[k])*f-vj) > t.tol {
-				return false
-			}
+			return linearFit, false
 		}
 	}
-	return true
+	if t.ttol <= 0 {
+		for j := a + 1; j < b; j++ {
+			f := float64(j-a) / float64(b-a)
+			for k, vj := range t.values[j] {
+				if math.Abs(va[k]+(vb[k]-va[k])*f-vj) > t.tol {
+					return linearFit, false
+				}
+			}
+		}
+		return linearFit, true
+	}
+	d := make([]float64, len(va))
+	var dd, dmax float64
+	for k := range va {
+		d[k] = vb[k] - va[k]
+		dd += d[k] * d[k]
+		dmax = math.Max(dmax, math.Abs(d[k]))
+	}
+	n := b - a - 1
+	if dd < 1e-9 {
+		// The keys coincide: everything between must sit on them.
+		for j := a + 1; j < b; j++ {
+			for k, vj := range t.values[j] {
+				if math.Abs(vj-va[k]) > t.tol {
+					return linearFit, false
+				}
+			}
+		}
+		return linearFit, true
+	}
+	// Progress of each sample along the line, and its distance from it.
+	ts, ss := make([]float64, n), make([]float64, n)
+	for j := a + 1; j < b; j++ {
+		vj := t.values[j]
+		var dot float64
+		for k := range va {
+			dot += (vj[k] - va[k]) * d[k]
+		}
+		s := dot / dd
+		for k := range va {
+			if math.Abs(va[k]+d[k]*s-vj[k]) > t.tol {
+				return linearFit, false
+			}
+		}
+		ts[j-a-1] = float64(j-a) / float64(b-a)
+		ss[j-a-1] = s
+	}
+	fit := fitEasing(ts, ss)
+	for i := range ts {
+		if math.Abs(fit.at(ts[i])-ss[i])*dmax > t.ttol {
+			return linearFit, false
+		}
+	}
+	return fit, true
 }
+
+// fitEasing finds the cubic-bezier timing curve through (0,0) and (1,1)
+// closest to the samples (t, s), by least squares on the control points
+// with the curve parameter re-solved from t between rounds. x stays in
+// [0,1] so the curve remains a function of time.
+func fitEasing(ts, ss []float64) easeFit {
+	n := len(ts)
+	if n == 0 {
+		return linearFit
+	}
+	u := append([]float64(nil), ts...)
+	fit := linearFit
+	a1, a2, r := make([]float64, n), make([]float64, n), make([]float64, n)
+	for round := 0; round < 4; round++ {
+		for i, w := range u {
+			a1[i] = 3 * (1 - w) * (1 - w) * w
+			a2[i] = 3 * (1 - w) * w * w
+			r[i] = w * w * w
+		}
+		for i := range ts {
+			r[i] = ts[i] - u[i]*u[i]*u[i]
+		}
+		fit.x1, fit.x2 = leastSquares2(a1, a2, r)
+		for i := range ss {
+			r[i] = ss[i] - u[i]*u[i]*u[i]
+		}
+		fit.y1, fit.y2 = leastSquares2(a1, a2, r)
+		fit.x1 = math.Min(1, math.Max(0, fit.x1))
+		fit.x2 = math.Min(1, math.Max(0, fit.x2))
+		fit.y1 = math.Min(2, math.Max(-1, fit.y1))
+		fit.y2 = math.Min(2, math.Max(-1, fit.y2))
+		for i, tt := range ts {
+			u[i] = fit.solveX(tt)
+		}
+	}
+	return fit
+}
+
+// leastSquares2 minimizes |a1*p + a2*q - y|² over p and q.
+func leastSquares2(a1, a2, y []float64) (float64, float64) {
+	var saa, sab, sbb, say, sby float64
+	for i := range y {
+		saa += a1[i] * a1[i]
+		sab += a1[i] * a2[i]
+		sbb += a2[i] * a2[i]
+		say += a1[i] * y[i]
+		sby += a2[i] * y[i]
+	}
+	det := saa*sbb - sab*sab
+	if math.Abs(det) < 1e-12 {
+		return 1.0 / 3, 2.0 / 3
+	}
+	return (say*sbb - sby*sab) / det, (saa*sby - sab*say) / det
+}
+
+func bezier1(p1, p2, u float64) float64 {
+	v := 1 - u
+	return 3*v*v*u*p1 + 3*v*u*u*p2 + u*u*u
+}
+
+// solveX finds the curve parameter at time x by bisection; x(u) is
+// monotonic since both control x are in [0,1].
+func (e easeFit) solveX(x float64) float64 {
+	lo, hi, u := 0.0, 1.0, x
+	for range 40 {
+		xu := bezier1(e.x1, e.x2, u)
+		if math.Abs(xu-x) < 1e-7 {
+			break
+		}
+		if xu < x {
+			lo = u
+		} else {
+			hi = u
+		}
+		u = (lo + hi) / 2
+	}
+	return u
+}
+
+// at is the eased progress at time fraction x.
+func (e easeFit) at(x float64) float64 { return bezier1(e.y1, e.y2, e.solveX(x)) }
 
 // property writes the track as a Lottie animated property; enc turns one
 // sample into the property's value form. A path's keyframes hold their
@@ -879,8 +1042,11 @@ func (t *track) property(enc func([]float64) any, keyed bool) obj {
 		case t.hold != nil && t.hold[f]:
 			k["h"] = 1
 		default:
-			k["o"] = obj{"x": []float64{0.333}, "y": []float64{0.333}}
-			k["i"] = obj{"x": []float64{0.667}, "y": []float64{0.667}}
+			// Two decimals: the timing error that costs is far below the
+			// tolerance, and short repeated values compress well.
+			e := t.eases[f]
+			k["o"] = obj{"x": []float64{round(e.x1, 2)}, "y": []float64{round(e.y1, 2)}}
+			k["i"] = obj{"x": []float64{round(e.x2, 2)}, "y": []float64{round(e.y2, 2)}}
 		}
 		keys = append(keys, k)
 	}
@@ -927,7 +1093,7 @@ func (c *converter) emit(bc *bakedClip, id string, minX, maxY, w, h float64) (ob
 			paths := c.pathsOf(d)
 			var items []obj
 			for pi, idx := range paths {
-				tr := &track{tol: c.opts.Tolerance}
+				tr := &track{tol: c.opts.Tolerance, ttol: c.opts.TimingTolerance}
 				for _, fr := range bc.frames {
 					ds := fr.draws[d]
 					v := make([]float64, 0, 2*len(idx))
@@ -982,8 +1148,8 @@ func (c *converter) emit(bc *bakedClip, id string, minX, maxY, w, h float64) (ob
 	}
 	if c.opts.Bones {
 		for bi, b := range c.pose.bones {
-			tol := c.opts.Tolerance
-			pos, rot, scl := &track{tol: tol}, &track{tol: tol}, &track{tol: tol}
+			tol, ttol := c.opts.Tolerance, c.opts.TimingTolerance
+			pos, rot, scl := &track{tol: tol, ttol: ttol}, &track{tol: tol, ttol: ttol}, &track{tol: tol, ttol: ttol}
 			for _, fr := range bc.frames {
 				m := fr.bones[bi]
 				x, y := toLottie(m[4], m[5])

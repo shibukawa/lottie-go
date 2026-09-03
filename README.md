@@ -610,12 +610,15 @@ as keys; events become markers, and a state machine with one looping
 state and one event per animation is generated so `sm.Fire("run")` works
 on the first load. The clips are plain Lottie, so a player without the
 extension still shows the shapes in their slot colors. Spine's own
-spineboy (JSON, atlas and page: 467 KB) imports to a 513 KB bundle. Path and physics
+spineboy (JSON, atlas and page: 467 KB) imports to a 504 KB bundle. Path and physics
 constraints, clipping and draw-order keys are not converted and are
-listed as notes. Keys are kept only where the motion leaves a straight
-line by more than `-tolerance` pixels (1 by default; 0 keeps every
-frame); `-skin`, `-fps`, `-scale`, `-bounds skeleton` and `-bones` tune
-the rest, and the package behind the flag is `plugin/spine`. Spine is a trademark of Esoteric Software; the importer
+listed as notes. Keys are kept only where the motion leaves the straight
+line between keys by more than `-tolerance` pixels (1 by default; 0
+keeps every frame), and each key carries an easing fitted to the frames
+it replaces, allowed to run them `-timing-tolerance` pixels early or
+late (3 by default); `-skin`, `-fps`, `-scale`, `-bounds skeleton` and
+`-bones` tune the rest, and the package behind the flag is
+`plugin/spine`. Spine is a trademark of Esoteric Software; the importer
 reads the exported files and needs no Spine runtime.
 
 ## Supported features

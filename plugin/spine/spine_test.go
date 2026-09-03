@@ -491,7 +491,7 @@ func TestSkeletonBounds(t *testing.T) {
 }
 
 func TestTrackCompression(t *testing.T) {
-	tr := &track{}
+	tr := &track{tol: exactTol}
 	for i := 0; i <= 10; i++ {
 		v := float64(i)
 		if i > 5 {
@@ -504,15 +504,60 @@ func TestTrackCompression(t *testing.T) {
 	}
 	tr.hold = make([]bool, 11)
 	tr.hold[7] = true
-	if got := tr.keyFrames(); len(got) != 5 {
+	if got := tr.keyFrames(); len(got) != 5 || got[2] != 7 || got[3] != 8 {
 		t.Fatalf("a hold keeps itself and its successor: %v", got)
+	}
+	// A gentle curve within tolerance collapses to its ends; a sharper one
+	// keeps the key that carries the bend.
+	curve := &track{tol: 1}
+	for i := 0; i <= 10; i++ {
+		x := float64(i)
+		curve.values = append(curve.values, []float64{x, 0.03 * x * (10 - x)})
+	}
+	if got := curve.keyFrames(); len(got) != 2 {
+		t.Fatalf("0.75 px bulge within 1 px = %v, want [0 10]", got)
+	}
+	curve.tol = 0.5
+	if got := curve.keyFrames(); len(got) < 3 {
+		t.Fatalf("0.75 px bulge over 0.5 px = %v, want an inner key", got)
+	}
+	// Straight-line motion that eases in and out: linear keys need several
+	// inner keys, the fitted easing covers it with two and reproduces the
+	// timing within the timing tolerance.
+	eased := &track{tol: 1}
+	for i := 0; i <= 20; i++ {
+		x := float64(i) / 20
+		s := x * x * (3 - 2*x) // smoothstep
+		eased.values = append(eased.values, []float64{round(100*s, 0), 0})
+	}
+	if got := eased.keyFrames(); len(got) <= 3 {
+		t.Fatalf("linear keys over an ease = %v, want several", got)
+	}
+	eased.ttol = 3
+	got := eased.keyFrames()
+	if len(got) != 2 {
+		t.Fatalf("eased keys = %v, want [0 20]", got)
+	}
+	e := eased.eases[0]
+	if e == linearFit || e.x1 < 0 || e.x1 > 1 || e.x2 < 0 || e.x2 > 1 {
+		t.Fatalf("fitted easing %+v", e)
+	}
+	for i := 1; i < 20; i++ {
+		x := float64(i) / 20
+		if math.Abs(e.at(x)*100-eased.values[i][0]) > 3 {
+			t.Fatalf("frame %d: eased %.1f vs %.1f", i, e.at(x)*100, eased.values[i][0])
+		}
+	}
+	prop := eased.property(vecValue, false)
+	keys := prop["k"].([]obj)
+	if oy := keys[0]["o"].(obj)["y"].([]float64)[0]; oy > 0.1 {
+		t.Fatalf("key should carry the fitted ease-in, got %v", keys[0])
 	}
 	static := &track{values: [][]float64{{1, 2}, {1, 2}, {1, 2}}}
 	if !static.static() {
 		t.Fatal("constant track should be static")
 	}
-	prop := static.property(vecValue, false)
-	if prop["a"] != 0 {
+	if prop := static.property(vecValue, false); prop["a"] != 0 {
 		t.Fatalf("static property %v", prop)
 	}
 }

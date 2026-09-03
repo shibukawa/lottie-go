@@ -33,8 +33,10 @@
 // directory (or -images) do. -skin shows a skin over the default one, -fps
 // and -scale set the sampling, -mesh triangles keeps every mesh triangle
 // (exact inner deformation, about five times the size of the default hull),
-// -tolerance sets how far a baked frame may stray from a straight line
-// before it is kept as a key (1 px by default, 0 keeps every frame),
+// -tolerance sets how far a baked frame may stray from the straight line
+// between keys before it is kept as a key (1 px by default, 0 keeps every
+// frame) and -timing-tolerance how far along that line the easing fitted
+// to each key may put it early or late (3 px; 0 for linear keys),
 // -bounds skeleton keeps the declared size instead of growing it to what
 // the animations reach, and -bones adds a null layer per bone. What the
 // importer skipped is printed as notes.
@@ -67,7 +69,8 @@ func main() {
 	spineScale := flag.Float64("scale", 1, "scale applied to every Spine coordinate")
 	spineMesh := flag.String("mesh", "hull", "how a Spine mesh becomes paths: hull (the outline, light) or triangles (every triangle, exact)")
 	spineBones := flag.Bool("bones", false, "add a null layer per Spine bone with its baked transform")
-	spineTol := flag.Float64("tolerance", 1, "pixels a baked frame may stray from a straight line before it becomes a key; 0 keeps every frame")
+	spineTol := flag.Float64("tolerance", 1, "pixels a baked frame may stray from the straight line between keys before it becomes a key; 0 keeps every frame")
+	spineTTol := flag.Float64("timing-tolerance", 3, "pixels along that line a frame may run early or late under the easing fitted to the keys; 0 writes linear keys only")
 	spineBounds := flag.String("bounds", "union", "composition size: union (the skeleton's bounds widened to every animation's reach) or skeleton (the declared bounds only)")
 	spineMachine := flag.Bool("machine", true, "generate a state machine with one state and one event per animation")
 	flag.Parse()
@@ -81,7 +84,7 @@ func main() {
 		err = importSpine(*spineSrc, *dir, spineOptions{
 			atlas: *spineAtlas, images: *spineImages, skins: *spineSkin,
 			fps: *spineFPS, scale: *spineScale, mesh: *spineMesh, bones: *spineBones, machine: *spineMachine,
-			bounds: *spineBounds, tolerance: *spineTol,
+			bounds: *spineBounds, tolerance: *spineTol, timing: *spineTTol,
 		})
 		if err == nil && *out != "" {
 			err = repack(*dir, *base, *out)
