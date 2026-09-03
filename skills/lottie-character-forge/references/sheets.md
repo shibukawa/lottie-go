@@ -18,12 +18,12 @@ contract (lottie-character-preset's rig.md).
   "sheet_size": [1024, 1024],             // default; match the model's native output
   "parts": {                              // per-slot overrides, all optional
     "head": { "fit": 1.3 },               // hair towers over the template head
-    "hair-back": {                        // an extra slot: cell + layer + texture
-      "parent": "head", "attach": [36, 20], "anchor": [40, 10],
-      "size": [80, 70], "joint": "top", "vertices": 10, "order": "behind-head"
-    },
     "body": { "attach": "scale-x" }       // broad torso: scale shoulder x offsets by width ratio
   },
+  "attachments": [                        // hair, cloth, ornaments — references/attachments.md
+    { "name": "ponytail", "kind": "lock",  "host": "head", "attach": [44, 12], "size": [26, 60], "order": "behind-head" },
+    { "name": "hakama",   "kind": "drape", "host": "body", "size": [60, 40], "drivers": ["thigh-near", "thigh-far"], "panels": 2 }
+  ],
   "props": [
     { "slot": "sword", "name": "naginata", "parent": "forearm-far",
       "attach": [7, 26], "anchor": [10, 10], "length": 78 }
@@ -50,14 +50,16 @@ the template's blade without touching a keyframe.
 | heads    | head, head-side, head-back (+ hair slots)            | bottom     |
 | torsos   | body, body-side, body-back (+ cape slots)            | bottom     |
 | limbs    | upper-arm, forearm, thigh, shin, then props          | top        |
+| attachments | one cell per attachment; side and back cells for `views: separate` (only when the spec has attachments) | top for hanging kinds, the declared anchor for rigid |
 
 Cell geometry: each cell is its slot's size × one scale per sheet, so
 cells keep slot aspect ratios and the part fills the cell top to bottom;
 the tool picks the largest scale at which every cell fits the sheet
-with a 24 px label band under each and a 16 px gutter. For chibi limbs
+with a 24 px label band under each and a 16 px gutter. Attachment
+cells take their aspect from the spec's `size`. For chibi limbs
 on 1024² that is about ×8: a 15×27 upper arm becomes a 120×216 cell,
-big enough for real detail. Extra slots with a `size` join the sheet
-whose joint edge they share.
+big enough for real detail. A host with attachments gets "WITHOUT its …" in its front cell line
+and "AS WORN with its …" in its side and back cell lines.
 
 Template PNG: flat key color, 2 px black border per cell, the slot name
 in the label band under it, nothing else. The border and band exist for
@@ -98,7 +100,9 @@ Per cell, inside `rect` shrunk by an 8 px margin:
    resolution. No resizing here: the morph rig samples this image as
    is, and the raster tier resizes to slot size later.
 5. **Derive.** `upper-arm-far` etc. = the near part with RGB × 0.72,
-   alpha untouched. `shadow` = the base preset's shadow image.
+   alpha untouched; `paired` attachments the same. A `panels: 2` drape
+   is split at its vertical midline into `<name>-front` and
+   `<name>-back` textures. `shadow` = the base preset's shadow image.
 6. **Contact sheet.** `contact.png`: every part on its slot's nominal
    rectangle (scaled), joint marked, name under it — what the agent
    looks at to catch a diagonal limb or a head drawn from the front on

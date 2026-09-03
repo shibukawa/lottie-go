@@ -33,14 +33,24 @@ contour:
   trace: alpha > 0.5 -> outer border of each connected component (marching squares); the largest kept unless the slot allows several
   simplify: Douglas-Peucker toward a vertex budget (12 for limbs, 16 for head and body; epsilon grows until the budget is met), then dilated ~2 px outward. The texture's own alpha draws the silhouette — the shader multiplies the texel, so transparent margin draws nothing — hence the path only has to contain the art — a loose hull is right, a tight one shows halos
   tangents: Catmull-Rom for smooth vertices; the two cap ends kept as corner vertices so a limb's end stays round after a bend
-  star_check: every vertex sees the centroid (the fan is the mesh — concept:texture-uv-pipeline mesh_vertex); a failing part is refused with the vertices named, and the fix is a split slot or mapping bbox
+  star_check: every vertex sees the centroid (the fan is the mesh — concept:texture-uv-pipeline mesh_vertex); a contour that fails is decomposed, not refused
+  decomposition: a failing contour is cut at reflex vertices into the fewest star-shaped sub-paths (greedy — cut the deepest reflex vertex toward the vertex that makes both halves pass, repeat), each an sh of its own in the same group under the same fl and paint, each with its own uv entry over the same texture; the union is the same silhouette, so the coverage mask is unchanged and the seam draws nothing
+  welds: the vertices two sub-paths share are recorded (extensions/forge/<slot>.json welds) and every generator moves a welded pair as one, so a morph never opens the seam
   count: more vertices, finer morph control, denser fan; the budget is a spec field per slot
+attachments:  # concept:attachment-kinds
+  layer: one shape layer per attachment, textured like a part, parent = host, a = the item's pivot, p = the attach point in the host's space — a new ind above the clip's highest, inserted into the layer array at the kind's draw position (array order is depth; ind never renumbers)
+  visibility: o copies the host's front-view layer's opacity track (the hold keys of turn clips), unless the attachment has separate view cells and layers
+  transform_motion: swing bakes rotation keys — a damped pendulum (stiffness, damping per kind) integrated per frame from the pivot's world path and angle (api:layer-placement), run over the clip twice for loops and cross-faded over the last six frames into the first; sway is a sine on rotation
+  vertex_motion: drape and lock ride the morph_tracks below; drape's driver angles come from the driver layers' rotation keys in the same clip, so a skirt bakes from the walk's thigh swings without a physics pass
+  panels: a drape may be two layers from one drawing (skirt-front, skirt-back — the tool splits the drawing at its vertical midline into two textures), placed before and behind the limbs it covers
 morph_tracks:  # what makes it a morph rig and not just a vector cutout
   where: path keys on the sh — static by default; every key holds the same vertices in the same order and only positions move (requirement:vector-editing path_topology)
   rest_stored: the rest contour rides in the bundle (extensions/forge/<slot>.json) so morph re-bakes start from it rather than from the last bake
   generators:
     breathe: vertices above the anchor scale toward and away from it by amount over period; body and head in idle and guard
     follow: hair, cape, tail — each vertex offset by lag frames of the parent's rotation track, weighted by its distance from the anchor; secondary motion baked, since there are no expressions
+    drape: each vertex rotates about the pivot by weight × a driver's angle, blended across the item's width between the drivers (near thigh on the near half of a skirt, far thigh on the far half) and by distance from the pivot, so the hem leads and the waist stays; the vertex morph of cloth over a limb
+    stretch: over a frame span, elongate along the parent axis by amount; launches and reaches
     squash: at a frame (landing, hit) compress along the parent axis and widen to keep area, recover over n frames; whole rig or listed parts
     bend: on a chain child, at keys where the joint angle passes a threshold, the inner-side vertices nearest the joint slide toward the parent so the crease fills; the cutout's gap at a deep bend closes
   composition: generators add offsets to the rest contour; the sum is keyed at the union of their frames plus the clip's pose keys, linear between, so the bake makes no easing decisions

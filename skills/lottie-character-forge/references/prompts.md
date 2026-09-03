@@ -15,6 +15,7 @@ Common fields:
 | `{{proportions}}` | proportions (defaults from the base)          | chibi proportions, about 2.5 heads tall, big head, short limbs |
 | `{{key}}` / `{{key_name}}` | key                                  | `#FF00FF` / magenta                            |
 | `{{cell_list}}` | sheets.json cells of one sheet                  | see P2                                         |
+| `{{without}}` / `{{worn}}` | attachments of a host cell           | "WITHOUT the hakama and the cape" / "with its ponytail and side locks as worn" |
 
 Pick the key color away from the palette. Magenta suits most designs; a
 pink or purple character takes `#00FF00` (green) instead.
@@ -76,6 +77,8 @@ Rules for every part:
 - Every limb segment ends in a ROUNDED CAP that extends a little past the joint at BOTH ends, so neighbouring segments overlap when a joint bends. No flat cut-off ends.
 - The torso is drawn from the neck stump at the top to the hips at the bottom, hip at the bottom center of the cell, without arms and without legs.
 - The head is drawn with all of its hair and a short neck stump, neck at the bottom center of the cell.
+- A cell that says WITHOUT something: draw that part complete as if the item were not worn (the hips and belt line under a skirt, the scalp under a ponytail); the item has its own cell. A cell that says AS WORN: include those items in that view.
+- Hanging items (hair locks, ribbons, tails, skirts, sleeves, capes) are drawn complete, hanging STRAIGHT DOWN, their root or waistband at the TOP center of the cell, slightly wider at the root than where they attach so they overlap the part they hang from.
 - Each part fills its cell from top to bottom; the cells are already sized so the parts keep the reference's proportions — do not enlarge a small part to fill a wide cell.
 - Flat {{key_name}} background inside every cell. No shadow, no glow, no soft edges, no text, no labels inside the cells, no arrows, no numbers, no extra parts.
 ```
@@ -86,6 +89,13 @@ Example cell list for the chibi `heads` sheet:
 A1 head — the whole head, front three-quarter view facing right, both eyes visible, neck stump at the bottom center
 A2 head-side — the same head from the rear three-quarter view: mostly the back of the head, one eye just visible at the leading (right) edge, neck at the bottom center
 A3 head-back — the same head from directly behind, no face visible, neck at the bottom center
+```
+
+With attachments in the spec the head lines change to, e.g.:
+
+```
+A1 head — the whole head WITHOUT the ponytail and the side locks (they have their own cells); front three-quarter view facing right, both eyes visible, the scalp complete where the locks attach, neck stump at the bottom center
+A2 head-side — the same head from the rear three-quarter view, AS WORN with its ponytail and side locks seen from that angle, one eye just visible at the leading (right) edge, neck at the bottom center
 ```
 
 and for `limbs`:
@@ -100,6 +110,20 @@ B1 sword — the naginata alone, drawn vertical, grip at the top center of the c
 
 Near and far sides are never asked for: the far copy is derived darker
 by the tool, exactly as the presets do.
+
+An `attachments` sheet lists one cell per attachment, worded by kind:
+
+```
+A1 ponytail — the ponytail alone, from the hair tie at the top center of the cell to the tip, hanging straight down, the root drawn slightly wider so it overlaps the scalp
+A2 side-lock — one side lock of hair, root at the top center, hanging straight down
+A3 hakama — the whole hakama from the waistband to the hem, hanging straight and relaxed, waistband at the top center and a little wider than the torso's hips, no legs visible
+A4 sleeve — one wide kimono sleeve alone, shoulder opening at the top center, hanging straight down, no arm inside
+B1 fox-ears — both fox ears as one piece as worn on top of the head, upright, the base of the ears at the bottom center
+B2 cape — the whole cape from the collar at the top center to the hem, hanging straight, seen from the front three-quarter view
+```
+
+Rigid items are drawn upright as worn; everything else hangs from the
+top center. Paired items (sleeves, side locks, earrings) are drawn once.
 
 ### P2-text — the same without a template image
 

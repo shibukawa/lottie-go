@@ -53,11 +53,17 @@ rendered by lottie-go for both rigs; a difference over budget (default
 4. Tangents: Catmull-Rom on smooth vertices; the two cap ends stay
    corner vertices (zero tangents) so a limb end stays round when the
    vertices near it move.
-5. **Star check**: every vertex must be visible from the centroid, or
-   the renderer's centroid fan overlaps itself and leaves untextured
-   wedges. A failing part is refused with the vertex indices. The fix
-   is a split slot (hair-front / hair-back), or `mapping: "bbox"` on
-   that slot when it never deforms.
+5. **Star check and decomposition**: every vertex must be visible from
+   the centroid, or the renderer's centroid fan overlaps itself and
+   leaves untextured wedges. A contour that fails is cut at its
+   deepest reflex vertex into two, and again until every piece passes
+   — each piece its own `sh` in the same group, under the same fill
+   and paint, with its own UV entry over the same texture. The union is
+   the same silhouette, so the mask is unchanged and the seam is
+   invisible. Vertices two pieces share are recorded as welds and move
+   together under every generator. Only a contour that still fails
+   after the vertex budget is exhausted is refused, with the vertices
+   named.
 
 ## The rewrite, per clip and per image layer
 
@@ -93,9 +99,16 @@ and in `extensions/texture/<clip>.json`:
 - Layer order, `ind` and `parent` never change: the sword's front-of-
   body placement, the far chain's draw order, everything the preset
   decided about depth is kept.
-- The rest contour and its UV are also stored in
-  `extensions/forge/<slot>.json` so `morph` re-bakes from the untouched
-  shape rather than from the previous bake.
+- The rest contours (one per sub-path), their UV and the welds are
+  also stored in `extensions/forge/<slot>.json` so `morph` re-bakes
+  from the untouched shape rather than from the previous bake.
+- **Attachment layers** are added to every clip the same way, with
+  `parent` = the host's `ind`, `a` = the item's pivot, `p` = the attach
+  point in the host's slot space, a fresh `ind` above the clip's
+  highest, inserted into the layer array at the kind's depth (array
+  order is depth; `ind` is identity — nothing is renumbered), and `o`
+  copied from the host's front-view layer so turn clips hide them with
+  the front drawing. See references/attachments.md.
 
 ## Reading a forged bundle in the editor
 
