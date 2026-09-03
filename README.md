@@ -610,7 +610,7 @@ as keys; events become markers, and a state machine with one looping
 state and one event per animation is generated so `sm.Fire("run")` works
 on the first load. The clips are plain Lottie, so a player without the
 extension still shows the shapes in their slot colors. Spine's own
-spineboy (JSON, atlas and page: 467 KB) imports to a 586 KB bundle. Path and physics
+spineboy (JSON, atlas and page: 467 KB) imports to a 513 KB bundle. Path and physics
 constraints, clipping and draw-order keys are not converted and are
 listed as notes. Keys are kept only where the motion leaves a straight
 line by more than `-tolerance` pixels (1 by default; 0 keeps every

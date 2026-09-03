@@ -19,7 +19,7 @@ why:
 approach: bake, not rig
   what: evaluate the skeleton at every frame of every animation and write what it draws as keyframes; no bones, constraints or weights survive into the clip
   why: Lottie has no skinning, no IK, no inherit modes and no draw-order keys; a rigged translation would cover only "normal" bones and lose every weighted mesh, while baking covers the whole update pipeline uniformly. Editability inside the editor is given up knowingly — the source of truth stays the Spine project
-  cost: a key wherever the motion leaves a straight line by more than Tolerance (1 px default); measured on spineboy 4.2 (json 221 KB + atlas 2 KB + page 245 KB = 467 KB, 1,630 bone keys) the hull bundle holds 5,671 path keys and is 586 KB (2.3 MB unzipped, compact); every frame kept (-tolerance 0) is 9,378 keys and 732 KB; -mesh triangles about five times that. Before lottierepack compacted JSON the same bundle was 1.05 MB with 20 MB unzipped
+  cost: a key wherever the motion leaves a straight line by more than Tolerance (1 px default); measured on spineboy 4.2 (json 221 KB + atlas 2 KB + page 245 KB = 467 KB, 1,630 bone keys) the hull bundle holds 5,731 path keys and is 513 KB (2.2 MB unzipped, compact; 264 KB of it the page image); every frame kept (-tolerance 0) is 9,378 keys and about 700 KB; -mesh triangles about five times that. Before lottierepack compacted JSON the same bundle was 1.05 MB with 20 MB unzipped
 mapping:
   animation: one clip per Spine animation, id = name made file-safe; the setup pose alone when there are none
   slot: one shape layer, ind = slot index + 1 (stable addresses), listed in reverse slot order (Lottie draws the first layer on top); slot blend → bm (additive 16, multiply 1, screen 2)
@@ -30,7 +30,7 @@ mapping:
   uv: normalized over the atlas page, through the region's offsets and 90° rotation; loose images map 1:1
   paint: MappingVertex, tint default (true) so the fill color carries the slot tint; texture = page name without extension, or the attachment path
   images: atlas pages into i/, un-premultiplied when the atlas says pma (Lottie assets are straight alpha); an unreadable image leaves no asset, the paint keeps the name for Player.SetTexture
-  coordinates: Y flipped; origin = top-left of the composition; composition = the skeleton's declared bounds widened to every animation's reach (SkeletonBounds keeps them as declared); Scale multiplies everything
+  coordinates: Y flipped, rounded to whole composition pixels (user decision 2026-09-03: a baked vertex is a raster position, and integers are short and compress well); UV kept to five decimals; origin = top-left of the composition; composition = the skeleton's declared bounds widened to every animation's reach (SkeletonBounds keeps them as declared); Scale multiplies everything
   events: markers (cm, tm, dr 0)
   machine: optional; a looping PlaybackState per clip, an Event input per clip, one GlobalState with a transition per event; initial "idle" when present
   bones: optional null layers with the baked world transform, for sockets and tools

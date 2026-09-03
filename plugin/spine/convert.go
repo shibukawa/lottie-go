@@ -892,8 +892,10 @@ func staticProp(v any) obj { return obj{"a": 0, "k": v} }
 // emit writes one baked clip as Lottie JSON plus its texture document.
 func (c *converter) emit(bc *bakedClip, id string, minX, maxY, w, h float64) (obj, *lottietexture.Doc) {
 	scale := c.opts.Scale
+	// Whole composition pixels: a baked vertex is a raster position, and
+	// integers keep the JSON short and compress well.
 	toLottie := func(x, y float64) (float64, float64) {
-		return round((x-minX)*scale, 1), round((maxY-y)*scale, 1)
+		return round((x-minX)*scale, 0), round((maxY-y)*scale, 0)
 	}
 	doc := &lottietexture.Doc{}
 	var layers []obj
