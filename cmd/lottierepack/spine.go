@@ -16,6 +16,7 @@ type spineOptions struct {
 	fps, scale           float64
 	mesh, bounds         string
 	bones, machine       bool
+	tolerance            float64
 }
 
 // importSpine converts a Spine skeleton into the exploded layout under dir:
@@ -34,6 +35,10 @@ func importSpine(src, dir string, o spineOptions) error {
 	base := strings.TrimSuffix(filepath.Base(src), filepath.Ext(src))
 	opts := lottiespine.Options{
 		FPS: o.fps, Scale: o.scale, Mesh: lottiespine.MeshMode(o.mesh), Bones: o.bones,
+		Tolerance: o.tolerance,
+	}
+	if o.tolerance == 0 {
+		opts.Tolerance = -1 // the flag's 0 means every frame
 	}
 	switch o.bounds {
 	case "union", "":

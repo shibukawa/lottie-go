@@ -35,7 +35,8 @@ const (
 )
 
 // Options tunes a conversion. The zero value bakes at 30 fps, scale 1, the
-// default skin, the hull of each mesh, and no images.
+// default skin, the hull of each mesh, keys within a pixel of the motion,
+// and no images.
 type Options struct {
 	// FPS is the sampling rate; every frame is a key, so it is also the
 	// clip's frame rate.
@@ -50,6 +51,12 @@ type Options struct {
 	// Bones adds a null layer per bone carrying its baked world transform,
 	// for tools that want to attach things to the rig.
 	Bones bool
+	// Tolerance is how far, in composition pixels, a baked frame may stray
+	// from the straight line between the keys that replace it before it is
+	// kept as a key of its own; the same number serves as degrees and
+	// percent for the bone layers. Zero means 1; negative keeps every frame
+	// that is not exactly on that line.
+	Tolerance float64
 	// SkeletonBounds sizes the composition by the skeleton's declared
 	// bounds alone. By default they are widened to whatever any animation
 	// reaches, so nothing is ever clipped.
@@ -199,6 +206,12 @@ func Convert(sk *Skeleton, opts Options) (*Result, error) {
 	}
 	if opts.Mesh == "" {
 		opts.Mesh = MeshHull
+	}
+	switch {
+	case opts.Tolerance == 0:
+		opts.Tolerance = 1
+	case opts.Tolerance < 0:
+		opts.Tolerance = exactTol
 	}
 	if opts.Mesh != MeshTriangles && opts.Mesh != MeshHull {
 		return nil, fmt.Errorf("lottiespine: unknown mesh mode %q", opts.Mesh)
@@ -778,7 +791,13 @@ func round(x float64, decimals int) float64 {
 type track struct {
 	values [][]float64
 	hold   []bool
+	// tol is how far a dropped sample may sit from the line between the
+	// keys around it, in the values' own units.
+	tol float64
 }
+
+// exactTol keeps every sample that is not exactly on the line.
+const exactTol = 1e-4
 
 func (t *track) static() bool {
 	for _, v := range t.values[1:] {
@@ -801,26 +820,39 @@ func sameVec(a, b []float64) bool {
 	return true
 }
 
-// keyFrames returns the indices of the samples that become keys.
+// keyFrames returns the indices of the samples that become keys: from
+// each key the next is pushed as far as every sample in between stays
+// within tol of the line joining them. A hold frame is always a key and
+// so is the frame after it, since the value jumps there.
 func (t *track) keyFrames() []int {
 	n := len(t.values)
 	keep := []int{0}
-	for i := 1; i < n-1; i++ {
-		prev, next := t.values[i-1], t.values[i+1]
-		if (t.hold != nil && (t.hold[i] || t.hold[i-1])) || !midpoint(prev, t.values[i], next) {
-			keep = append(keep, i)
+	for last := 0; last < n-1; {
+		next := last + 1
+		if t.hold == nil || !t.hold[last] {
+			for next+1 < n && t.spanFits(last, next+1) {
+				next++
+			}
 		}
-	}
-	if n > 1 {
-		keep = append(keep, n-1)
+		keep = append(keep, next)
+		last = next
 	}
 	return keep
 }
 
-func midpoint(a, m, b []float64) bool {
-	for i := range m {
-		if math.Abs((a[i]+b[i])/2-m[i]) > 1e-4 {
+// spanFits reports whether keys at a and b alone reproduce every sample
+// between them within tol, with no hold frame inside the span.
+func (t *track) spanFits(a, b int) bool {
+	va, vb := t.values[a], t.values[b]
+	for j := a + 1; j < b; j++ {
+		if t.hold != nil && t.hold[j] {
 			return false
+		}
+		f := float64(j-a) / float64(b-a)
+		for k, vj := range t.values[j] {
+			if math.Abs(va[k]+(vb[k]-va[k])*f-vj) > t.tol {
+				return false
+			}
 		}
 	}
 	return true
@@ -893,7 +925,7 @@ func (c *converter) emit(bc *bakedClip, id string, minX, maxY, w, h float64) (ob
 			paths := c.pathsOf(d)
 			var items []obj
 			for pi, idx := range paths {
-				tr := &track{}
+				tr := &track{tol: c.opts.Tolerance}
 				for _, fr := range bc.frames {
 					ds := fr.draws[d]
 					v := make([]float64, 0, 2*len(idx))
@@ -912,8 +944,8 @@ func (c *converter) emit(bc *bakedClip, id string, minX, maxY, w, h float64) (ob
 			}
 			// Fill: the slot color times the attachment color, hidden while
 			// another attachment (or none) shows.
-			col := &track{}
-			opa := &track{hold: make([]bool, nFrames)}
+			col := &track{tol: exactTol}
+			opa := &track{hold: make([]bool, nFrames), tol: exactTol}
 			for fi, fr := range bc.frames {
 				sc := fr.colors[si]
 				col.values = append(col.values, []float64{
@@ -948,7 +980,8 @@ func (c *converter) emit(bc *bakedClip, id string, minX, maxY, w, h float64) (ob
 	}
 	if c.opts.Bones {
 		for bi, b := range c.pose.bones {
-			pos, rot, scl := &track{}, &track{}, &track{}
+			tol := c.opts.Tolerance
+			pos, rot, scl := &track{tol: tol}, &track{tol: tol}, &track{tol: tol}
 			for _, fr := range bc.frames {
 				m := fr.bones[bi]
 				x, y := toLottie(m[4], m[5])

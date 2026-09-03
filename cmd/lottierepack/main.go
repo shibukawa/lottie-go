@@ -15,7 +15,8 @@
 //
 // Repacking starts from the dumped bundle's manifest when -base points at
 // one (or when the output already exists), so fields the directory does
-// not carry survive the round trip. Animations present in the bundle but
+// not carry survive the round trip, and JSON is stored compact however the
+// directory indents it. Animations present in the bundle but
 // missing from the directory are removed — deleting a clip's file deletes
 // the clip. The same holds for extension files once work/extensions/
 // exists; a directory without one leaves the base's payloads untouched.
@@ -32,6 +33,8 @@
 // directory (or -images) do. -skin shows a skin over the default one, -fps
 // and -scale set the sampling, -mesh triangles keeps every mesh triangle
 // (exact inner deformation, about five times the size of the default hull),
+// -tolerance sets how far a baked frame may stray from a straight line
+// before it is kept as a key (1 px by default, 0 keeps every frame),
 // -bounds skeleton keeps the declared size instead of growing it to what
 // the animations reach, and -bones adds a null layer per bone. What the
 // importer skipped is printed as notes.
@@ -64,6 +67,7 @@ func main() {
 	spineScale := flag.Float64("scale", 1, "scale applied to every Spine coordinate")
 	spineMesh := flag.String("mesh", "hull", "how a Spine mesh becomes paths: hull (the outline, light) or triangles (every triangle, exact)")
 	spineBones := flag.Bool("bones", false, "add a null layer per Spine bone with its baked transform")
+	spineTol := flag.Float64("tolerance", 1, "pixels a baked frame may stray from a straight line before it becomes a key; 0 keeps every frame")
 	spineBounds := flag.String("bounds", "union", "composition size: union (the skeleton's bounds widened to every animation's reach) or skeleton (the declared bounds only)")
 	spineMachine := flag.Bool("machine", true, "generate a state machine with one state and one event per animation")
 	flag.Parse()
@@ -77,7 +81,7 @@ func main() {
 		err = importSpine(*spineSrc, *dir, spineOptions{
 			atlas: *spineAtlas, images: *spineImages, skins: *spineSkin,
 			fps: *spineFPS, scale: *spineScale, mesh: *spineMesh, bones: *spineBones, machine: *spineMachine,
-			bounds: *spineBounds,
+			bounds: *spineBounds, tolerance: *spineTol,
 		})
 		if err == nil && *out != "" {
 			err = repack(*dir, *base, *out)
@@ -238,7 +242,7 @@ func syncExtensions(b *lottie.Bundle, dir string) error {
 		if err != nil {
 			return err
 		}
-		if err := b.SetExtensionFile(name, data); err != nil {
+		if err := b.SetExtensionFile(name, compactJSON(data)); err != nil {
 			return fmt.Errorf("%s: %w", p, err)
 		}
 		present[name] = true
@@ -303,7 +307,7 @@ func repack(dir, base, out string) error {
 		if err != nil {
 			return err
 		}
-		if err := b.SetAnimation(id, data); err != nil {
+		if err := b.SetAnimation(id, compactJSON(data)); err != nil {
 			return fmt.Errorf("%s: %w", path, err)
 		}
 		present[id] = true
@@ -368,6 +372,21 @@ func repack(dir, base, out string) error {
 // Windows a '\' in one would escape -dir (path.Base does not split on it).
 func safeComponent(name string) bool {
 	return name != "" && name != "." && name != ".." && !strings.ContainsAny(name, `/\`)
+}
+
+// compactJSON strips the indentation the directory carries for editing:
+// the bundle is what a game loads, and a pretty-printed clip is several
+// times the bytes to store and parse. Anything that is not JSON passes
+// through untouched.
+func compactJSON(raw []byte) []byte {
+	if !json.Valid(raw) {
+		return raw
+	}
+	var buf bytes.Buffer
+	if err := json.Compact(&buf, raw); err != nil {
+		return raw
+	}
+	return buf.Bytes()
 }
 
 func writeIndented(path string, raw []byte) error {
