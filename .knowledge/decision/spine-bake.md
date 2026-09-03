@@ -16,7 +16,7 @@ rejected:
 consequences:
   - the clip is plain Lottie with one key per frame: heavy in bytes, trivial to play, editable only in the sense a rendered frame is
   - the Spine project remains the source; re-import replaces the clips (lottierepack's repack removes clips missing from the directory, so a re-import into the same -dir is a clean replacement)
-  - one path per triangle (default) reproduces the mesh exactly through the centroid fan, since a triangle's fan is affine; the hull mode is offered for size and needs a star-shaped hull (concept:texture-uv-pipeline mesh_vertex limits)
+  - the hull path is the default (user decision 2026-09-03: a fifth of the size, and spineboy's meshes all read right); it needs a star-shaped hull (concept:texture-uv-pipeline mesh_vertex limits). One path per triangle reproduces the mesh exactly through the centroid fan, since a triangle's fan is affine, for rigs whose inner vertices carry the deformation
   - constraints the evaluator lacks (path, physics) degrade to the keyed pose and are reported, never fatal (policy:robustness)
 ```
 

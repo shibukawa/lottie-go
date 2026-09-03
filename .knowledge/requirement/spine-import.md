@@ -19,12 +19,12 @@ why:
 approach: bake, not rig
   what: evaluate the skeleton at every frame of every animation and write what it draws as keyframes; no bones, constraints or weights survive into the clip
   why: Lottie has no skinning, no IK, no inherit modes and no draw-order keys; a rigged translation would cover only "normal" bones and lose every weighted mesh, while baking covers the whole update pipeline uniformly. Editability inside the editor is given up knowingly — the source of truth stays the Spine project
-  cost: one key per frame per path; a clip is large in JSON (a 5 s clip of a 70-bone character runs to tens of MB pretty-printed) but zips to a few MB, and -mesh hull cuts it by ~5x
+  cost: one key per frame per path; measured on spineboy 4.2 (json 221 KB + atlas 2 KB + page 245 KB = 467 KB) the bundle is 1.05 MB with the hull default and 4.9 MB with -mesh triangles (the exploded, pretty-printed directories 20 MB and 134 MB)
 mapping:
   animation: one clip per Spine animation, id = name made file-safe; the setup pose alone when there are none
   slot: one shape layer, ind = slot index + 1 (stable addresses), listed in reverse slot order (Lottie draws the first layer on top); slot blend → bm (additive 16, multiply 1, screen 2)
   attachment: one group per region or mesh a slot ever shows in the clip — paths, then a fill whose c is slot color × attachment color and whose o is alpha × 100, held at 0 while another attachment shows; the setup attachment's group first
-  mesh: one closed 3-vertex path per triangle (MeshTriangles, default) so inner vertices deform exactly, or one path of the hull vertices (MeshHull); weighted vertices are blended in world space, deform offsets added per weight entry
+  mesh: one path of the hull vertices (MeshHull, default — user decision 2026-09-03 for size; right while the hull is star-shaped) or one closed 3-vertex path per triangle (MeshTriangles) so inner vertices deform exactly; weighted vertices are blended in world space, deform offsets added per weight entry
   region: one 4-vertex path over the packed (whitespace-stripped) rect
   uv: normalized over the atlas page, through the region's offsets and 90° rotation; loose images map 1:1
   paint: MappingVertex, tint default (true) so the fill color carries the slot tint; texture = page name without extension, or the attachment path
@@ -48,7 +48,7 @@ verification:
   unit: plugin/spine/spine_test.go — world transforms and inherit modes, weighted mesh and region placement, deform interpolation, curves, two-bone IK reach and bend, one-bone IK plus transform constraint, atlas parsing with rotation and offsets, full conversion decoding into a playable bundle in both mesh modes with markers, machine, blend mode, null layers and the x-member purity guard
   sample: spineboy (Spine's example, 4.2.22) imported and rendered through lottiecheck -render on 2026-09-03 for every animation — poses, IK legs, weighted head mesh and slot tints checked by eye; not committed (Spine example assets are not ours to redistribute)
   not_covered: pixels in CI (no GPU), path constraints
-tool: "lottierepack -import-spine hero.json -dir work [-out hero.lottie] [-atlas f] [-images dir] [-skin a,b] [-fps 30] [-scale 1] [-mesh triangles|hull] [-bounds union|skeleton] [-bones] [-machine=false]"
+tool: "lottierepack -import-spine hero.json -dir work [-out hero.lottie] [-atlas f] [-images dir] [-skin a,b] [-fps 30] [-scale 1] [-mesh hull|triangles] [-bounds union|skeleton] [-bones] [-machine=false]"
 open:
   - path constraints — the one Spine feature a common rig (a tail, a vine) needs that is missing
   - draw-order keys could become a layer per (slot, order run); not asked for yet

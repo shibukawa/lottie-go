@@ -22,18 +22,20 @@ import (
 type MeshMode string
 
 const (
-	// MeshTriangles writes one three-vertex path per Spine triangle, so the
-	// whole mesh — inner vertices and all — deforms exactly as Spine draws
-	// it. The default.
-	MeshTriangles MeshMode = "triangles"
 	// MeshHull writes one path from the mesh's hull vertices; inner vertices
 	// are dropped and the texture interpolates across a fan from the hull's
-	// centroid. Far fewer numbers, right whenever the hull is star-shaped.
+	// centroid. Right whenever the hull is star-shaped, which character
+	// meshes almost always are, at a fifth of the size of MeshTriangles.
+	// The default.
 	MeshHull MeshMode = "hull"
+	// MeshTriangles writes one three-vertex path per Spine triangle, so the
+	// whole mesh — inner vertices and all — deforms exactly as Spine draws
+	// it, for meshes whose inner vertices carry the deformation.
+	MeshTriangles MeshMode = "triangles"
 )
 
 // Options tunes a conversion. The zero value bakes at 30 fps, scale 1, the
-// default skin, one path per triangle, and no images.
+// default skin, the hull of each mesh, and no images.
 type Options struct {
 	// FPS is the sampling rate; every frame is a key, so it is also the
 	// clip's frame rate.
@@ -196,7 +198,7 @@ func Convert(sk *Skeleton, opts Options) (*Result, error) {
 		opts.Scale = 1
 	}
 	if opts.Mesh == "" {
-		opts.Mesh = MeshTriangles
+		opts.Mesh = MeshHull
 	}
 	if opts.Mesh != MeshTriangles && opts.Mesh != MeshHull {
 		return nil, fmt.Errorf("lottiespine: unknown mesh mode %q", opts.Mesh)

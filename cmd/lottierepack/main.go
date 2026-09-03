@@ -30,7 +30,8 @@
 // their art. The atlas (hero.atlas beside the JSON, or -atlas) supplies the
 // images; without one, the loose images under the skeleton's images
 // directory (or -images) do. -skin shows a skin over the default one, -fps
-// and -scale set the sampling, -mesh hull trades exactness for size,
+// and -scale set the sampling, -mesh triangles keeps every mesh triangle
+// (exact inner deformation, about five times the size of the default hull),
 // -bounds skeleton keeps the declared size instead of growing it to what
 // the animations reach, and -bones adds a null layer per bone. What the
 // importer skipped is printed as notes.
@@ -61,7 +62,7 @@ func main() {
 	spineSkin := flag.String("skin", "", "comma-separated skins to show over the default skin")
 	spineFPS := flag.Float64("fps", 30, "frames per second to bake the Spine animations at")
 	spineScale := flag.Float64("scale", 1, "scale applied to every Spine coordinate")
-	spineMesh := flag.String("mesh", "triangles", "how a Spine mesh becomes paths: triangles (exact) or hull (light)")
+	spineMesh := flag.String("mesh", "hull", "how a Spine mesh becomes paths: hull (the outline, light) or triangles (every triangle, exact)")
 	spineBones := flag.Bool("bones", false, "add a null layer per Spine bone with its baked transform")
 	spineBounds := flag.String("bounds", "union", "composition size: union (the skeleton's bounds widened to every animation's reach) or skeleton (the declared bounds only)")
 	spineMachine := flag.Bool("machine", true, "generate a state machine with one state and one event per animation")

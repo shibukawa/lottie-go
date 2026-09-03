@@ -600,15 +600,18 @@ go run github.com/shibukawa/lottie-go/cmd/lottierepack -import-spine hero.json -
 ```
 
 Every animation becomes a clip; every slot a shape layer; every region or
-mesh attachment a group of keyframed paths (one per triangle by default,
-`-mesh hull` for the outline only) whose fill paints the atlas page
-through the mesh's own UV. Bones with every inherit mode, IK and
+mesh attachment a keyframed path — the mesh's hull by default, or one
+path per triangle with `-mesh triangles` when the inner vertices carry
+the deformation, at about five times the size — whose fill paints the
+atlas page through the mesh's own UV. Bones with every inherit mode, IK and
 transform constraints, weighted meshes, deform keys, slot colors,
 attachment swaps and blend modes are evaluated at every frame and written
 as keys; events become markers, and a state machine with one looping
 state and one event per animation is generated so `sm.Fire("run")` works
 on the first load. The clips are plain Lottie, so a player without the
-extension still shows the shapes in their slot colors. Path and physics
+extension still shows the shapes in their slot colors. Spine's own
+spineboy imports to a bundle about twice the size of its JSON, atlas and
+page together. Path and physics
 constraints, clipping and draw-order keys are not converted and are
 listed as notes. `-skin`, `-fps`, `-scale`, `-bounds skeleton` and
 `-bones` tune the result; the package behind the flag is

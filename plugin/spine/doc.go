@@ -11,8 +11,9 @@
 // texture document beside the clip (plugin/texture) paints the atlas page
 // through those paths with the mesh's own UV per vertex. A mesh therefore
 // keeps deforming with its art, which is what the extension's per-vertex
-// mapping is for; a player without the extension sees the same shapes in
-// their slot colors.
+// mapping is for; by default its hull is the path, and MeshTriangles keeps
+// every triangle for meshes that deform inside. A player without the
+// extension sees the same shapes in their slot colors.
 //
 // Spine events become markers, slot blends become layer blend modes, and
 // a generated state machine gives the game one event per animation. Path
