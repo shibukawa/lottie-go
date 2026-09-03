@@ -26,6 +26,7 @@ rules:
 mcp: revisited 2026-09-02 — decision:editor-mcp-server adopts it as the live pair-editing path; this file workflow stays for batch and no-editor contexts
 status:
   - shipped: cmd/lottiecheck (validate + render sample frames), cmd/lottierepack (dump/rebuild bundles), skills/lottie-character-preset (SKILL.md + rig/clips/subset references)
+  - shipped 2026-09-03: cmd/lottieforge and skills/lottie-character-forge — a new character from image-model output (requirement:ai-character-forge)
 ```
 
 Self-verification loop is the critical piece: agent edits JSON, runs CLI, inspects rendered PNG, corrects. `UnsupportedFeatures()` turns subset violations into machine-checkable errors.

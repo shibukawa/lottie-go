@@ -4,7 +4,12 @@ type: requirement
 title: AI Character Forge (Image Prompt to UV-Morph Rig)
 ---
 
-Status: designed 2026-09-03, not implemented. Make a new game character
+Status: implemented 2026-09-03 — cmd/lottieforge (grid, cut, rig, morph);
+the faithful pixel diff is not built (see verification). Two hand-built
+samples on main are the same idea done by hand: examples/state-editor/knight-nun
+(a chibi-sword design swap with skirt, cape, scabbard and spring-simulated
+twin-tails as added slots) and examples/state-editor/elara (a texture-mesh
+figure cut from Gemini sheets); the forge automates their steps. Make a new game character
 from a text description, with an image model (Gemini, Grok) drawing the
 art and a coding agent doing everything else: the skill writes the prompts
 that get part-split art back, a CLI cuts the sheets into rig parts, turns
@@ -33,21 +38,20 @@ tiers:  # each usable alone; the skill picks by what the user has
   t0_raster: cut sheets into the preset's slot sizes and swap the raster rig's images — no new rig code, the path skills/lottie-character-preset documents; art lands at 15x27 forearms, so it suits pixel-art styles only
   t1_morph: parts become textured paths, template coordinates kept, textures at any resolution; the primary tier
   t2_motion: morph tracks and new clips on the t1 rig
-tooling:  # cmd/lottieforge — one command, four subcommands; designed, not built
+tooling:  # cmd/lottieforge — one command, four subcommands
   grid: character.json -> sheets.json, work/sheets/*.template.png (key color, cell borders, label band) and work/prompts/*.md filled from the skill's templates with the base rig's slots
   cut: sheets + sheets.json -> work/parts/<slot>.png at sheet resolution, report.json (per cell — empty, border, multi, halo), contact.png, plus the derived far-side parts and the shadow
   rig: parts + base preset -> bundle; default writes t1 (concept:uv-morph-rig — trace, simplify, decompose to star-shaped sub-paths, fit into slot space, identity UV, rewrite every clip's image layers as shape layers, emit the texture docs); inserts each attachment's layer into every clip at its kind's draw order with the host's opacity track; -raster writes t0
   morph: bakes the spec's morph list into path keys of the named clips, and the attachments' kind motion — swing on rotation from the pivot's world motion (api:layer-placement), drape from the drivers' angles, lock as both; vertex counts preserved; re-runnable, since generators start from the stored rest contour
-prerequisites:  # gaps in the shipped tools the loop depends on; small, first
-  - lottierepack dumps and repacks extensions/ (today a/, i/, s/ only: a texture doc edited in work/ is lost on repack)
-  - lottiecheck -render applies extensions/texture through lottietexture.Load before drawing (today a textured clip renders its fallback solids, so the visual check cannot see the art)
-  - lottiecheck reports a texture doc entry whose address or UV count does not resolve (today only the runtime notes it)
+prerequisites:  # done on main 2026-09-03, independently of this branch
+  - lottierepack dumps and repacks extensions/ under work/extensions/, the directory authoritative on repack (requirement:bundle-repack)
+  - lottiecheck loads each clip's texture document and applies it before -render draws; this branch adds binding at check time, so a bare check refuses an address or a UV count that no longer fits
 verification:
-  faithful: frame 0 of idle-anim rendered from the t1 rig matches the same frame from a t0 rig built from the same parts within a pixel-difference budget — both drawn by lottie-go, so the conversion is checked by the renderer, not by eye; rig writes faithful.png and exits non-zero over budget
+  faithful: not built — rig -raster builds the t0 rig from the same parts with the same fit, so the two render side by side through lottiecheck; an automatic pixel diff would need the GPU run inside rig
   playable: lottiecheck exits 0 on the bundle; UnsupportedFeatures empty; every texture doc address resolves
   visual: contact sheets per clip (lottiecheck -render) read by the agent, the preset skill's rule — a wrong joint fit shows as a detached limb in the walk's contact pose, a bad contour as an untextured wedge
   editor: the bundle opens in cmd/lottie-state-editor; the Shapes tab shows each part's paint and UV; MCP render answers the agent while a human adjusts
-  tests: lottieforge's own tests forge a character from generated parts (the string-art recipe of the presets, upscaled), so the repository commits no model output (policy:risks)
+  tests: cmd/lottieforge/forge_test.go paints capsules into the grid templates and runs grid, cut, rig, morph and rig -raster against chibi-sword — every clip decodes clean, every texture document binds, vertex counts hold across keys, attachment layers place, the tail swings and the hakama drapes; no model output is committed (policy:risks). Rendered frames were checked by eye under Xvfb on 2026-09-03
 rules:
   - the clip JSON stays plain Lottie; a foreign player sees the parts' mean colors as solid fills (data:texture-document degradation)
   - a path's vertex count and order never change after rig: morphs move vertices, never add them (requirement:vector-editing path_topology; UV is per vertex)
@@ -65,4 +69,6 @@ open:
   - heads whose hair towers over the slot: fitting by face height needs a landmark the alpha does not give; the per-slot fit factor is the manual answer
   - whether t1 should also carry a raster machine in the same bundle (one look, two rigs) so a game picks per platform
   - ear clipping in the renderer would make the tool's decomposition unnecessary; the welds would remain for morphs across the seam
+  - the fit reads only the alpha box; a limb drawn with a long cap lands its child joint low. Cap detection from the alpha profile would fix it without a spec field
+  - morph re-run: path keys re-bake from the rest contours, but a rotation already keyed is left alone, so re-tuning a swing means rig then morph
 ```

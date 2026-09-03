@@ -123,6 +123,15 @@ func checkBundle(path string) ([]renderJob, bool) {
 			ok = false
 			continue
 		}
+		// Bind it now, not only at render time, so a bare check still
+		// catches an address or a UV count that no longer fits the clip.
+		if doc != nil {
+			if err := doc.Apply(a.NewPlayer()); err != nil {
+				fmt.Printf("NG %s %s: texture: %v\n", path, id, err)
+				ok = false
+				continue
+			}
+		}
 		job.tex = doc
 		jobs = append(jobs, job)
 	}

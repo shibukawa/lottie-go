@@ -22,7 +22,7 @@ flow:
     - id: cut
       action: lottieforge cut work -> work/parts/, report.json, contact.png; the agent reads the report and looks at the contact sheet; a flagged cell (empty, border, multi, halo) goes back to part-sheets with the cell fix-up prompt — one cell, not the sheet
     - id: rig
-      action: lottieforge rig work -o work/<name>.lottie; also writes faithful.png (t1 against t0 at idle frame 0) and refuses a contour the fan cannot texture, naming the part and the vertices
+      action: lottieforge rig work -> work/<name>.lottie; a slot with no drawing falls back to the base's image with a warning, so a partial sheet set still rigs
     - id: check
       action: lottiecheck -render work/preview work/<name>.lottie; the agent reads idle, the walk contact pose, an attack's strike frame and a turn's midpoint. A detached joint means a fit factor in the spec, then rig again; a wedge means the decomposition or the vertex budget needs a look
     - id: motion

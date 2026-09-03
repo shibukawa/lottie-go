@@ -411,15 +411,23 @@ for "a samurai version of this character" or "a livelier walk". Presets
 regenerate from source with `cd cmd/lottie-state-editor && go run ./genpresets`.
 
 A second skill, [skills/lottie-character-forge](skills/lottie-character-forge/SKILL.md),
-is the design for making a character that does not exist yet: it writes
-the prompts an image model (Gemini, Grok) needs to draw the art already
-split into rig parts on a grid, specifies how the returned sheets are cut
-into parts and rebuilt as a textured vector rig — each part a path with
-per-vertex UV, inheriting every clip of a preset — and how morph motion
-(breathing, bends, squash, follow-through) is baked on top. The
-`lottieforge` command it names is specified but not yet built; see
-`.knowledge/requirement/ai-character-forge.md` for the status and the
-two small changes `lottierepack` and `lottiecheck` need first.
+makes a character that does not exist yet, with an image model (Gemini,
+Grok) drawing the art. `cmd/lottieforge` does the mechanical half:
+
+```bash
+go run ./cmd/lottieforge grid  work   # spec -> grid templates + prompts to paste into the model
+go run ./cmd/lottieforge cut   work   # returned sheets -> parts/, a report naming cells to redo
+go run ./cmd/lottieforge rig   work   # parts + a preset -> work/<name>.lottie, every clip inherited
+go run ./cmd/lottieforge morph work   # bake breathing, bends, squash, cloth and hair motion
+```
+
+The prompts ask for the character already split into rig parts on a grid
+template; `rig` traces each part into a path with per-vertex UV (the
+texture extension above), keeps the preset's transform keys, and adds
+hair, skirts, capes, ribbons, tails and ornaments as typed attachments
+that draw in the right order and move by kind — a pendulum for what
+hangs, a vertex morph following the limbs for cloth. `lottiecheck -render`
+then shows the result through the real renderer.
 
 ## Collision plugins
 

@@ -14,16 +14,19 @@ character it was built from. So the new character walks, runs, attacks,
 turns and dies on day one, at the image model's resolution, and its parts
 can bend, breathe and squash on top of that.
 
-Status: the workflow, formats and prompts here are the design; the CLI
-`lottieforge` they name is specified in
-[references/morph-rig.md](references/morph-rig.md) and
-[references/sheets.md](references/sheets.md) but not yet in the
-repository. Until it lands, each step says what it must produce, and an
-agent can script it (Go against the lottie-go module, or Python with
-Pillow for the image steps) from those specifications. Two shipped tools
-also need small changes before the loop closes for textured bundles:
-`lottierepack` must round-trip `extensions/`, and `lottiecheck -render`
-must apply the texture documents. Say so to the user if they are not done.
+The CLI is `cmd/lottieforge` in the lottie-go repository (run it as
+`go run github.com/shibukawa/lottie-go/cmd/lottieforge <sub> work` from
+the game module, or `go run ./cmd/lottieforge` in a checkout). It needs
+the base preset: a `.lottie` path in the spec's `base`, or a preset name
+found under `-presets DIR` or the checkout's `examples/state-editor/presets`.
+Defaults are deliberately plain — the editor is where a human fine-tunes
+a vertex, a UV point or a swing afterwards. Two samples in the repository
+show the same result made by hand and are worth a look before a first
+forge: `examples/state-editor/knight-nun` (a chibi-sword swap with a
+skirt, cape, scabbard and spring-simulated twin-tails as added slots —
+what `attachments` automate) and `examples/state-editor/elara` (a
+texture-mesh figure cut from Gemini sheets, with notes on what the model
+drew well and badly).
 
 ## What you produce
 
@@ -78,25 +81,27 @@ work/
    `multi` or `halo` goes back to the image model with the single-cell
    fix-up prompt. Do not accept a flagged cell "because it looks fine":
    the flags predict a detached limb or a halo in motion.
-7. **Rig.** `lottieforge rig work -o work/<name>.lottie`. It traces each
-   part, fits it into the template's joint geometry, rewrites every clip
-   of the base preset to shape layers with vertex-mapped textures, adds
-   each attachment's layer to every clip at its kind's depth, and
-   writes `faithful.png` — the morph rig against a raster rig from the
-   same parts at idle frame 0. It refuses a part whose contour the
-   renderer cannot texture even after decomposing it, and names it.
+7. **Rig.** `lottieforge rig work` writes `work/<name>.lottie`. It traces
+   each part, fits it into the template's joint geometry, rewrites every
+   clip of the base preset to shape layers with vertex-mapped textures,
+   and adds each attachment's layer to every clip at its kind's depth. A
+   slot with no drawing falls back to the base preset's image with a
+   warning, so a partial sheet set still rigs. `-raster` writes the
+   cutout tier from the same parts instead.
 8. **Check.** `lottiecheck -render work/preview work/<name>.lottie`, and
    read the PNGs: idle, the walk's contact pose, an attack's strike
    frame, a turn's midpoint. A limb floating off its joint is a fit
    problem (set `parts.<slot>.fit`, or redraw the cell with proper
-   caps); an untextured wedge is a contour problem; a color silhouette
-   instead of art means the texture document did not resolve (report
-   the tool gap above).
+   caps); an untextured wedge is a contour problem (raise
+   `parts.<slot>.vertices`); a color silhouette instead of art means a
+   texture did not bind, which lottiecheck reports by name.
 9. **Motion.** Bake the spec's morph list (`lottieforge morph work`):
    breathing on idle, bend at the elbows and knees, squash on landing —
    and the attachments' own motion, which their kinds imply: swings
    from the pivot's real path, drapes from the driver limbs' angles,
-   locks as both. Add character-specific clips by copying the
+   locks as both. `morph` bakes from the rest contours stored in the
+   bundle, so re-run it after a spec change; to redo a swing, run `rig`
+   again first (a rotation already keyed is left alone). Add character-specific clips by copying the
    nearest template clip and reshaping it — the recipes in
    [references/motion.md](references/motion.md) and in
    lottie-character-preset's clips.md. Wire states. Check again.

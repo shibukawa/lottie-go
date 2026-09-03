@@ -1,9 +1,10 @@
 # Spec, sheets, and the cut
 
-What `lottieforge grid` and `lottieforge cut` do, precisely enough to
-script by hand until they ship. The spec is the only file an agent
-writes; everything else is derived from it and the base preset's rig
-contract (lottie-character-preset's rig.md).
+What `lottieforge grid` and `lottieforge cut` do. The spec is the only
+file an agent writes; everything else is derived from it and the base
+preset's rig contract, which the tool reads from the preset bundle
+itself (sizes, anchors, attach points, parents, layer order), so any
+raster cutout preset works as a base.
 
 ## character.json
 

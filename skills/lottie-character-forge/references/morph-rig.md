@@ -2,10 +2,9 @@
 
 A part becomes a shape layer whose closed path is filled with its
 texture through per-vertex UV, parented and keyed exactly as the
-preset's image layer was. Everything below is mechanical; the point of
-writing it down is that an agent can script it (Go on the lottie-go
-module: `lottie.DecodeBundle`, `plugin/texture`, `Bundle.Encode`) until
-`lottieforge rig` ships, and can read the result in a dump.
+preset's image layer was. This is what `lottieforge rig` does; knowing
+it lets an agent read the result in a `lottierepack -dump` and fix it
+by hand.
 
 ## Two spaces, one fit
 
@@ -36,9 +35,9 @@ the mean x of the alpha a few rows inside — which is what the prompts'
 
 The rest pose is then an identity: at every vertex `uv = fit⁻¹(v) /
 textureSize`, so frame 0 of idle paints the picture where the raster
-rig would have drawn the image. `faithful.png` is that comparison,
-rendered by lottie-go for both rigs; a difference over budget (default
-2% of the character's pixels) fails the rig step and names the slot.
+rig would have drawn the image. `rig -raster` builds that raster rig
+from the same parts with the same fit, so the two can be rendered side
+by side with `lottiecheck -render` when a fit looks off.
 
 ## Contour
 
